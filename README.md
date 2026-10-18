@@ -55,12 +55,13 @@ Colors follow your Caelestia theme. Same app, different wallpaper:
 
 #### Supported keyboards
 
-Ccenter only uses what the **Linux kernel** offers for keyboard lights (`/sys/class/leds`). It never talks to the firmware or USB devices directly, so the kernel driver checks everything it writes.
+Ccenter only uses the files a **kernel driver** offers for keyboard lights (in `/sys`). It never talks to the firmware or USB devices directly, so the driver checks everything it writes.
 
 | Laptop | Kernel light | What works |
 |---|---|---|
-| HP Victus / OMEN, single-zone RGB | `hp::kbd_backlight` (needs kernel 7.2+) | Color, brightness, effects (tested) |
-| HP OMEN / Victus, four-zone RGB | `hp::kbd_zoned_backlight-*` | Color (same on all zones), brightness, effects (not tested yet) |
+| HP Victus / OMEN, single-zone RGB | `hp::kbd_backlight` (needs an extra module, [see below](#hp-laptops)) | Color, brightness, effects (tested) |
+| HP OMEN / Victus, four-zone RGB | `hp::kbd_zoned_backlight-*` (extra module, current version) | Color (same on all zones), brightness (not tested yet) |
+| HP OMEN / Victus, four-zone RGB | `rgb_zones/zone00`–`zone03` (extra module, older copies) | Color only, same on all zones (not tested yet) |
 | ASUS TUF with RGB | `asus::kbd_backlight` + `kbd_rgb_mode` | Static color and 4 brightness levels (not tested yet). Never saves anything to the BIOS |
 | ASUS (other) | `asus::kbd_backlight` | Brightness levels |
 | ASUS ROG (Aura N-KEY) | colors go through USB | Brightness only; for colors use [asusctl](https://gitlab.com/asus-linux/asusctl) |
@@ -68,7 +69,29 @@ Ccenter only uses what the **Linux kernel** offers for keyboard lights (`/sys/cl
 | Lenovo Legion RGB | colors go through USB | Brightness if available; for colors use [L5P-Keyboard-RGB](https://github.com/4JX/L5P-Keyboard-RGB) or [OpenRGB](https://openrgb.org) |
 | HP per-key RGB | not supported by the kernel | — |
 
-The effects write to the light many times a second, so for now they're only turned on for the HP driver I could test them on.
+The effects write to the light many times a second, so for now they're only turned on for the HP single-zone keyboard I could test them on.
+
+#### HP laptops
+
+Installing Ccenter alone isn't enough on HP:
+
+- **Keyboard colors:** the official Linux kernel doesn't support HP keyboard lights yet (as of 7.3-rc7). You need the extra kernel module [hp-wmi-fan-and-backlight-control](https://github.com/TUXOV/hp-wmi-fan-and-backlight-control). It covers both single-zone and four-zone RGB keyboards and detects which one you have. Without it, Ccenter's keyboard tab tells you the light isn't available.
+- **Fans:** NBFC with a config for your exact model (step 2 below). Configs that use BIOS (ACPI) methods also need the `acpi_call` module (`acpi_call-dkms` on Arch).
+
+Installing the keyboard module (this is the module's own way, see its README for other distros and NixOS):
+
+```sh
+git clone https://github.com/TUXOV/hp-wmi-fan-and-backlight-control
+cd hp-wmi-fan-and-backlight-control
+make install-arch                  # Arch: builds and installs a DKMS package (asks for your password)
+# other distros: make && sudo make install-dkms
+```
+
+Then reboot. Check that it worked: `ls /sys/class/leds | grep hp::` should show `hp::kbd_backlight` (single-zone) or four `hp::kbd_zoned_backlight-…` lights (four-zone).
+
+- If an older copy of the module is already installed (for example through victus-control), remove it first so only one version is installed. Check with `dkms status`, then `sudo dkms remove hp-wmi-fan-and-backlight-control/<old version> --all`.
+- To undo on Arch: `sudo pacman -R hp-wmi-fan-and-backlight-control-dkms` and reboot. Your laptop goes back to the kernel's own driver (no keyboard colors).
+- Ccenter only uses the module's keyboard files, never its fan controls.
 
 ### Languages
 - English and Turkish. Switch with the **TR / EN** button at the top (or `ccenter lang en`).
@@ -162,6 +185,7 @@ The `Makefile` is for packagers (`make DESTDIR=… PREFIX=/usr install`) or a sy
 - Closing the window doesn't quit Ccenter, it keeps controlling the fans. Open it again from the launcher, the tray icon or with `ccenter`.
 - To quit for real: the "Quit" button, the tray menu or `ccenter quit`. The fans go back to NBFC first.
 - "Start in the background on login" in the app turns on the systemd user service. If Ccenter crashes while running as a service, the fans are still handed back to NBFC.
+- With that service on, starting Ccenter yourself (`ccenter`, the app launcher) also goes through the service, so the crash protection is there too. If the service can't be used, Ccenter starts directly and says so in the terminal.
 - Only one Ccenter runs at a time, two copies would fight over the fans.
 
 ### Terminal commands

@@ -83,7 +83,7 @@ if [ -f "$rule" ]; then
     t "The keyboard light permission ($rule) is still there." "Klavye ışığı izni ($rule) duruyor."
     if ask "Remove this permission too? (asks for the admin password)" "Bu izin de kaldırılsın mı? (yönetici şifresi istenecek)" y; then
         # Give the light files back to root (owner root, 0644; kbd_rgb_mode keeps its write-only mode)
-        reset_perms='for d in /sys/class/leds/*::kbd_backlight /sys/class/leds/*::kbd_backlight_* /sys/class/leds/*::kbd_zoned_backlight-*; do [ -d "$d" ] || continue; for f in brightness multi_intensity; do [ -e "$d/$f" ] && chown root:root "$d/$f" && chmod 0644 "$d/$f"; done; [ -e "$d/kbd_rgb_mode" ] && chown root:root "$d/kbd_rgb_mode"; done; true'
+        reset_perms='for d in /sys/class/leds/*::kbd_backlight /sys/class/leds/*::kbd_backlight_* /sys/class/leds/*::kbd_zoned_backlight-*; do [ -d "$d" ] || continue; for f in brightness multi_intensity; do [ -e "$d/$f" ] && chown root:root "$d/$f" && chmod 0644 "$d/$f"; done; [ -e "$d/kbd_rgb_mode" ] && chown root:root "$d/kbd_rgb_mode"; done; for f in /sys/devices/platform/hp-wmi/rgb_zones/zone*; do [ -e "$f" ] && chown root:root "$f" && chmod 0644 "$f"; done; true'
         if sudo rm -f "$rule" && sudo udevadm control --reload-rules && sudo sh -c "$reset_perms"; then
             t "Keyboard permission removed (the light files are writable only by root again)." \
               "Klavye izni kaldırıldı (ışık dosyaları yine sadece root tarafından yazılabilir)."

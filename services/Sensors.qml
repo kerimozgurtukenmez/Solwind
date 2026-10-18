@@ -14,6 +14,11 @@ Singleton {
     property int tick: 0
     property real lastNv: NaN
     property string lastNvNote: ""
+    // nvidia-smi failures (e.g. after a driver update without a reboot every call fails and the kernel
+    // logs "API mismatch"): from the 2nd failure in a row wait 30 s, 1 min, 2 min ... up to 10 min between
+    // tries (one failure, e.g. while the card wakes up, is just retried); reset on success.
+    property int nvFails: 0
+    property double nvRetryAt: 0
     property var readings: []     // [{ label, model, value (°C or NaN), note }]
     property var hw: ({ cpu: "", cores: "", gpu: "", igpu: "" })
     // For fan control: discrete GPU temperature (NaN when asleep / absent)
@@ -52,7 +57,7 @@ Singleton {
 
     function parse(txt) {
         let pkg = NaN, coreMax = NaN, amdCpu = NaN, acpi = NaN
-        let nv = NaN, nvNote = "", hasNv = false, amdGpu = NaN, igpu = NaN
+        let nv = NaN, nvNote = "", hasNv = false, nvFailed = false, amdGpu = NaN, igpu = NaN
         let fanDrv = "", fanRpm = []
         for (const line of txt.split("\n")) {
             const p = line.split("|")
@@ -65,8 +70,10 @@ Singleton {
             const n = p[0], l = p[1].toLowerCase(), raw = p[2]
             if (n === "nvidia" || n === "nouveau") {
                 hasNv = true
-                if (raw === "skip") { nv = lastNv; nvNote = lastNvNote }    // not read this round: last value
+                // not read this round: last value (while backing off: the error, not an older "asleep")
+                if (raw === "skip") { nv = lastNv; nvNote = nvFails > 0 ? I18n.t("Read error") : lastNvNote }
                 else if (raw === "asleep") nvNote = I18n.t("Asleep")
+                else if (raw === "fail") { nvFailed = true; nvNote = I18n.t("Read error") }
                 else nv = Math.max(isFinite(nv) ? nv : -1, parseInt(raw) / 1000)
                 continue
             }
@@ -93,6 +100,18 @@ Singleton {
         if (isFinite(igpu) || hw.igpu !== "")
             out.push({ label: "iGPU", model: hw.igpu, extra: "", value: igpu, note: isFinite(igpu) ? "" : I18n.t("No sensor") })
         if (hasNv) { lastNv = nv; lastNvNote = nvNote }   // used on rounds where the GPU is skipped
+        if (nvFailed && !isFinite(nv)) {
+            nvFails++
+            const wait = nvFails < 2 ? 0 : Math.min(600000, 30000 * Math.pow(2, nvFails - 2))
+            nvRetryAt = Date.now() + wait
+            if (nvFails === 2 || wait === 600000 && nvFails % 6 === 0)
+                console.log("[ccenter] nvidia-smi gave no temperature (failures: " + nvFails + "), next try in "
+                            + Math.round(wait / 1000) + " s. After an NVIDIA driver update a reboot usually fixes this.")
+        } else if (isFinite(nv) && nvFails > 0) {
+            console.log("[ccenter] nvidia-smi works again")
+            nvFails = 0
+            nvRetryAt = 0
+        }
         readings = out
         rpms = Array.from(fanRpm, v => isFinite(v) ? v : NaN)
         if (rpms.some(v => v > 0)) rpmWorks = true
@@ -100,7 +119,9 @@ Singleton {
 
     function poll() {
         if (cmd.busy) return
-        const gpu = fast || tick % 4 === 0
+        const now = Date.now()
+        if (nvRetryAt - now > 600000) nvRetryAt = now + 600000      // the clock went back: never wait more than the cap
+        const gpu = (fast || tick % 4 === 0) && now >= nvRetryAt
         tick++
         cmd.go(["sh", Quickshell.shellPath("scripts/sensors.sh")].concat(gpu ? ["gpu"] : []), (code, out) => root.parse(out))
     }

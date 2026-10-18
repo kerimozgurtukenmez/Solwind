@@ -115,9 +115,10 @@ Singleton {
                                          : I18n.t("nbfc config -l failed (code %1): %2").arg(code).arg(root.firstLine(out))
             root.mergeConfigs()
         })
-        // All known config folders; line format: folder|filename
+        // The folders NBFC itself loads configs from (src/nbfc.h): the mutable /var/lib one and DATADIR
+        // (/usr/share, or /usr/local/share for a /usr/local build). Line format: folder|filename
         enqueue("cfg:dir", ["sh", "-c",
-            'for d in /usr/share/nbfc/configs /usr/local/share/nbfc/configs /var/lib/nbfc/configs /etc/nbfc/configs /opt/nbfc/configs; do ' +
+            'for d in /var/lib/nbfc/configs /usr/share/nbfc/configs /usr/local/share/nbfc/configs; do ' +
             '[ -d "$d" ] && find "$d" -maxdepth 1 -name "*.json" -printf "$d|%f\\n"; done'], (code, out) => {
             const names = [], dirs = []
             for (const l of root.lines(out)) {
@@ -138,9 +139,12 @@ Singleton {
     function loadConfigCurves() {
         const id = configId
         if (id === "") { configCurves = []; return }
+        // Same lookup order as NBFC (ModelConfig_FindAndLoad): the id as a path (NBFC runs in "/"), then /var/lib,
+        // then DATADIR, each with and without ".json", so the preview shows the file NBFC really uses.
         enqueue("cfg:curves", ["sh", "-c",
-            'for d in /etc/nbfc/configs /usr/share/nbfc/configs /usr/local/share/nbfc/configs; do ' +
-            '[ -f "$d/$1.json" ] && exec cat "$d/$1.json"; done; exit 1', "sh", id], (code, out) => {
+            'cd / || exit 1; [ -f "$1" ] && exec cat "$1"; ' +
+            'for d in /var/lib/nbfc/configs /usr/share/nbfc/configs /usr/local/share/nbfc/configs; do ' +
+            'for f in "$d/$1" "$d/$1.json"; do [ -f "$f" ] && exec cat "$f"; done; done; exit 1', "sh", id], (code, out) => {
             if (id !== root.configId) return
             try {
                 root.configCurves = code === 0 ? (JSON.parse(out).FanConfigurations || []).map(f => root.toCurve(f.TemperatureThresholds)) : []

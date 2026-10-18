@@ -170,6 +170,7 @@ ShellRoot {
         }
         function kbdBrightness(percent: int): string {
             if (!Keyboard.available) return I18n.t("No keyboard light found")
+            if (!Keyboard.hasBrightness) return I18n.t("This keyboard light has no brightness setting (color only)")
             Keyboard.setBrightness(Math.max(0, Math.min(100, percent)) * Keyboard.maxBrightness / 100)
             return Keyboard.writable ? I18n.t("Brightness: %1%").arg(Math.max(0, Math.min(100, percent))) : Keyboard.noPermissionText()
         }

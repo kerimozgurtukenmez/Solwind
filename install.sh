@@ -202,15 +202,19 @@ fi
 # The rule gives write access to the keyboard light's files to THIS user only (their owner becomes this user's id).
 # Older versions made them writable for every user (0666); that is reset first.
 uid=$(id -u)
-reset_perms='for d in /sys/class/leds/*::kbd_backlight /sys/class/leds/*::kbd_backlight_* /sys/class/leds/*::kbd_zoned_backlight-*; do [ -d "$d" ] || continue; for f in brightness multi_intensity; do [ -e "$d/$f" ] && chown root:root "$d/$f" && chmod 0644 "$d/$f"; done; [ -e "$d/kbd_rgb_mode" ] && chown root:root "$d/kbd_rgb_mode"; done; true'
-led=""
+reset_perms='for d in /sys/class/leds/*::kbd_backlight /sys/class/leds/*::kbd_backlight_* /sys/class/leds/*::kbd_zoned_backlight-*; do [ -d "$d" ] || continue; for f in brightness multi_intensity; do [ -e "$d/$f" ] && chown root:root "$d/$f" && chmod 0644 "$d/$f"; done; [ -e "$d/kbd_rgb_mode" ] && chown root:root "$d/kbd_rgb_mode"; done; for f in /sys/devices/platform/hp-wmi/rgb_zones/zone*; do [ -e "$f" ] && chown root:root "$f" && chmod 0644 "$f"; done; true'
+led="" wfile=""                                     # the light, and a file of it that the permission makes writable
 for d in /sys/class/leds/*::kbd_backlight /sys/class/leds/*::kbd_backlight_* /sys/class/leds/*::kbd_zoned_backlight-*; do
-    [ -e "$d/brightness" ] && { led=$d; break; }
+    [ -e "$d/brightness" ] && { led=$d; wfile=$d/brightness; break; }
 done
+# HP four-zone keyboards with older copies of the hp-wmi-fan-and-backlight-control module: colour files on the device
+if [ -z "$led" ] && [ -e /sys/devices/platform/hp-wmi/rgb_zones/zone00 ]; then
+    led=/sys/devices/platform/hp-wmi/rgb_zones; wfile=$led/zone00
+fi
 legacy=""; [ -f "$rule" ] && grep -q -e '0666' -e '/bin/sh' "$rule" && legacy=1     # an older, less strict rule
 if [ -z "$led" ]; then
     t "No keyboard light found; skipped the keyboard permission step." "Klavye ışığı bulunamadı; klavye izni adımı atlandı."
-elif [ -w "$led/brightness" ] && [ -z "$legacy" ]; then
+elif [ -w "$wfile" ] && [ -z "$legacy" ]; then
     t "The keyboard light is already writable; no permission step needed." "Klavye ışığına zaten yazılabiliyor; izin adımı gerekmiyor."
 else
     t "Keyboard light permission (optional)" "Klavye ışığı izni (isteğe bağlı)"
@@ -221,15 +225,15 @@ else
         t "The new version gives access to your user only." "Yeni sürüm sadece senin kullanıcına izin verir."
     fi
     t "Light found: ${led##*/}" "Bulunan ışık: ${led##*/}"
-    t "For Ccenter to change the keyboard's color, brightness and effects, your user needs write access to the light's" \
-      "Ccenter'ın klavyenin rengini, parlaklığını ve efektlerini değiştirebilmesi için kullanıcının ışığın"
-    t "brightness and color files (a permanent version of what you do by hand with 'sudo tee')." \
-      "parlaklık ve renk dosyalarına yazabilmesi gerekir (elle 'sudo tee' ile yaptığın şeyin kalıcı hali)."
+    t "For Ccenter to change the keyboard light, your user needs write access to the light's color files" \
+      "Ccenter'ın klavye ışığını değiştirebilmesi için kullanıcının ışığın renk dosyalarına"
+    t "(and brightness files, if it has them): a permanent version of what you do by hand with 'sudo tee'." \
+      "(varsa parlaklık dosyalarına da) yazabilmesi gerekir: elle 'sudo tee' ile yaptığın şeyin kalıcı hali."
     say ""
     t "What is done : the file $rule is added (a udev rule); no other file is touched." \
       "Ne yapılır : $rule dosyası eklenir (udev kuralı); başka hiçbir dosyaya dokunulmaz."
-    t "What changes : only your user (id $uid) can change the keyboard light's color and brightness." \
-      "Ne değişir : sadece senin kullanıcın (id $uid) klavye ışığının rengini ve parlaklığını değiştirebilir."
+    t "What changes : only your user (id $uid) can change the keyboard light." \
+      "Ne değişir : sadece senin kullanıcın (id $uid) klavye ışığını değiştirebilir."
     t "               It gives no access to anything else (fans, files, the system) and nothing to other users." \
       "             Başka hiçbir şeye (fanlar, dosyalar, sistem) erişim vermez, diğer kullanıcılara hiçbir şey vermez."
     t "Undo         : ./uninstall.sh, or in the app Keyboard > 'Remove permission'." \
@@ -250,8 +254,9 @@ else
            && sudo mv "$rule.new" "$rule" \
            && sudo udevadm control --reload-rules \
            && sudo udevadm trigger --action=change --subsystem-match=leds \
+           && sudo udevadm trigger --action=change --subsystem-match=platform --sysname-match=hp-wmi \
            && sudo udevadm settle; then
-            if [ -w "$led/brightness" ]; then t "Permission granted." "İzin verildi."
+            if [ -w "$wfile" ]; then t "Permission granted." "İzin verildi."
             else t "The rule was added but the permission isn't visible yet; it applies after a reboot." "Kural eklendi ama izin henüz görünmüyor; yeniden başlatınca geçerli olur."; fi
         else
             t "Could not grant the permission (no password, or an error). You can grant it later from the app." \

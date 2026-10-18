@@ -17,6 +17,8 @@ UDEVDIR = $(DESTDIR)$(PREFIX)/lib/udev/rules.d
 LICDIR  = $(DESTDIR)$(PREFIX)/share/licenses/ccenter
 # Keyboard lights (their files go back to root on uninstall)
 KBD_LEDS = /sys/class/leds/*::kbd_backlight /sys/class/leds/*::kbd_backlight_* /sys/class/leds/*::kbd_zoned_backlight-*
+# HP four-zone colour files (older copies of the hp-wmi-fan-and-backlight-control module)
+KBD_ZONES = /sys/devices/platform/hp-wmi/rgb_zones/zone*
 # The rule gives access to one user: the one running "sudo make udev" (SUDO_UID), or UDEV_UID=<id>
 UDEV_UID ?= $(SUDO_UID)
 
@@ -64,7 +66,8 @@ udev:
 	chmod 644 $(UDEVDIR)/90-ccenter.rules.new
 	mv $(UDEVDIR)/90-ccenter.rules.new $(UDEVDIR)/90-ccenter.rules
 	@if [ -z "$(DESTDIR)" ] && command -v udevadm >/dev/null; then \
-		udevadm control --reload-rules && udevadm trigger --action=change --subsystem-match=leds; \
+		udevadm control --reload-rules && udevadm trigger --action=change --subsystem-match=leds \
+			&& udevadm trigger --action=change --subsystem-match=platform --sysname-match=hp-wmi; \
 	fi
 
 uninstall-udev:
@@ -73,5 +76,6 @@ uninstall-udev:
 		command -v udevadm >/dev/null && udevadm control --reload-rules; \
 		for d in $(KBD_LEDS); do [ -d "$$d" ] || continue; \
 			for f in brightness multi_intensity; do [ -e "$$d/$$f" ] && chown root:root "$$d/$$f" && chmod 0644 "$$d/$$f"; done; \
-			[ -e "$$d/kbd_rgb_mode" ] && chown root:root "$$d/kbd_rgb_mode"; done; true; \
+			[ -e "$$d/kbd_rgb_mode" ] && chown root:root "$$d/kbd_rgb_mode"; done; \
+		for f in $(KBD_ZONES); do [ -e "$$f" ] && chown root:root "$$f" && chmod 0644 "$$f"; done; true; \
 	fi

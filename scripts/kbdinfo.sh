@@ -8,6 +8,10 @@
 #   v|name|file|value                           a readable value of that light
 #   w|name|file                                 a file of that light we may write to (permission granted)
 #   x|name|file                                 a file that exists (kbd_rgb_mode is write-only, so it can't be read)
+#   zone|name|driver|path                       an HP four-zone colour file: /sys/devices/platform/hp-wmi/rgb_zones/zoneNN
+#                                               (older copies of the hp-wmi-fan-and-backlight-control module, 0.0.2;
+#                                               0.0.4+ uses *::kbd_zoned_backlight-* LEDs instead). Hex RRGGBB, no brightness.
+#                                               Its v/w lines use the file name "color".
 #   usb|vendor|product|name                     USB devices of makers whose RGB keyboards are USB devices (ASUS, ITE/Lenovo)
 #   rule|etc|current|legacy  rule|lib           our udev permission rule; legacy = an older, less strict version
 #                                               (world-writable 0666, or running a shell)
@@ -37,6 +41,21 @@ for d in "$sys"/class/leds/*; do
     [ -w "$d/$f" ] && echo "w|$n|$f"
   done
 done
+
+# HP four-zone keyboards with the out-of-tree hp-wmi module: colour files on the hp-wmi device itself (not LED class).
+# Only this exact device is looked at (Alienware uses the same rgb_zones name with a different format).
+z=$sys/devices/platform/hp-wmi
+if [ -d "$z/rgb_zones" ]; then
+  drv=""
+  [ -e "$z/driver" ] && drv=$(readlink -f "$z/driver") && drv=${drv##*/}
+  for f in "$z"/rgb_zones/zone*; do
+    [ -e "$f" ] || continue
+    n=hp-wmi/rgb_zones/${f##*/}
+    echo "zone|$n|$drv|$f"
+    echo "v|$n|color|$(r "$f")"
+    [ -w "$f" ] && echo "w|$n|color"
+  done
+fi
 
 for u in "$sys"/bus/usb/devices/*; do
   [ -r "$u/idVendor" ] || continue

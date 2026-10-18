@@ -157,8 +157,11 @@ Flickable {
                 StyledText {
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
-                    text: I18n.t("What is done: /etc/udev/rules.d/90-ccenter.rules is added; only the color and brightness files of the %1 light become writable (what you do by hand with 'sudo tee').").arg(Keyboard.name) + "\n"
-                        + I18n.t("What changes: only your user can change the keyboard light's color and brightness; it gives no access to the fans, files or the system, and nothing to other users.") + "\n"
+                    text: (Keyboard.hasBrightness
+                           ? I18n.t("What is done: /etc/udev/rules.d/90-ccenter.rules is added; only the color and brightness files of the %1 light become writable (what you do by hand with 'sudo tee').").arg(Keyboard.name)
+                           : I18n.t("What is done: /etc/udev/rules.d/90-ccenter.rules is added; only the color files of the %1 light become writable (what you do by hand with 'sudo tee').").arg(Keyboard.name)) + "\n"
+                        + (Keyboard.hasBrightness ? I18n.t("What changes: only your user can change the keyboard light's color and brightness; it gives no access to the fans, files or the system, and nothing to other users.")
+                                                  : I18n.t("What changes: only your user can change the keyboard light's color; it gives no access to the fans, files or the system, and nothing to other users.")) + "\n"
                         + I18n.t("Undo: 'Remove permission' here. Your password is asked in the system's own window; Ccenter never sees it.")
                     color: Colours.fgDim
                     font.pixelSize: 11
@@ -472,7 +475,7 @@ Flickable {
         // ---------- overall brightness ----------
         Card {
             id: brightCard
-            visible: Keyboard.available
+            visible: Keyboard.hasBrightness
             title: I18n.t("Brightness")
             enabled: page.canWrite
             opacity: enabled ? 1 : 0.4

@@ -113,9 +113,60 @@ guard() {
     fi
 }
 
+# If the user's systemd service is enabled and runs this very copy, start the app through it: then a crash
+# still hands the fans back to NBFC (ExecStopPost=nbfc set -a), which a directly started app can't do.
+# Returns 0 when the window is open, 1 when the service can't be used (the caller starts the app directly),
+# 2 when the service is running but the app didn't answer in time.
+service_start() {
+    [ -z "${CCENTER_DIR:-}" ] || return 1          # the service wouldn't get CCENTER_DIR and would run its own copy
+    command -v systemctl >/dev/null 2>&1 || return 1
+    [ "$(systemctl --user is-enabled ccenter.service 2>/dev/null)" = enabled ] || return 1
+    # ExecStart looks like "{ path=/…/bin/ccenter ; argv[]=… }": take the path and compare it canonicalized
+    exe=$(systemctl --user show -p ExecStart --value ccenter.service 2>/dev/null)
+    case "$exe" in *"path="*" ;"*) ;; *) return 1 ;; esac
+    exe=${exe#*path=}
+    exe=${exe%% ;*}
+    [ "$(readlink -f "$exe" 2>/dev/null)" = "$self" ] || return 1   # the service runs another copy (e.g. a source checkout)
+    if ! systemctl --user start ccenter.service 2>/dev/null; then
+        err "ccenter: the background service didn't start, starting directly (no crash protection for the fans)" \
+            "ccenter: arka plan servisi başlamadı, doğrudan başlatılıyor (fanlar için çökme koruması yok)"
+        return 1
+    fi
+    # Type=simple: start returns before the app is ready, so wait until it answers (at most ~10 s)
+    n=0
+    while [ "$n" -lt 50 ]; do
+        ipc open >/dev/null 2>&1 && return 0
+        case "$(systemctl --user show -p SubState --value ccenter.service 2>/dev/null)" in
+            start-pre|start|start-post|running) ;;
+            *)
+                # Crashed (auto-restart shows as "activating" too), failed or stopped: stop it so it doesn't keep
+                # restarting in the background, then start directly
+                systemctl --user stop ccenter.service >/dev/null 2>&1
+                err "ccenter: the background service stopped (see: journalctl --user -u ccenter), starting directly" \
+                    "ccenter: arka plan servisi durdu (bkz: journalctl --user -u ccenter), doğrudan başlatılıyor"
+                return 1 ;;
+        esac
+        sleep 0.2
+        n=$((n + 1))
+    done
+    err "ccenter: started in the background but not answering yet, run ccenter again in a moment" \
+        "ccenter: arka planda başladı ama henüz yanıt vermiyor, biraz sonra yine ccenter çalıştır"
+    return 2
+}
+
 case "${1:-}" in
     "")
-        if running; then ipc open; else guard; qs -p "$dir" -n -d >/dev/null 2>&1; fi ;;
+        if running; then
+            ipc open
+        else
+            guard
+            service_start
+            case $? in
+                0) ;;
+                1) qs -p "$dir" -n -d >/dev/null 2>&1 ;;
+                *) exit 1 ;;
+            esac
+        fi ;;
     --background)
         guard; exec env CCENTER_BACKGROUND=1 qs -p "$dir" -n ;;
     open|hide|toggle|status|profiles|quit)

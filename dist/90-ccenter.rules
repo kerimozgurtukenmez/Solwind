@@ -1,14 +1,21 @@
 # Ccenter: lets ONE user (the one who granted it) set the keyboard light's colour and brightness without root.
-# The numeric user id in the three lines below is filled in when the rule is installed (the app's "Grant permission"
+# The numeric user id in the seven lines below is filled in when the rule is installed (the app's "Grant permission"
 # button or install.sh); other users of the computer get no access.
 # Only these files of keyboard backlight lights are touched, and only their owner changes (permission bits stay):
 #   brightness, multi_intensity (RGB colour), kbd_rgb_mode (ASUS TUF colour, write-only)
-# Lights: *::kbd_backlight (HP, ASUS, Lenovo, ...) and *::kbd_zoned_backlight-* (HP four-zone keyboards).
+#   rgb_zones/zone00..zone03 of the hp-wmi device (HP four-zone keyboards with older copies of the
+#   hp-wmi-fan-and-backlight-control module; hex colour). These files appear while the driver is being bound,
+#   after the device's "add" event, so those lines also run on "bind".
+# Lights: *::kbd_backlight (HP, ASUS, Lenovo, ...) and *::kbd_zoned_backlight-* (four-zone keyboards).
 # No shell is involved: udev runs chown directly, and only if the file exists (TEST).
 # Manual equivalent: echo "r g b" | sudo tee /sys/class/leds/<light>/multi_intensity
 # Never installed silently. Location: /etc/udev/rules.d/90-ccenter.rules. Removing it (app "Remove permission",
 # uninstall.sh) and giving the files back to root restores root-only access.
-# Before it is installed, every line of this file is checked: only comments and the three lines below are accepted.
+# Before it is installed, every line of this file is checked: only comments and the seven lines below are accepted.
 SUBSYSTEM=="leds", ACTION=="add|change", KERNEL=="*::kbd_backlight|*::kbd_backlight_*|*::kbd_zoned_backlight-*", TEST=="brightness", RUN+="/bin/chown @UID@ /sys%p/brightness"
 SUBSYSTEM=="leds", ACTION=="add|change", KERNEL=="*::kbd_backlight|*::kbd_backlight_*|*::kbd_zoned_backlight-*", TEST=="multi_intensity", RUN+="/bin/chown @UID@ /sys%p/multi_intensity"
 SUBSYSTEM=="leds", ACTION=="add|change", KERNEL=="*::kbd_backlight|*::kbd_backlight_*|*::kbd_zoned_backlight-*", TEST=="kbd_rgb_mode", RUN+="/bin/chown @UID@ /sys%p/kbd_rgb_mode"
+SUBSYSTEM=="platform", ACTION=="add|bind|change", KERNEL=="hp-wmi", TEST=="rgb_zones/zone00", RUN+="/bin/chown @UID@ /sys%p/rgb_zones/zone00"
+SUBSYSTEM=="platform", ACTION=="add|bind|change", KERNEL=="hp-wmi", TEST=="rgb_zones/zone01", RUN+="/bin/chown @UID@ /sys%p/rgb_zones/zone01"
+SUBSYSTEM=="platform", ACTION=="add|bind|change", KERNEL=="hp-wmi", TEST=="rgb_zones/zone02", RUN+="/bin/chown @UID@ /sys%p/rgb_zones/zone02"
+SUBSYSTEM=="platform", ACTION=="add|bind|change", KERNEL=="hp-wmi", TEST=="rgb_zones/zone03", RUN+="/bin/chown @UID@ /sys%p/rgb_zones/zone03"

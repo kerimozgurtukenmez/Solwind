@@ -5,12 +5,16 @@ import QtQuick
 import qs.utils
 
 // Keyboard backlight. Detection (scripts/kbdinfo.sh) finds the laptop maker, the kernel driver and the light it
-// exposes, and picks a backend. SAFETY: only the kernel's own interfaces are used (LED class files under
-// /sys/class/leds); no raw WMI/ACPI/EC/USB access. The kernel driver validates every value.
+// exposes, and picks a backend. SAFETY: only files a kernel driver exposes in /sys are used (LED class files under
+// /sys/class/leds, or the hp-wmi module's rgb_zones); no raw WMI/ACPI/EC/USB access. The driver validates every value.
 // Backends:
 //   led-rgb   one RGB light: brightness + multi_intensity "r g b"            (HP Victus/Omen single zone: hp::kbd_backlight)
-//   hp-zoned  HP four-zone keyboards: one LED per zone (hp::kbd_zoned_backlight-left/center/right/wasd);
-//             every zone gets the same colour and brightness
+//   hp-zoned  four-zone keyboards with one LED per zone (the kernel's naming: *::kbd_zoned_backlight-<zone>;
+//             TUXOV's hp-wmi-fan-and-backlight-control 0.0.4+ uses right/middle/left/wasd, HP's proposed kernel patch
+//             right/center/left/wasd); every zone gets the same colour and brightness
+//   hp-rgbzones HP four-zone keyboards with older copies of that module (0.0.2, e.g. the one victus-control installs):
+//             /sys/devices/platform/hp-wmi/rgb_zones/zone00..03, hex "RRGGBB". No brightness file, so colour only;
+//             every zone gets the same colour.
 //   asus-tuf  ASUS TUF: asus::kbd_backlight brightness (0..3) + kbd_rgb_mode "cmd mode r g b speed" for the colour.
 //             Always cmd 0 (apply only, never 1 = save to BIOS) and mode 0 (static). kbd_rgb_mode can't be read back.
 //   led-mono  brightness only (ASUS non-RGB, Lenovo IdeaPad/ThinkPad, others)
@@ -22,8 +26,8 @@ import qs.utils
 Singleton {
     id: root
 
-    property string backend: ""               // "" (none) | led-rgb | hp-zoned | asus-tuf | led-mono
-    property var zones: []                    // light folders that are written together (one, or the HP zones)
+    property string backend: ""               // "" (none) | led-rgb | hp-zoned | hp-rgbzones | asus-tuf | led-mono
+    property var zones: []                    // light folders written together (one, or the HP zones); hp-rgbzones: the zone files
     readonly property string dir: zones.length ? zones[0] : ""
     readonly property bool available: backend !== ""
     property string name: ""                  // e.g. hp::kbd_backlight (or "hp::kbd_zoned_backlight ×4")
@@ -31,9 +35,11 @@ Singleton {
     property var dmi: ({ vendor: "", product: "", family: "", board: "" })
     property string kernel: ""
     property var notes: []                    // extra findings: legion-usb, rog-usb, hp-none
-    readonly property bool rgb: backend === "led-rgb" || backend === "hp-zoned" || backend === "asus-tuf"
-    // Software effects write many times per second: only on the driver they were tested with
-    readonly property bool effectsAllowed: rgb && driver === "hp-wmi" && backend !== "asus-tuf"
+    readonly property bool rgb: backend === "led-rgb" || backend === "hp-zoned" || backend === "hp-rgbzones" || backend === "asus-tuf"
+    readonly property bool hasBrightness: available && backend !== "hp-rgbzones"
+    // Software effects write many times per second: only where they were tested (HP single zone). On four-zone HP
+    // keyboards every zone write is a full colour-table read + write over WMI in both module versions, 4x per frame.
+    readonly property bool effectsAllowed: rgb && driver === "hp-wmi" && backend === "led-rgb"
     readonly property bool tested: backend === "led-rgb" && driver === "hp-wmi"
     property bool writable: false
     property bool ruleLegacy: false           // an older, less strict rule is installed (0666 or running a shell)
@@ -95,6 +101,7 @@ Singleton {
     function parse(out) {
         const leds = []                       // [{ name, driver, path, v: {file: value}, w: {file: true}, x: {file: true} }]
         const byName = {}
+        const rgbZones = []                   // hp-wmi rgb_zones files, same shape as leds
         const usb = []
         let rule = ""
         for (const line of out.split("\n")) {
@@ -102,6 +109,7 @@ Singleton {
             if (p[0] === "dmi" && p.length >= 6) dmi = { vendor: p[1], product: p[2], family: p[4], board: p[5] }
             else if (p[0] === "kernel") kernel = p[1] || ""
             else if (p[0] === "led" && p.length >= 4) { const l = { name: p[1], driver: p[2], path: p.slice(3).join("|"), v: {}, w: {}, x: {} }; leds.push(l); byName[p[1]] = l }
+            else if (p[0] === "zone" && p.length >= 4) { const l = { name: p[1], driver: p[2], path: p.slice(3).join("|"), v: {}, w: {}, x: {} }; rgbZones.push(l); byName[p[1]] = l }
             else if ((p[0] === "v" || p[0] === "w" || p[0] === "x") && byName[p[1]]) byName[p[1]][p[0]][p[2]] = p[0] === "v" ? p.slice(3).join("|") : true
             else if (p[0] === "usb") usb.push({ vid: p[1], pid: p[2], name: p[3] || "" })
             else if (p[0] === "rule") rule = rule || (p[1] === "etc" ? (p[2] === "legacy" ? "etc-legacy" : "etc") : "lib")
@@ -114,23 +122,34 @@ Singleton {
         const isRgb = l => !!l.v.multi_intensity && /red/.test(l.v.multi_index || "") && /green/.test(l.v.multi_index || "")
         const zoned = leds.filter(l => l.name.indexOf("::kbd_zoned_backlight-") >= 0)
         const single = leds.find(l => /::kbd_backlight$/.test(l.name)) || leds.find(l => l.name.indexOf("::kbd_backlight") >= 0)
+        const isHex = l => /^[0-9A-Fa-f]{6}$/.test(l.v.color || "")
         let use = [], kind = ""
         if (zoned.length > 0 && zoned.every(isRgb)) { use = zoned; kind = "hp-zoned" }
+        else if (rgbZones.length > 0 && rgbZones.every(isHex)) { use = rgbZones; kind = "hp-rgbzones" }
         else if (single && isRgb(single)) { use = [single]; kind = "led-rgb" }
         else if (single && single.x.kbd_rgb_mode) { use = [single]; kind = "asus-tuf" }
         else if (single) { use = [single]; kind = "led-mono" }
         else if (zoned.length > 0) { use = zoned; kind = "led-mono" }
         backend = kind
         zones = use.map(l => l.path)
-        name = use.length > 1 ? use[0].name.replace(/-[^-]*$/, "") + " ×" + use.length : (use.length ? use[0].name : "")
+        name = kind === "hp-rgbzones" ? "hp-wmi rgb_zones ×" + use.length
+             : use.length > 1 ? use[0].name.replace(/-[^-]*$/, "") + " ×" + use.length : (use.length ? use[0].name : "")
         driver = use.length ? use[0].driver : ""
         const first = use[0]
-        writable = use.length > 0 && use.every(l => l.w.brightness
+        writable = use.length > 0 && (kind === "hp-rgbzones" ? use.every(l => !!l.w.color)
+                 : use.every(l => l.w.brightness
                     && (kind === "led-rgb" || kind === "hp-zoned" ? !!l.w.multi_intensity : true)
-                    && (kind === "asus-tuf" ? !!l.w.kbd_rgb_mode : true))
+                    && (kind === "asus-tuf" ? !!l.w.kbd_rgb_mode : true)))
         maxBrightness = first ? (parseInt(first.v.max_brightness) || 255) : 255
-        brightness = first ? (parseInt(first.v.brightness) || 0) : 0
-        if (kind === "led-rgb" || kind === "hp-zoned") {
+        // hp-rgbzones has no brightness: treat it as always full so nothing tries to "turn the light on"
+        brightness = kind === "hp-rgbzones" ? maxBrightness : first ? (parseInt(first.v.brightness) || 0) : 0
+        if (kind === "hp-rgbzones") {
+            maxIntensity = [255, 255, 255]
+            if (!effectActive) {
+                const h = parseInt(first.v.color, 16)
+                color = Qt.rgba((h >> 16 & 255) / 255, (h >> 8 & 255) / 255, (h & 255) / 255, 1)
+            }
+        } else if (kind === "led-rgb" || kind === "hp-zoned") {
             maxIntensity = (first.v.multi_max_intensity || "255 255 255").trim().split(/\s+/).map(x => parseInt(x) || 255)
             // While an effect runs, the hardware colour is just the current frame; don't overwrite the chosen colour with it
             if (!effectActive) {
@@ -146,7 +165,7 @@ Singleton {
         const n = []
         if (vendor.indexOf("lenovo") >= 0 && usb.some(u => u.vid === "048d" && /^c9/i.test(u.pid))) n.push("legion-usb")
         if (vendor.indexOf("asus") >= 0 && kind !== "asus-tuf" && usb.some(u => u.vid === "0b05" && /n-key/i.test(u.name))) n.push("rog-usb")
-        if (vendor === "hp" && kind === "") n.push("hp-none")
+        if ((vendor === "hp" || vendor.indexOf("hewlett") >= 0) && kind === "") n.push("hp-none")
         notes = n
 
         // ASUS TUF: the colour can't be read back, so the saved colour is applied once at startup
@@ -161,6 +180,9 @@ Singleton {
     }
     // The value written for a colour, per backend
     function colorValue(c, level) {
+        if (backend === "hp-rgbzones")       // "RRGGBB" (no "#")
+            return hex(Qt.rgba(Math.max(0, Math.min(1, c.r * level)), Math.max(0, Math.min(1, c.g * level)),
+                               Math.max(0, Math.min(1, c.b * level)), 1)).slice(1)
         if (backend === "asus-tuf") {
             // cmd 0 = apply (1 would save to BIOS: never), mode 0 = static, speed 1 (ignored by static)
             const v = [c.r, c.g, c.b].map(x => Math.round(Math.max(0, Math.min(1, x * level)) * 255))
@@ -169,9 +191,12 @@ Singleton {
         return intensity(c, level)
     }
     readonly property string colorFile: backend === "asus-tuf" ? "kbd_rgb_mode" : "multi_intensity"
+    // The file a colour is written to: hp-rgbzones zones are the files themselves, the others are LED folders
+    function colorPath(z) { return backend === "hp-rgbzones" ? z : z + "/" + colorFile }
     // Changes show in the UI immediately; the files are written at most ~12 times/s (while dragging)
     property var pending: ({})
     function setBrightness(b) {
+        if (!hasBrightness) return
         if (!writable) { refresh(); return }  // without permission don't change the state; it may have been granted meanwhile, so check again
         brightness = Math.max(0, Math.min(maxBrightness, Math.round(b)))
         queue("brightness", String(brightness))
@@ -184,7 +209,7 @@ Singleton {
         Settings.setKbd({ color: hex(color) })
         if (!effectActive) queue("color", colorValue(color, 1))   // with an effect running, the next frame applies it
         // Picking a colour at brightness 0 shows nothing; turn the light on so the user sees it
-        if (brightness === 0) setBrightness(maxBrightness)
+        if (hasBrightness && brightness === 0) setBrightness(maxBrightness)
     }
     function queue(kind, value) {
         if (!available) return
@@ -196,10 +221,11 @@ Singleton {
     function writeNext() {
         // Colour first, then brightness (so the light never shows the new colour at the old brightness)
         if (pending.color !== undefined) sendColor(pending.color)
-        if (pending.brightness !== undefined) for (const z of zones) send(z + "/brightness", pending.brightness)
+        if (pending.brightness !== undefined && hasBrightness) for (const z of zones) send(z + "/brightness", pending.brightness)
         pending = ({})
     }
-    Timer { id: flush; interval: 80; onTriggered: root.writeNext() }
+    // Zoned lights: one write per zone (each a WMI colour-table read + write on HP), so fewer while dragging
+    Timer { id: flush; interval: root.zones.length > 1 ? 250 : 80; onTriggered: root.writeNext() }
 
     // One persistent writer process (awk): starting a process per write would be costly during effects (25 frames/s).
     // awk reads its input buffered (bash "read" reads a pipe byte by byte, ~2x the CPU; Quickshell FileView ~3x).
@@ -208,7 +234,7 @@ Singleton {
     function send(path, value) {
         if (writer.running) writer.write(path + "\n" + value + "\n")
     }
-    function sendColor(value) { for (const z of zones) send(z + "/" + colorFile, value) }
+    function sendColor(value) { for (const z of zones) send(colorPath(z), value) }
     function writeFailed(why) {
         error = I18n.t("Could not write to the keyboard light") + (why ? ": " + why : "")
         effect = "static"                     // permission lost: stop the effect (not saved to settings)
@@ -316,7 +342,7 @@ Singleton {
         if (!effectActive) { cb(); return }
         effect = "static"                                   // not saved: the effect resumes on the next start
         oneShot.go(["sh", "-c", 'v=$1; shift; for f; do printf "%s\\n" "$v" > "$f"; done', "sh", colorValue(color, 1)]
-                   .concat(zones.map(z => z + "/" + colorFile)), () => cb())
+                   .concat(zones.map(z => colorPath(z))), () => cb())
     }
 
     // ---------- write permission (only when the user asks; via the system password dialog) ----------
@@ -330,7 +356,8 @@ Singleton {
     readonly property string resetPerms:
         'for d in /sys/class/leds/*::kbd_backlight /sys/class/leds/*::kbd_backlight_* /sys/class/leds/*::kbd_zoned_backlight-*; do ' +
         '[ -d "$d" ] || continue; for f in brightness multi_intensity; do [ -e "$d/$f" ] && chown root:root "$d/$f" && chmod 0644 "$d/$f"; done; ' +
-        '[ -e "$d/kbd_rgb_mode" ] && chown root:root "$d/kbd_rgb_mode"; done; '
+        '[ -e "$d/kbd_rgb_mode" ] && chown root:root "$d/kbd_rgb_mode"; done; ' +
+        'for f in /sys/devices/platform/hp-wmi/rgb_zones/zone*; do [ -e "$f" ] && chown root:root "$f" && chmod 0644 "$f"; done; '
     function grantPermission() {
         // While the files change hands (old permissions reset, then the new owner set) a running effect must not write,
         // or it hits "Permission denied" in between. Pause it; permDone() resumes it once the new state has been read.
@@ -343,7 +370,8 @@ Singleton {
                  'sed "s/@UID@/$uid/g" "$1" > "$new" && sh "$2" "$new" "$uid" || { rm -f "$new"; exit 1; }; ' +
                  resetPerms +
                  'chmod 644 "$new" && mv "$new" /etc/udev/rules.d/90-ccenter.rules && ' +
-                 'udevadm control --reload-rules && udevadm trigger --action=change --subsystem-match=leds && udevadm settle',
+                 'udevadm control --reload-rules && udevadm trigger --action=change --subsystem-match=leds && ' +
+                 'udevadm trigger --action=change --subsystem-match=platform --sysname-match=hp-wmi && udevadm settle',
                  "sh", ruleFile, ruleCheck],
                 (code, out, err) => root.permDone(code, out, err))
     }
@@ -374,7 +402,7 @@ Singleton {
         return ("#" + h(c.r) + h(c.g) + h(c.b)).toUpperCase()
     }
     function kindText() {
-        return backend === "hp-zoned" ? I18n.t("RGB, %1 zones (same color on all)").arg(zones.length)
+        return backend === "hp-zoned" || backend === "hp-rgbzones" ? I18n.t("RGB, %1 zones (same color on all)").arg(zones.length)
              : backend === "asus-tuf" ? I18n.t("RGB, single zone, ASUS TUF")
              : backend === "led-rgb" ? I18n.t("RGB, single zone")
              : I18n.t("single color, %1 brightness levels").arg(maxBrightness)
@@ -395,19 +423,19 @@ Singleton {
     function supportText() {
         if (!available) return I18n.t("not supported")
         if (tested) return I18n.t("full (tested)")
-        if (effectsAllowed) return I18n.t("color, brightness and effects (not tested on this keyboard type)")
+        if (backend === "hp-rgbzones") return I18n.t("color only, same on all zones (not tested on this keyboard type)")
         if (rgb) return I18n.t("color and brightness (not tested on this model)")
         return I18n.t("brightness only")
     }
     function noteText(n) {
         return n === "legion-usb" ? I18n.t("This Lenovo has a USB RGB keyboard controller (ITE). Its colors are not exposed by the kernel; tools like L5P-Keyboard-RGB or OpenRGB control it.")
              : n === "rog-usb" ? I18n.t("This ASUS has an Aura (N-KEY) USB keyboard. Its colors are controlled by asusctl, not through the kernel light.")
-             : n === "hp-none" ? I18n.t("No keyboard light from the hp-wmi driver. HP color support needs a recent kernel (7.2 or newer); per-key RGB keyboards are not supported by the kernel.")
+             : n === "hp-none" ? I18n.t("No HP keyboard light found. If this laptop has an RGB keyboard: the official kernel doesn't support HP keyboard lights yet, they need the extra hp-wmi-fan-and-backlight-control module (see the README). Per-key RGB keyboards aren't supported.")
              : n
     }
     function noPermissionText() { return I18n.t("No write permission: Keyboard tab > 'Grant permission' (or install.sh)") }
     function statusText() {
-        if (!available) return I18n.t("No keyboard light found (no /sys/class/leds/*::kbd_backlight)")
+        if (!available) return I18n.t("No keyboard light found")
         const src = { single: I18n.t("chosen color"), multi: I18n.t("%1 colors").arg(colors.length),
                       theme: I18n.t("Caelestia theme, %1 colors").arg(themeCount) }
         const fx = effect === "breathing"
@@ -415,7 +443,7 @@ Singleton {
             : effect === "cycle" ? I18n.t("color cycle (%1, %2 s per color)").arg(src[source]).arg(I18n.num(period, 1)) : I18n.t("static")
         return I18n.t("Keyboard light: %1").arg(name) + " (" + kindText() + ")"
             + "\n" + I18n.t("Color: %1").arg(rgb ? hex(color) : "-")
-            + "\n" + I18n.t("Brightness: %1%").arg(Math.round(brightness * 100 / maxBrightness))
+            + (hasBrightness ? "\n" + I18n.t("Brightness: %1%").arg(Math.round(brightness * 100 / maxBrightness)) : "")
             + "\n" + I18n.t("Effect: %1").arg(fx)
             + (writable ? "" : "\n" + noPermissionText())
     }

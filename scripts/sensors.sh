@@ -4,8 +4,10 @@
 # Output lines:
 #   name|label|millidegrees     CPU / iGPU / AMD GPU temperatures
 #   fan|driver|number|rpm       fan speed (if the driver reports it; some always report 0)
-#   nvidia||millidegrees        NVIDIA temperature   (nvidia||asleep: card asleep, nvidia||skip: skipped this round)
+#   nvidia||millidegrees        NVIDIA temperature   (nvidia||asleep: card asleep, nvidia||skip: skipped this round,
+#                               nvidia||fail: nvidia-smi gave no temperature, e.g. driver/library version mismatch)
 # If $1 = "gpu", the NVIDIA temperature is read with nvidia-smi (expensive, ~30 ms); otherwise it is skipped.
+# nvidia-smi is stopped after 5 s, so a hanging call doesn't hold up every later sensor read.
 for h in /sys/class/hwmon/hwmon*; do
   [ -r "$h/name" ] || continue
   read -r n < "$h/name"
@@ -40,8 +42,10 @@ for d in /sys/bus/pci/devices/*; do
   elif [ "$1" != "gpu" ]; then
     echo "nvidia||skip"
   elif command -v nvidia-smi >/dev/null 2>&1; then
-    t=$(nvidia-smi --query-gpu=temperature.gpu --format=csv,noheader,nounits 2>/dev/null)
+    to=""
+    command -v timeout >/dev/null 2>&1 && to="timeout -k 2 5"
+    t=$($to nvidia-smi --query-gpu=temperature.gpu --format=csv,noheader,nounits 2>/dev/null)
     t=${t%%[!0-9]*}
-    [ -n "$t" ] && echo "nvidia||${t}000"
+    if [ -n "$t" ]; then echo "nvidia||${t}000"; else echo "nvidia||fail"; fi
   fi
 done

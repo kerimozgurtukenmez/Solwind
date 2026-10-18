@@ -97,6 +97,13 @@ run "Detection (kbdinfo.sh)" sh "$app/scripts/kbdinfo.sh"
 for d in /sys/class/leds/*kbd*; do
     [ -e "$d" ] && run "Files of ${d##*/}" ls -ln "$d/"
 done
+[ -d /sys/devices/platform/hp-wmi/rgb_zones ] && run "HP four-zone files (rgb_zones)" ls -ln /sys/devices/platform/hp-wmi/rgb_zones/
+[ -r /sys/module/hp_wmi/taint ] && run "hp_wmi module taint (O = out-of-tree)" cat /sys/module/hp_wmi/taint
+# Which hp_wmi is loaded matters: the keyboard files differ between the kernel's own and the extra module's versions
+if [ -d /sys/module/hp_wmi ]; then
+    command -v modinfo >/dev/null 2>&1 && run "hp_wmi module file" modinfo -F filename hp_wmi
+    [ -r /sys/module/hp_wmi/srcversion ] && run "hp_wmi srcversion" cat /sys/module/hp_wmi/srcversion
+fi
 [ -f /etc/udev/rules.d/90-ccenter.rules ] && run "Permission rule" cat /etc/udev/rules.d/90-ccenter.rules
 
 section "Settings"
