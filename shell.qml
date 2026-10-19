@@ -138,6 +138,7 @@ ShellRoot {
         // Detection report (laptop, driver, light, permission, support level): handy for bug reports
         function kbdInfo(): string { return Keyboard.infoText() }
         function kbdColor(hex: string): string {
+            if (!Keyboard.available) return I18n.t("No keyboard light found")
             if (!Keyboard.rgb) return I18n.t("This keyboard light is not RGB")
             if (!/^#?[0-9a-fA-F]{6}$/.test(hex)) return I18n.t("The color must look like #rrggbb (e.g. #ff0000)")
             Keyboard.setColor(hex.startsWith("#") ? hex : "#" + hex)

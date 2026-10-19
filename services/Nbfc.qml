@@ -23,10 +23,18 @@ Singleton {
 
     property var targets: ({})            // fan index -> st (only for Fixed/Curve fans)
     property var lastSent: ({})
+    // "Did NBFC see it yet?" is judged by counting status reads, not by the clock (a clock jump can't break it)
+    property int pollSeq: 0               // status reads started so far
+    property int statusSeq: 0             // number of the status read being processed
+    property var sentSeq: ({})            // fan index -> pollSeq when NBFC took the last speed (Infinity while on the way)
+    property var releasing: ({})          // fan index -> { at, seq, tries }: handed back to NBFC auto, not confirmed yet
     property var queue: []
+    property var adminQueue: []
     property bool logged: false
 
-    // ---------- command queue (commands run one after another) ----------
+    // ---------- command queues ----------
+    // nbfc commands run one after another. Admin actions (pkexec) have their own queue: the password dialog can stay
+    // open for a long time and must not hold up fan speeds or the safety limit.
     function enqueue(key, cmd, cb) {
         const q = queue.filter(e => key === "" || e.key !== key)
         q.push({ key: key, cmd: cmd, cb: cb })
@@ -42,14 +50,36 @@ Singleton {
             Qt.callLater(root.pump)
         })
     }
+    function enqueueAdmin(cmd, cb) {
+        adminQueue = adminQueue.concat([{ cmd: cmd, cb: cb }])
+        pumpAdmin()
+    }
+    function pumpAdmin() {
+        if (adminRunner.busy || adminQueue.length === 0) return
+        const e = adminQueue[0]
+        adminQueue = adminQueue.slice(1)
+        adminRunner.go(e.cmd, (code, out, err) => {
+            if (e.cb) e.cb(code, out, err)
+            Qt.callLater(root.pumpAdmin)
+        })
+    }
     function firstLine(s) { return s.trim().split("\n")[0] }
     function lines(s) { return s.split("\n").map(l => l.trim()).filter(l => l !== "") }
+
+    // While an admin action runs and for a few seconds after it, NBFC may stop and start: that is not reported as
+    // "stopped unexpectedly" or "could not set the speed"
+    property double adminQuietUntil: 0
+    function adminQuiet() {
+        const left = adminQuietUntil - Date.now()          // (a clock jump back doesn't stretch it)
+        return adminRunner.busy || adminQueue.length > 0 || (left > 0 && left <= 5000)
+    }
 
     // actions that need root
     function sudo(args, label, then) {
         message = label
         messageError = false
-        enqueue("", ["pkexec"].concat(args), (code, out, err) => {
+        enqueueAdmin(["pkexec"].concat(args), (code, out, err) => {
+            root.adminQuietUntil = Date.now() + 5000
             if (code === 0) {
                 root.message = ""
             } else {
@@ -63,13 +93,37 @@ Singleton {
 
     // ---------- service ----------
     property bool userStopped: false         // if the user stopped the service, don't send the "stopped unexpectedly" notification
+    property bool lostPending: false         // the service went away; reported once no admin action explains it
     signal serviceLost()                     // a running service stopped unexpectedly
     signal commandFailed(string msg)         // a fan speed could not be written
     signal boostEnded()                      // a timed max fan run ended
 
-    function startService() { userStopped = false; sudo(["nbfc", "start"].concat(readOnly ? ["-r"] : []), I18n.t("Waiting for admin permission…")) }
-    function stopService() { userStopped = true; sudo(["nbfc", "stop"], I18n.t("Waiting for admin permission…")) }
+    function startService() {
+        userStopped = false
+        lostPending = false
+        sudo(["nbfc", "start"].concat(readOnly ? ["-r"] : []), I18n.t("Waiting for admin permission…"))
+    }
+    function stopService() { handBackThen(["nbfc", "stop"], code => { if (code === 0) root.userStopped = true }) }
     function restartService(ro) { sudo(["nbfc", "restart"].concat(ro ? ["-r"] : []), I18n.t("Waiting for admin permission…")) }
+    // NBFC saves the fans' target speeds when it stops and sets them again at its next start (/var/lib/nbfc/state.json),
+    // also when Ccenter isn't running then, and a new config gets them by fan number. So before stopping or switching
+    // the config, every fan goes back to NBFC's automatic control, and no speeds are written until the action has
+    // finished. If it fails or is cancelled, Ccenter takes its own fans again on the next round; fans it doesn't drive
+    // (no saved setting, or fixed from outside) stay on auto.
+    property int holds: 0                     // admin actions that hand the fans back, still running
+    readonly property bool holding: holds > 0
+    function handBackThen(args, then) {
+        holds++
+        const act = () => root.sudo(args, I18n.t("Waiting for admin permission…"), code => {
+            root.holds--
+            if (then) then(code)
+        })
+        // Always: the last status read may not show a speed that is still on the way, and in read-only mode NBFC also
+        // keeps and saves the targets (it only doesn't write them to the EC). Key "" is never replaced by a later
+        // command, so `act` always runs, after the speed commands already waiting.
+        if (running) enqueue("", ["nbfc", "set", "-a"], () => act())
+        else act()
+    }
     function setReadOnly(v) {
         const was = root.running
         readOnly = v
@@ -187,7 +241,7 @@ Singleton {
         })
     }
     function applyConfig(name) {
-        sudo(["sh", "-c", 'nbfc config -s "$1" && nbfc restart $2', "sh", name, readOnly ? "-r" : ""], I18n.t("Waiting for admin permission…"))
+        handBackThen(["sh", "-c", 'nbfc config -s "$1" && nbfc restart $2', "sh", name, readOnly ? "-r" : ""])
     }
 
     // ---------- reading the status ----------
@@ -197,7 +251,7 @@ Singleton {
         const res = { readOnly: null, temp: NaN, fans: [] }
         let fan = null
         const fresh = name => {
-            const f = { name: name, temp: NaN, auto: true, current: 0, target: 0, curSeen: false }
+            const f = { name: name, temp: NaN, auto: true, critical: false, current: 0, target: 0, curSeen: false }
             res.fans.push(f)
             return f
         }
@@ -221,6 +275,7 @@ Singleton {
             }
             if (!fan) continue
             if (k.indexOf("target") >= 0 && k.indexOf("speed") >= 0) fan.target = parseFloat(v) || 0
+            else if (k.indexOf("critical") >= 0) fan.critical = root.isTrue(v)      // "Critical Mode Enabled": NBFC runs it at 100%
             else if (k.indexOf("auto") >= 0) fan.auto = root.isTrue(v)
         }
         return res
@@ -235,16 +290,28 @@ Singleton {
 
     function poll() {
         if (statusCmd.busy) return
+        root.pollSeq++
+        const seq = root.pollSeq
         statusCmd.go(["nbfc", "status", "-a"], (code, out, err) => {
             if (!root.logged) {
                 root.logged = true
                 console.log("[ccenter] nbfc status -a (exit " + code + "):\n" + out + err)
             }
+            root.statusSeq = seq
             const was = root.running
             root.running = code === 0
-            if (was && !root.running && !root.userStopped && !root.quitting) root.serviceLost()
+            // A running service went away: not reported while an admin action (restart, config) explains it, but
+            // afterwards if it didn't come back and the user didn't stop it
+            if (was && !root.running) root.lostPending = true
+            if (root.running) root.lostPending = false
+            if (root.lostPending && !root.userStopped && !root.quitting && !root.adminQuiet()) {
+                root.lostPending = false
+                root.serviceLost()
+            }
             if (code === 0) {
-                root.userStopped = false
+                // Only a service that came back clears "stopped by the user" (a read started before the stop
+                // finished can still succeed afterwards)
+                if (!was) root.userStopped = false
                 root.applyStatus(root.parseStatus(out))
                 root.checkBoost()
                 root.control()
@@ -311,8 +378,10 @@ Singleton {
         const t = Object.assign({}, targets)
         for (const i of ids) {
             lastSent[i] = undefined
+            sentSeq[i] = 0
             level[i] = undefined                    // setting changed: the new curve applies immediately
-            if (st.mode === 0) delete t[i]; else t[i] = st
+            if (st.mode === 0) { delete t[i]; markReleasing(i) }
+            else { t[i] = st; delete releasing[i] }
         }
         targets = t
         if (boosting) return                         // while max fan runs, each fan returns to its own setting when it ends
@@ -324,18 +393,44 @@ Singleton {
         }
     }
 
+    // A fan Ccenter handed back to NBFC's automatic control: confirmed by a status read started after it was asked,
+    // otherwise asked again (every 4 s, at most 5 times, then reported)
+    function markReleasing(i) { releasing[i] = { at: Date.now(), seq: pollSeq, tries: 0 } }
+    function checkRelease(i, now) {
+        const r = releasing[i]
+        if (!r) return
+        if (fans[i].auto && statusSeq > r.seq) { delete releasing[i]; return }
+        const age = now - r.at
+        if (age >= 0 && age < 4000) return                // (a clock jump back counts as time up)
+        if (r.tries >= 5) {
+            if (adminQuiet()) return                      // an admin action may explain it: wait until it's over
+            delete releasing[i]
+            commandFailed(I18n.t("Fan %1 could not be handed back to NBFC's automatic control").arg(i + 1))
+            return
+        }
+        r.at = now
+        r.seq = pollSeq
+        r.tries++
+        enqueue("auto:" + i, ["nbfc", "set", "-f", String(i), "-a"], null)
+    }
+
     // Runs after every status read: writes speeds to fans in Fixed/Curve mode
     function control() {
-        if (!root.running || readOnly || quitting) return
+        if (!root.running || readOnly || quitting || holding) return
+        const now = Date.now()
         for (let i = 0; i < fans.length; i++) {
+            const f = fans[i]
+            // NBFC went back to auto or holds another speed than the one we sent (changed outside Ccenter, an old one
+            // restored): write it again. Only judged from a status read started after NBFC took our command; not in
+            // critical mode, where NBFC itself runs the fan at 100%.
+            if (lastSent[i] !== undefined && statusSeq > (sentSeq[i] ?? 0)
+                    && (f.auto || (!f.critical && Math.abs(f.target - lastSent[i]) >= 1))) lastSent[i] = undefined
             if (boosting) {                          // max fan: all fans at 100%
-                if (fans[i].auto) lastSent[i] = undefined
                 if (lastSent[i] !== 100) { lastSent[i] = 100; send(i, 100) }
                 continue
             }
             const t = targets[i]
-            if (!t) continue
-            if (fans[i].auto) lastSent[i] = undefined   // the service went back to auto: write again
+            if (!t) { checkRelease(i, now); continue }
             const T = sourceTemp(i, t.src)
             const H = hottest(i)
             let pct
@@ -354,10 +449,16 @@ Singleton {
     }
     property double lastFailNote: 0
     function send(i, pct) {
+        sentSeq[i] = Infinity
         enqueue("spd:" + i, ["nbfc", "set", "-f", String(i), "-s", String(pct)], (code, out, err) => {
-            if (code === 0) return
+            if (code === 0) {
+                if (root.lastSent[i] === pct) root.sentSeq[i] = root.pollSeq   // (a newer speed may already be on the way)
+                return
+            }
             root.lastSent[i] = undefined             // retried on the next round
-            root.commandFailed(I18n.t("Could not set the speed of fan %1: %2").arg(i + 1).arg(root.firstLine(err !== "" ? err : out)))
+            root.sentSeq[i] = 0
+            if (!root.adminQuiet())
+                root.commandFailed(I18n.t("Could not set the speed of fan %1: %2").arg(i + 1).arg(root.firstLine(err !== "" ? err : out)))
         })
     }
 
@@ -374,7 +475,10 @@ Singleton {
             for (let i = 0; i < fans.length; i++) {
                 lastSent[i] = undefined
                 level[i] = undefined
-                if (!targets[i]) enqueue("auto:" + i, ["nbfc", "set", "-f", String(i), "-a"], null)
+                if (!targets[i]) {
+                    markReleasing(i)
+                    enqueue("auto:" + i, ["nbfc", "set", "-f", String(i), "-a"], null)
+                }
             }
         }
         control()
@@ -408,12 +512,44 @@ Singleton {
         targets = ({})
         boostUntil = 0
         if (owned && running) enqueue("quit", ["nbfc", "set", "-a"], () => Qt.quit())
+        else if (owned) warnSavedSpeedsThenQuit()
         else Qt.quit()
+    }
+    // NBFC isn't running, so the fans can't be handed back now. If it saved fixed speeds when it stopped, it sets them
+    // again at its next start, with nothing watching the temperature but the config's critical limit: say so.
+    function warnSavedSpeedsThenQuit() {
+        enqueue("quit", ["cat", "/var/lib/nbfc/state.json"], (code, out) => {
+            let fixed = false
+            try { fixed = code === 0 && (JSON.parse(out).TargetFanSpeeds || []).some(v => Number(v) >= 0) } catch (e) {}
+            if (fixed) {
+                console.log("[ccenter] NBFC is stopped with fixed fan speeds saved in /var/lib/nbfc/state.json")
+                Notify.send(I18n.t("Fans may stay at a fixed speed"),
+                            I18n.t("NBFC is stopped and has saved fixed fan speeds; it sets them again when it starts. After starting it, run `nbfc set -a` or open Ccenter."),
+                            "normal", "dialog-warning")
+            }
+            Qt.quit()
+        })
+    }
+
+    // Another config: the old one's settings don't belong to these fans. Fans Ccenter drove go back to NBFC's automatic
+    // control (followed up until NBFC reports it: a restart right after the switch can swallow the first command, and
+    // the new config then gets the old speeds by fan number); FanState applies the new config's saved settings on the
+    // next status read, which takes those fans over again.
+    function forgetFans() {
+        const owned = Object.keys(targets).concat(Object.keys(releasing))
+        targets = ({})
+        lastSent = ({})
+        sentSeq = ({})
+        level = ({})
+        releasing = ({})
+        for (const k of owned) markReleasing(Number(k))
+        if (running && !boosting) for (const k of owned) enqueue("auto:" + k, ["nbfc", "set", "-f", k, "-a"], null)
     }
 
     // ---------- plumbing ----------
-    Cmd { id: runner }
-    Cmd { id: statusCmd }
+    Cmd { id: runner; timeout: 15000 }
+    Cmd { id: statusCmd; timeout: 10000 }
+    Cmd { id: adminRunner }                   // no time limit: it waits for the password dialog
     // 2 s while the window is open or Ccenter drives fans; 5 s when hidden and everything is on NBFC
     Timer { interval: root.uiVisible || root.controlling ? 2000 : 5000; running: true; repeat: true; triggeredOnStart: true; onTriggered: root.poll() }
 
@@ -421,12 +557,13 @@ Singleton {
         path: "/etc/nbfc/nbfc.json"
         watchChanges: true
         onFileChanged: reload()
+        // A half-written file (empty while NBFC rewrites it) keeps the current id instead of switching configs
         onLoaded: {
             try { root.configId = JSON.parse(text()).SelectedConfigId || "" }
-            catch (e) { root.configId = "" }
+            catch (e) { console.log("[ccenter] /etc/nbfc/nbfc.json could not be read: " + e) }
         }
     }
 
-    onConfigIdChanged: { mergeConfigs(); loadConfigCurves() }
+    onConfigIdChanged: { forgetFans(); mergeConfigs(); loadConfigCurves() }
     Component.onCompleted: { loadConfigs(); refreshBoot() }
 }

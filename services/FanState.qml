@@ -52,6 +52,9 @@ Singleton {
     Connections {
         target: Nbfc
         function onFansChanged() { Qt.callLater(root.restore) }
+        // Another config has its own saved settings: loaded on the next status read (Nbfc.forgetFans has already
+        // dropped the old config's ones). Also covers a status read that came before /etc/nbfc/nbfc.json was read.
+        function onConfigIdChanged() { root.restored = false }
     }
 
     // ---------- changes coming from the UI ----------

@@ -11,7 +11,8 @@ import qs.utils
 //   led-rgb   one RGB light: brightness + multi_intensity "r g b"            (HP Victus/Omen single zone: hp::kbd_backlight)
 //   hp-zoned  four-zone keyboards with one LED per zone (the kernel's naming: *::kbd_zoned_backlight-<zone>;
 //             TUXOV's hp-wmi-fan-and-backlight-control 0.0.4+ uses right/middle/left/wasd, HP's proposed kernel patch
-//             right/center/left/wasd); every zone gets the same colour and brightness
+//             right/center/left/wasd; that module's 0.0.3 numbers them: hp::kbd_backlight_zone0..3);
+//             every zone gets the same colour and brightness
 //   hp-rgbzones HP four-zone keyboards with older copies of that module (0.0.2, e.g. the one victus-control installs):
 //             /sys/devices/platform/hp-wmi/rgb_zones/zone00..03, hex "RRGGBB". No brightness file, so colour only;
 //             every zone gets the same colour.
@@ -95,8 +96,24 @@ Singleton {
                                : source === "theme" ? themeColors : [color]
 
     // ---------- reading ----------
+    // One read at a time. A request during a read gets a fresh read right after it (its callback runs after that one),
+    // so no callback is lost and none gets a state read before it asked
+    property var readWaiting: []              // callbacks for the next read
+    property var readCurrent: []              // callbacks of the read in progress
+    property bool readAgain: false
     function refresh(done) {
-        reader.go(["sh", Quickshell.shellPath("scripts/kbdinfo.sh")], (code, out) => { root.parse(out); if (done) done() })
+        if (done) readWaiting = readWaiting.concat([done])
+        if (reader.busy) { readAgain = true; return }
+        readCurrent = readWaiting
+        readWaiting = []
+        readAgain = false
+        reader.go(["sh", Quickshell.shellPath("scripts/kbdinfo.sh")], (code, out) => {
+            root.parse(out)
+            const cbs = root.readCurrent
+            root.readCurrent = []
+            for (const f of cbs) f()
+            if (root.readAgain) root.refresh()
+        })
     }
     function parse(out) {
         const leds = []                       // [{ name, driver, path, v: {file: value}, w: {file: true}, x: {file: true} }]
@@ -120,8 +137,13 @@ Singleton {
 
         // Pick the backend
         const isRgb = l => !!l.v.multi_intensity && /red/.test(l.v.multi_index || "") && /green/.test(l.v.multi_index || "")
-        const zoned = leds.filter(l => l.name.indexOf("::kbd_zoned_backlight-") >= 0)
-        const single = leds.find(l => /::kbd_backlight$/.test(l.name)) || leds.find(l => l.name.indexOf("::kbd_backlight") >= 0)
+        // Numbered zone LEDs of one driver are one keyboard too, never a single light (that would write one zone only)
+        const numbered = leds.filter(l => /::kbd_backlight_zone\d+$/.test(l.name))
+        const named = leds.filter(l => l.name.indexOf("::kbd_zoned_backlight-") >= 0)
+        const zoned = named.length > 0 ? named
+                    : numbered.length > 0 && numbered.every(l => l.driver === numbered[0].driver) ? numbered : []
+        const single = leds.find(l => /::kbd_backlight$/.test(l.name))
+                    || leds.find(l => l.name.indexOf("::kbd_backlight") >= 0 && zoned.indexOf(l) < 0)
         const isHex = l => /^[0-9A-Fa-f]{6}$/.test(l.v.color || "")
         let use = [], kind = ""
         if (zoned.length > 0 && zoned.every(isRgb)) { use = zoned; kind = "hp-zoned" }
@@ -133,7 +155,7 @@ Singleton {
         backend = kind
         zones = use.map(l => l.path)
         name = kind === "hp-rgbzones" ? "hp-wmi rgb_zones ×" + use.length
-             : use.length > 1 ? use[0].name.replace(/-[^-]*$/, "") + " ×" + use.length : (use.length ? use[0].name : "")
+             : use.length > 1 ? use[0].name.replace(/(-[^-]*|_zone\d+)$/, "") + " ×" + use.length : (use.length ? use[0].name : "")
         driver = use.length ? use[0].driver : ""
         const first = use[0]
         writable = use.length > 0 && (kind === "hp-rgbzones" ? use.every(l => !!l.w.color)
@@ -143,16 +165,20 @@ Singleton {
         maxBrightness = first ? (parseInt(first.v.max_brightness) || 255) : 255
         // hp-rgbzones has no brightness: treat it as always full so nothing tries to "turn the light on"
         brightness = kind === "hp-rgbzones" ? maxBrightness : first ? (parseInt(first.v.brightness) || 0) : 0
+        brightAt = Date.now()
+        // The light shows the chosen colour unless an effect is chosen: while one is selected (also when a write error
+        // stopped it or there's no permission) it may still show one of the effect's frames; the chosen colour is kept then.
+        // An effect saved on a light that has no effects (settings from another keyboard) doesn't count.
+        const fromHw = !effectsAllowed || (effect === "static" && Settings.kbdOf().effect === "static")
         if (kind === "hp-rgbzones") {
             maxIntensity = [255, 255, 255]
-            if (!effectActive) {
+            if (fromHw) {
                 const h = parseInt(first.v.color, 16)
                 color = Qt.rgba((h >> 16 & 255) / 255, (h >> 8 & 255) / 255, (h & 255) / 255, 1)
             }
         } else if (kind === "led-rgb" || kind === "hp-zoned") {
             maxIntensity = (first.v.multi_max_intensity || "255 255 255").trim().split(/\s+/).map(x => parseInt(x) || 255)
-            // While an effect runs, the hardware colour is just the current frame; don't overwrite the chosen colour with it
-            if (!effectActive) {
+            if (fromHw) {
                 const it = first.v.multi_intensity.trim().split(/\s+/).map(x => parseInt(x) || 0)
                 const order = (first.v.multi_index || "red green blue").trim().split(/\s+/)
                 const ch = n => { const k = order.indexOf(n); return k < 0 ? 0 : it[k] / maxIntensity[k] }
@@ -208,9 +234,23 @@ Singleton {
         color = Qt.rgba(c.r, c.g, c.b, 1)
         Settings.setKbd({ color: hex(color) })
         if (!effectActive) queue("color", colorValue(color, 1))   // with an effect running, the next frame applies it
-        // Picking a colour at brightness 0 shows nothing; turn the light on so the user sees it
-        if (hasBrightness && brightness === 0) setBrightness(maxBrightness)
+        // Picking a colour at brightness 0 shows nothing; turn the light on so the user sees it. The key that turns the
+        // light off (Fn) changes the brightness behind Ccenter's back, so a value older than a second is read again.
+        if (!hasBrightness) return
+        const age = Date.now() - brightAt
+        if (brightness === 0) setBrightness(maxBrightness)
+        else if ((age < 0 || age > 1000) && !brightReader.busy && pending.brightness === undefined) {
+            brightAt = Date.now()
+            brightReader.go(["cat", dir + "/brightness"], (code, out) => {
+                const b = parseInt(out)
+                // (a brightness the user set meanwhile wins over what was read before it was written)
+                if (code !== 0 || !isFinite(b) || !root.hasBrightness || root.pending.brightness !== undefined) return
+                root.brightness = b
+                if (b === 0) root.setBrightness(root.maxBrightness)
+            })
+        }
     }
+    property double brightAt: 0                // when the brightness was last read from the light
     function queue(kind, value) {
         if (!available) return
         const p = Object.assign({}, pending)
@@ -237,9 +277,48 @@ Singleton {
     function sendColor(value) { for (const z of zones) send(colorPath(z), value) }
     function writeFailed(why) {
         error = I18n.t("Could not write to the keyboard light") + (why ? ": " + why : "")
-        effect = "static"                     // permission lost: stop the effect (not saved to settings)
-        refresh()                             // re-read the real value and permission
+        if (effect !== "static") lostEffect = true
+        effect = "static"                     // stop the effect (not saved to settings)
+        healthy.stop()
+        refresh(() => root.scheduleRecover())  // re-read the real value and permission
     }
+    // After a write error (the module was reloaded, the light went away, permission changed) the light is looked for
+    // again: after 2, 4, 8, 16, 32 s, then every minute while it is missing. Once it's there and writable, a stopped
+    // effect comes back, or the chosen colour is written again; the error goes once that works. A light that is there
+    // but keeps failing is left alone after 5 tries (until a permission action); a minute without errors after a
+    // recovery resets the count, and so does a light that comes back after being missing.
+    property bool lostEffect: false           // the effect was stopped by a write error, not by the user
+    property bool lightMissing: false         // the last recovery look found no light
+    property int recoverTries: 0
+    function scheduleRecover() {
+        if (recoverTries >= 5 && available) return
+        recover.interval = Math.min(60000, 2000 * Math.pow(2, recoverTries))
+        recoverTries++
+        recover.restart()
+    }
+    function tryRecover() {
+        if (!available) { lightMissing = true; scheduleRecover(); return }
+        if (lightMissing) {
+            lightMissing = false
+            recoverTries = 0
+            // It has just appeared: udev may not have handed it to the user yet, so look once more before giving up
+            if (!writable) { scheduleRecover(); return }
+        }
+        if (!writable) return                 // no permission: granting it brings the effect back (permDone)
+        error = ""
+        if (lostEffect) {
+            lostEffect = false
+            effect = Settings.kbdOf().effect
+            lastFrame = ""
+        } else if (rgb && Settings.kbdOf().color !== "") {
+            // A static write failed: write the chosen colour again (if it fails again, the error comes back)
+            color = Settings.kbdOf().color
+            queue("color", colorValue(color, 1))
+        }
+        healthy.restart()
+    }
+    Timer { id: recover; onTriggered: root.refresh(() => root.tryRecover()) }
+    Timer { id: healthy; interval: 60000; onTriggered: root.recoverTries = 0 }
     Process {
         id: writer
         running: root.available
@@ -253,7 +332,8 @@ Singleton {
 
     // ---------- effects ----------
     function setEffect(e) {
-        if (e === effect) return
+        if (e === effect && !lostEffect) return
+        lostEffect = false                    // the user chose (also "static" after an error stopped the effect): keep it
         if (e === "cycle" && source === "single") setSource("multi")   // a cycle needs more than one colour
         effect = e
         Settings.setKbd({ effect: e })
@@ -389,7 +469,12 @@ Singleton {
         permBusy = false
         // 126/127: password dialog dismissed / not authorised
         if (code !== 0) error = code === 126 || code === 127 ? I18n.t("Cancelled.") : I18n.t("Failed: %1").arg((err || out).trim().split("\n")[0])
-        else effect = Settings.kbdOf().effect  // a write that failed earlier may have stopped the effect: bring back the saved one
+        else {
+            effect = Settings.kbdOf().effect  // a write that failed earlier may have stopped the effect: bring back the saved one
+            lostEffect = false
+            lightMissing = false
+            recoverTries = 0
+        }
         // Unpause only after the new permission state has been read: if permission is gone, writable=false stops the effect;
         // if it was cancelled, the effect continues (unpausing earlier would make the effect write without permission and stop itself)
         refresh(() => { root.paused = false })
@@ -438,7 +523,8 @@ Singleton {
         if (!available) return I18n.t("No keyboard light found")
         const src = { single: I18n.t("chosen color"), multi: I18n.t("%1 colors").arg(colors.length),
                       theme: I18n.t("Caelestia theme, %1 colors").arg(themeCount) }
-        const fx = effect === "breathing"
+        const fx = !effectsAllowed ? I18n.t("static")
+            : effect === "breathing"
             ? I18n.t("breathing (%1, %2 s, %3%–%4%)").arg(src[source]).arg(I18n.num(period, 1)).arg(Math.round(minLevel * 100)).arg(Math.round(maxLevel * 100))
             : effect === "cycle" ? I18n.t("color cycle (%1, %2 s per color)").arg(src[source]).arg(I18n.num(period, 1)) : I18n.t("static")
         return I18n.t("Keyboard light: %1").arg(name) + " (" + kindText() + ")"
@@ -450,6 +536,7 @@ Singleton {
 
     Cmd { id: reader }
     Cmd { id: oneShot }
+    Cmd { id: brightReader; timeout: 5000 }
     function loadSaved() {
         const k = Settings.kbdOf()
         source = k.source

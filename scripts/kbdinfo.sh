@@ -1,5 +1,6 @@
 #!/bin/sh
-# Keyboard light detection (read only; runs when the Keyboard tab opens or the permission changes, not in a loop).
+# Keyboard light detection (read only; runs when the Keyboard tab opens, the permission changes, or after a write
+# error while the light is looked for again: then at most once a minute).
 # Everything here is readable without root. Nothing is written.
 # Output lines (fields separated by "|"):
 #   dmi|vendor|product|version|family|board     laptop maker and model (/sys/class/dmi/id)
