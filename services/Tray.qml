@@ -40,7 +40,8 @@ Singleton {
                 const arg = sp < 0 ? "" : line.slice(sp + 1)
                 if (cmd === "toggle") root.toggleRequested()
                 else if (cmd === "profile") root.profileRequested(arg)
-                else if (cmd === "boost") Nbfc.setBoost(parseInt(arg) || 0)
+                else if (cmd === "boost" && !Nbfc.setBoost(parseInt(arg) || 0))
+                    Notify.send(I18n.t("Max fan not turned on"), Nbfc.boostBlocked(), "normal", "dialog-information")
                 else if (cmd === "quit") Nbfc.releaseAndQuit()
             }
         }

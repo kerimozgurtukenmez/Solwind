@@ -67,7 +67,7 @@ done
 
 f=/etc/udev/rules.d/90-ccenter.rules
 if [ -f "$f" ]; then
-  if grep -q -e '0666' -e '/bin/sh' "$f"; then echo "rule|etc|legacy"; else echo "rule|etc|current"; fi
+  if grep -q -e 'chmod 0666' -e '/bin/sh' "$f"; then echo "rule|etc|legacy"; else echo "rule|etc|current"; fi
 fi
 [ -f /usr/lib/udev/rules.d/90-ccenter.rules ] && echo "rule|lib"
 true

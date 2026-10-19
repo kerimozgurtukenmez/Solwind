@@ -211,7 +211,7 @@ done
 if [ -z "$led" ] && [ -e /sys/devices/platform/hp-wmi/rgb_zones/zone00 ]; then
     led=/sys/devices/platform/hp-wmi/rgb_zones; wfile=$led/zone00
 fi
-legacy=""; [ -f "$rule" ] && grep -q -e '0666' -e '/bin/sh' "$rule" && legacy=1     # an older, less strict rule
+legacy=""; [ -f "$rule" ] && grep -q -e 'chmod 0666' -e '/bin/sh' "$rule" && legacy=1     # an older, less strict rule
 if [ -z "$led" ]; then
     t "No keyboard light found; skipped the keyboard permission step." "Klavye ışığı bulunamadı; klavye izni adımı atlandı."
 elif [ -w "$wfile" ] && [ -z "$legacy" ]; then

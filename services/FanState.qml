@@ -141,7 +141,11 @@ Singleton {
     // UI, terminal and tray apply profiles by name (taken from the real list, so Qt list types can't get in the way)
     function applyByName(name, fromIpc) {
         const key = String(name).trim().toLocaleLowerCase()
-        const p = allProfiles().find(x => namesOf(x).indexOf(key) >= 0)
+        const all = allProfiles()
+        // The exact name of a user profile first (older settings may hold two names that only differ in case), then
+        // any case. Not for a name a built-in answers to: older versions let a user profile be called "quiet" too.
+        const exact = reservedName(name) ? undefined : all.find(x => !x.builtin && x.name === String(name).trim())
+        const p = exact ?? all.find(x => namesOf(x).indexOf(key) >= 0)
         if (!p) return I18n.t("Profile not found: %1").arg(name) + "\n" + profileList()
         if (!restored) return I18n.t("Fans not read yet (is NBFC running?), try again")
         if (!Nbfc.running) return I18n.t("The NBFC service is not running")

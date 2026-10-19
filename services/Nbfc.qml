@@ -360,6 +360,8 @@ Singleton {
 
     // Current level of a fan in Curve mode (%): hysteresis and the gradual slow-down work on this
     property var level: ({})
+    property var hot: ({})                    // fan index -> true while the safety limit holds it at 100%
+    readonly property int safetyHyst: 3
     readonly property int rampDown: 5        // slows down by at most this much per control round (2 s)
 
     // Speed up immediately; to slow down the temperature must drop st.hyst °C below the curve, then step down gradually
@@ -434,7 +436,11 @@ Singleton {
             const T = sourceTemp(i, t.src)
             const H = hottest(i)
             let pct
-            if (isFinite(H) && H >= safety) { pct = 100; level[i] = 100 }   // safety comes first
+            // Safety comes first. It lets go only 3°C below the limit, so a fan doesn't flip between 100% and its
+            // setting every round while the temperature hovers at the limit (an unreadable temperature keeps it)
+            if (isFinite(H) && H >= safety) hot[i] = true
+            else if (isFinite(H) && H < safety - safetyHyst) hot[i] = false
+            if (hot[i]) { pct = 100; level[i] = 100 }
             else if (t.mode === 1) { pct = t.fixed * 100; level[i] = undefined }
             else if (isFinite(T)) { pct = curveLevel(i, t, T); level[i] = pct }
             else continue
@@ -466,7 +472,17 @@ Singleton {
     // boostUntil: 0 off, -1 until turned off, >0 end time (ms)
     property double boostUntil: 0
     readonly property bool boosting: boostUntil !== 0
+    // Why max fan can't be turned on now ("" = it can): nothing would be written while NBFC is stopped, read-only or
+    // being stopped/switched (fans handed back). Max fan that is already on stays on through these and writes 100%
+    // again once NBFC can take it (the safe direction).
+    function boostBlocked() {
+        return !running ? I18n.t("The NBFC service is not running")
+             : readOnly ? I18n.t("NBFC is in read-only mode, fan speeds can't be written")
+             : holding ? I18n.t("Waiting for the NBFC service action to finish") : ""
+    }
+    // Returns false if it can't be turned on now (turning it off always works)
     function setBoost(minutes) {
+        if (minutes !== 0 && boostBlocked() !== "") return false
         if (minutes > 0) boostUntil = Date.now() + minutes * 60000
         else if (minutes < 0) boostUntil = -1
         else if (boosting) {
@@ -482,6 +498,7 @@ Singleton {
             }
         }
         control()
+        return true
     }
     function checkBoost() {
         if (boostUntil > 0 && Date.now() >= boostUntil) { setBoost(0); boostEnded() }
@@ -541,6 +558,7 @@ Singleton {
         lastSent = ({})
         sentSeq = ({})
         level = ({})
+        hot = ({})
         releasing = ({})
         for (const k of owned) markReleasing(Number(k))
         if (running && !boosting) for (const k of owned) enqueue("auto:" + k, ["nbfc", "set", "-f", k, "-a"], null)

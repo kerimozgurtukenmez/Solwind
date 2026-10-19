@@ -124,7 +124,9 @@ Card {
             Btn {
                 required property var modelData
                 text: modelData.t
-                onClicked: Nbfc.setBoost(modelData.m)
+                enabled: Nbfc.boostBlocked() === ""             // nothing could be written now
+                opacity: enabled ? 1 : 0.4
+                onClicked: if (enabled) Nbfc.setBoost(modelData.m)
             }
         }
         Btn {

@@ -58,7 +58,7 @@ ColumnLayout {
         edited(a)
     }
     function removeSelected() {
-        if (points.length <= 1) return
+        if (points.length <= 2) return       // a curve needs two points (fewer would fall back to the default curve)
         const a = copy()
         a.splice(selIndex, 1)
         selected = Math.max(0, selIndex - 1)
@@ -216,7 +216,7 @@ ColumnLayout {
         Btn {
             Layout.fillWidth: true; Layout.preferredWidth: 1
             icon: "delete"; text: I18n.t("Delete")
-            enabled: ed.points.length > 1
+            enabled: ed.points.length > 2
             opacity: enabled ? 1 : 0.4
             onClicked: ed.removeSelected()
         }

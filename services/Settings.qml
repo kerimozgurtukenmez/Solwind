@@ -75,7 +75,11 @@ Singleton {
     function saveProfile(id, p) {
         edit(d => {
             const c = slot(d, id)
-            const list = Array.isArray(c.profiles) ? c.profiles.filter(x => x && x.name !== p.name) : []
+            // Names are matched case-insensitively (FanState.applyByName): "gece" replaces "Gece"
+            const key = String(p.name).toLocaleLowerCase()
+            const same = x => x && typeof x.name === "string" && x.name.toLocaleLowerCase() === key
+            if (typeof c.active === "string" && c.active.toLocaleLowerCase() === key) c.active = p.name
+            const list = Array.isArray(c.profiles) ? c.profiles.filter(x => x && !same(x)) : []
             list.push(p)
             c.profiles = list
         })

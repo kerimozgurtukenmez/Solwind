@@ -308,8 +308,7 @@ Singleton {
         error = ""
         if (lostEffect) {
             lostEffect = false
-            effect = Settings.kbdOf().effect
-            lastFrame = ""
+            restoreSavedEffect()
         } else if (rgb && Settings.kbdOf().color !== "") {
             // A static write failed: write the chosen colour again (if it fails again, the error comes back)
             color = Settings.kbdOf().color
@@ -340,7 +339,21 @@ Singleton {
         if (e === "static") queue("color", colorValue(color, 1))   // effect off: back to the chosen colour
         else { t0 = Date.now(); lastFrame = "" }
     }
-    function setSource(s) { source = s; Settings.setKbd({ source: s }); lastFrame = "" }
+    // Returns false for "single" while a colour cycle is chosen (a cycle needs more than one colour)
+    function setSource(s) {
+        if (s === "single" && effect === "cycle") return false
+        source = s
+        Settings.setKbd({ source: s })
+        lastFrame = ""
+        return true
+    }
+    // The saved effect back (after a write error or a permission change); a cycle can't run on a single colour
+    function restoreSavedEffect() {
+        const e = Settings.kbdOf().effect
+        if (e === "cycle" && source === "single") setSource("multi")
+        effect = e
+        lastFrame = ""
+    }
     function setThemeCount(n) { themeCount = Math.max(3, Math.min(6, Math.round(n))); Settings.setKbd({ themeCount: themeCount }) }
     function setColors(list) { colors = list.slice(0, 6); Settings.setKbd({ colors: colors }) }
     function setSpeed(v) {
@@ -386,7 +399,9 @@ Singleton {
     function tick() {
         const n = cycle.length
         if (n === 0) return
-        const t = (Date.now() - t0) / 1000 / period
+        const now = Date.now()
+        if (now < t0) t0 = now                 // the clock jumped back: start over instead of freezing until it catches up
+        const t = (now - t0) / 1000 / period
         const k = Math.floor(t)
         const f = t - k
         if (cycleIndex !== k % n) cycleIndex = k % n
@@ -417,12 +432,18 @@ Singleton {
         if (saveRange.running) { saveRange.stop(); Settings.setKbd({ min: minLevel, max: maxLevel }) }
     }
     // On quit: don't leave the keyboard dark in the middle of an effect; go back to the chosen static colour (then cb)
+    // A colour or brightness change still waiting for its write (80/250 ms) is written too, colour first.
     function restoreForQuit(cb) {
         flushSaves()
-        if (!effectActive) { cb(); return }
-        effect = "static"                                   // not saved: the effect resumes on the next start
-        oneShot.go(["sh", "-c", 'v=$1; shift; for f; do printf "%s\\n" "$v" > "$f"; done', "sh", colorValue(color, 1)]
-                   .concat(zones.map(z => colorPath(z))), () => cb())
+        const c = effectActive ? colorValue(color, 1) : pending.color
+        const writes = []                                   // file, value, file, value, ...
+        if (c !== undefined) for (const z of zones) writes.push(colorPath(z), c)
+        if (pending.brightness !== undefined && hasBrightness) for (const z of zones) writes.push(z + "/brightness", pending.brightness)
+        flush.stop()
+        pending = ({})
+        if (effectActive) effect = "static"                 // not saved: the effect resumes on the next start
+        if (writes.length === 0 || !writable) { cb(); return }
+        oneShot.go(["sh", "-c", 'while [ $# -gt 1 ]; do printf "%s\\n" "$2" > "$1"; shift 2; done', "sh"].concat(writes), () => cb())
     }
 
     // ---------- write permission (only when the user asks; via the system password dialog) ----------
@@ -470,7 +491,7 @@ Singleton {
         // 126/127: password dialog dismissed / not authorised
         if (code !== 0) error = code === 126 || code === 127 ? I18n.t("Cancelled.") : I18n.t("Failed: %1").arg((err || out).trim().split("\n")[0])
         else {
-            effect = Settings.kbdOf().effect  // a write that failed earlier may have stopped the effect: bring back the saved one
+            restoreSavedEffect()              // a write that failed earlier may have stopped the effect: bring back the saved one
             lostEffect = false
             lightMissing = false
             recoverTries = 0
@@ -539,7 +560,8 @@ Singleton {
     Cmd { id: brightReader; timeout: 5000 }
     function loadSaved() {
         const k = Settings.kbdOf()
-        source = k.source
+        // Older versions could save a colour cycle on the single chosen colour (it can't cycle): use the colour list
+        source = k.effect === "cycle" && k.source === "single" ? "multi" : k.source
         colors = k.colors
         speed = k.speed
         themeCount = k.themeCount

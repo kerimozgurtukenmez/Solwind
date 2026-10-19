@@ -122,7 +122,7 @@ ShellRoot {
         function profile(name: string): string { return FanState.applyByName(name, true) }
         // Max fan: minutes (0 = off, -1 = until turned off)
         function boost(minutes: int): string {
-            Nbfc.setBoost(minutes)
+            if (!Nbfc.setBoost(minutes)) return Nbfc.boostBlocked()
             return minutes === 0 ? I18n.t("Max fan off")
                  : minutes > 0 ? I18n.t("Max fan on (%1 min)").arg(minutes) : I18n.t("Max fan on (until turned off)")
         }
@@ -152,7 +152,7 @@ ShellRoot {
         }
         function kbdSource(name: string): string {
             if (["single", "multi", "theme"].indexOf(name) < 0) return I18n.t("Color source: single | multi | theme")
-            Keyboard.setSource(name)
+            if (!Keyboard.setSource(name)) return I18n.t("A color cycle needs several colors: multi | theme")
             return I18n.t("Color source: %1").arg(name)
         }
         function kbdSpeed(percent: int): string {
