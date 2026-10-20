@@ -110,7 +110,11 @@ ShellRoot {
         function onProfileRequested(name) { FanState.applyByName(name, false) }
     }
 
-    // Terminal control: ccenter <command> (= qs ipc -p <app folder> call cc <command> [argument])
+    // Terminal control: ccenter <command> (= qs ipc -p <app folder> call cc <command> [argument]).
+    // A failure is answered with "ERROR<tab>message" (exit code 1) or, for a wrong argument, "USAGE<tab>message"
+    // (exit code 2); bin/ccenter prints the message to stderr.
+    function fail(msg) { return "ERROR\t" + msg }
+    function badArg(msg) { return "USAGE\t" + msg }
     IpcHandler {
         target: "cc"
         function toggle(): void { root.shown = !root.shown }
@@ -119,61 +123,77 @@ ShellRoot {
         // Quit completely: fans driven by Ccenter go back to NBFC's automatic control
         function quit(): void { Nbfc.releaseAndQuit() }
         // Applies a profile (same code as the button in the UI). Case-insensitive.
-        function profile(name: string): string { return FanState.applyByName(name, true) }
+        function profile(name: string): string {
+            const r = FanState.applyByNameResult(name, true)
+            return r.ok ? r.text : r.usage ? root.badArg(r.text) : root.fail(r.text)
+        }
+        function currentProfile(): string { return FanState.activeName() || I18n.t("custom settings") }
         // Max fan: minutes (0 = off, -1 = until turned off)
         function boost(minutes: int): string {
-            if (!Nbfc.setBoost(minutes)) return Nbfc.boostBlocked()
+            if (!Nbfc.setBoost(minutes)) return root.fail(Nbfc.boostBlocked())
             return minutes === 0 ? I18n.t("Max fan off")
                  : minutes > 0 ? I18n.t("Max fan on (%1 min)").arg(minutes) : I18n.t("Max fan on (until turned off)")
+        }
+        function boostStatus(): string {
+            if (!Nbfc.boosting) return I18n.t("Max fan off")
+            if (Nbfc.boostUntil < 0) return I18n.t("Max fan on (until turned off)")
+            return I18n.t("Max fan on (%1 min)").arg(Math.max(1, Math.ceil((Nbfc.boostUntil - Date.now()) / 60000)))
         }
         function profiles(): string { return FanState.profileList() }
         // UI language: tr | en
         function lang(id: string): string {
-            if (I18n.languages.findIndex(l => l.id === id) < 0) return "tr | en"
+            if (I18n.languages.findIndex(l => l.id === id) < 0) return root.badArg("tr | en")
             I18n.setLang(id)
             return I18n.t("Language: %1").arg(I18n.languages.find(l => l.id === id).name)
         }
+        function currentLang(): string { return I18n.t("Language: %1").arg(I18n.languages.find(l => l.id === I18n.lang)?.name ?? I18n.lang) }
         // Keyboard light: colour "#rrggbb", brightness in percent (0-100)
         function kbd(): string { return Keyboard.statusText() }
         // Detection report (laptop, driver, light, permission, support level): handy for bug reports
         function kbdInfo(): string { return Keyboard.infoText() }
         function kbdColor(hex: string): string {
-            if (!Keyboard.available) return I18n.t("No keyboard light found")
-            if (!Keyboard.rgb) return I18n.t("This keyboard light is not RGB")
-            if (!/^#?[0-9a-fA-F]{6}$/.test(hex)) return I18n.t("The color must look like #rrggbb (e.g. #ff0000)")
+            if (!Keyboard.available) return root.fail(I18n.t("No keyboard light found"))
+            if (!Keyboard.rgb) return root.fail(I18n.t("This keyboard light is not RGB"))
+            if (!/^#?[0-9a-fA-F]{6}$/.test(hex)) return root.badArg(I18n.t("The color must look like #rrggbb (e.g. #ff0000)"))
+            if (!Keyboard.writable) { Keyboard.refresh(); return root.fail(Keyboard.noPermissionText()) }   // (it may have been granted meanwhile)
             Keyboard.setColor(hex.startsWith("#") ? hex : "#" + hex)
-            return Keyboard.writable ? I18n.t("Color: %1").arg(Keyboard.hex(Keyboard.color)) : Keyboard.noPermissionText()
+            return I18n.t("Color: %1").arg(Keyboard.hex(Keyboard.color))
         }
         function kbdEffect(name: string): string {
-            if (["static", "breathing", "cycle"].indexOf(name) < 0) return I18n.t("Effect: %1").arg("static | breathing | cycle")
-            if (!Keyboard.effectsAllowed) return I18n.t("Effects are not available for this keyboard")
+            if (["static", "breathing", "cycle"].indexOf(name) < 0) return root.badArg(I18n.t("Effect: %1").arg("static | breathing | cycle"))
+            if (!Keyboard.effectsAllowed) return root.fail(I18n.t("Effects are not available for this keyboard"))
+            if (!Keyboard.writable) { Keyboard.refresh(); return root.fail(Keyboard.noPermissionText()) }   // (it may have been granted meanwhile)
             Keyboard.setEffect(name)
-            return Keyboard.writable ? I18n.t("Effect: %1").arg(name) : Keyboard.noPermissionText()
+            return I18n.t("Effect: %1").arg(name)
         }
         function kbdSource(name: string): string {
-            if (["single", "multi", "theme"].indexOf(name) < 0) return I18n.t("Color source: single | multi | theme")
-            if (!Keyboard.setSource(name)) return I18n.t("A color cycle needs several colors: multi | theme")
+            if (["single", "multi", "theme"].indexOf(name) < 0) return root.badArg(I18n.t("Color source: single | multi | theme"))
+            if (!Keyboard.setSource(name)) return root.fail(I18n.t("A color cycle needs several colors: multi | theme"))
             return I18n.t("Color source: %1").arg(name)
         }
         function kbdSpeed(percent: int): string {
+            if (!Keyboard.effectsAllowed) return root.fail(I18n.t("Effects are not available for this keyboard"))
             Keyboard.setSpeed(Math.max(0, Math.min(100, percent)) / 100)
             return I18n.t("Speed: %1% (%2 s per breath / color)").arg(Math.round(Keyboard.speed * 100)).arg(I18n.num(Keyboard.period, 1))
         }
         // Number of colours for the Caelestia source (3-6)
         function kbdThemeCount(n: int): string {
+            if (!Keyboard.effectsAllowed) return root.fail(I18n.t("Effects are not available for this keyboard"))
             Keyboard.setThemeCount(n)
             return I18n.t("Caelestia colors: %1 (%2)").arg(Keyboard.themeCount).arg(Keyboard.themeColors.map(c => Keyboard.hex(c)).join(" "))
         }
         // Lowest and highest breathing level (percent)
         function kbdRange(low: int, high: int): string {
+            if (!Keyboard.effectsAllowed) return root.fail(I18n.t("Effects are not available for this keyboard"))
             Keyboard.setRange(low / 100, high / 100)
             return I18n.t("Breathing range: %1% – %2%").arg(Math.round(Keyboard.minLevel * 100)).arg(Math.round(Keyboard.maxLevel * 100))
         }
         function kbdBrightness(percent: int): string {
-            if (!Keyboard.available) return I18n.t("No keyboard light found")
-            if (!Keyboard.hasBrightness) return I18n.t("This keyboard light has no brightness setting (color only)")
+            if (!Keyboard.available) return root.fail(I18n.t("No keyboard light found"))
+            if (!Keyboard.hasBrightness) return root.fail(I18n.t("This keyboard light has no brightness setting (color only)"))
+            if (!Keyboard.writable) { Keyboard.refresh(); return root.fail(Keyboard.noPermissionText()) }   // (it may have been granted meanwhile)
             Keyboard.setBrightness(Math.max(0, Math.min(100, percent)) * Keyboard.maxBrightness / 100)
-            return Keyboard.writable ? I18n.t("Brightness: %1%").arg(Math.max(0, Math.min(100, percent))) : Keyboard.noPermissionText()
+            return I18n.t("Brightness: %1%").arg(Math.max(0, Math.min(100, percent)))
         }
         function status(): string { return FanState.statusText() }
     }

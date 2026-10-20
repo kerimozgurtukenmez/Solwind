@@ -139,20 +139,23 @@ Singleton {
         applying = false
     }
     // UI, terminal and tray apply profiles by name (taken from the real list, so Qt list types can't get in the way)
-    function applyByName(name, fromIpc) {
+    function applyByName(name, fromIpc) { return applyByNameResult(name, fromIpc).text }
+    // { ok, usage (the name matched no profile), text }
+    function applyByNameResult(name, fromIpc) {
         const key = String(name).trim().toLocaleLowerCase()
         const all = allProfiles()
         // The exact name of a user profile first (older settings may hold two names that only differ in case), then
         // any case. Not for a name a built-in answers to: older versions let a user profile be called "quiet" too.
         const exact = reservedName(name) ? undefined : all.find(x => !x.builtin && x.name === String(name).trim())
         const p = exact ?? all.find(x => namesOf(x).indexOf(key) >= 0)
-        if (!p) return I18n.t("Profile not found: %1").arg(name) + "\n" + profileList()
-        if (!restored) return I18n.t("Fans not read yet (is NBFC running?), try again")
-        if (!Nbfc.running) return I18n.t("The NBFC service is not running")
-        if (Nbfc.readOnly) return I18n.t("NBFC is in read-only mode, fan speeds can't be written")
+        if (!p) return { ok: false, usage: true, text: I18n.t("Profile not found: %1").arg(name) + "\n" + profileList() }
+        const no = text => ({ ok: false, usage: false, text: text })
+        if (!restored) return no(I18n.t("Fans not read yet (is NBFC running?), try again"))
+        if (!Nbfc.running) return no(I18n.t("The NBFC service is not running"))
+        if (Nbfc.readOnly) return no(I18n.t("NBFC is in read-only mode, fan speeds can't be written"))
         applyProfile(p)
         if (fromIpc && Notify.profiles) Notify.send(I18n.t("Fan profile: %1").arg(displayName(p)), "", "low", "dialog-information")
-        return I18n.t("Applied: %1").arg(displayName(p))
+        return { ok: true, usage: false, text: I18n.t("Applied: %1").arg(displayName(p)) }
     }
     function profileList() {
         const active = activeId()

@@ -536,7 +536,7 @@ Singleton {
     function noteText(n) {
         return n === "legion-usb" ? I18n.t("This Lenovo has a USB RGB keyboard controller (ITE). Its colors are not exposed by the kernel; tools like L5P-Keyboard-RGB or OpenRGB control it.")
              : n === "rog-usb" ? I18n.t("This ASUS has an Aura (N-KEY) USB keyboard. Its colors are controlled by asusctl, not through the kernel light.")
-             : n === "hp-none" ? I18n.t("No HP keyboard light found. If this laptop has an RGB keyboard: the official kernel doesn't support HP keyboard lights yet, they need the extra hp-wmi-fan-and-backlight-control module (see the README). Per-key RGB keyboards aren't supported.")
+             : n === "hp-none" ? I18n.t("No HP keyboard light found. If this laptop has an RGB keyboard: the official kernel doesn't support HP keyboard lights yet, they need the extra hp-wmi-fan-and-backlight-control module (see the README). White (single-color) backlights and per-key RGB keyboards aren't supported by it either; their light only changes with the Fn key.")
              : n
     }
     function noPermissionText() { return I18n.t("No write permission: Keyboard tab > 'Grant permission' (or install.sh)") }

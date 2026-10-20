@@ -2,6 +2,7 @@
 # Ccenter launcher and terminal commands.
 # The app folder is looked up in order: CCENTER_DIR, <this script's folder>/.. (a source checkout, or install.sh's
 # ~/.local/share/ccenter/bin/ccenter), <prefix>/share/ccenter (/usr/bin -> /usr/share/ccenter), /usr/share/ccenter.
+# Exit codes: 0 done, 1 error, 2 wrong usage, 3 not started because Ccenter already runs, 4 the app isn't running.
 
 set -u
 
@@ -18,12 +19,13 @@ t() { if [ "$lang" = tr ]; then printf '%s\n' "$2"; else printf '%s\n' "$1"; fi;
 err() { t "$@" >&2; }
 
 self=$(readlink -f "$0")
+base=${self%/bin/*}                               # the folder that holds bin/ (works whatever the command is called)
 if [ -n "${CCENTER_DIR:-}" ]; then
     dir=$CCENTER_DIR
-elif [ -f "${self%/bin/ccenter}/shell.qml" ]; then
-    dir=${self%/bin/ccenter}                      # source checkout or install.sh install (<app>/bin/ccenter)
-elif [ -f "${self%/bin/ccenter}/share/ccenter/shell.qml" ]; then
-    dir=${self%/bin/ccenter}/share/ccenter        # installed with a prefix layout (/usr or ~/.local)
+elif [ -f "$base/shell.qml" ]; then
+    dir=$base                                     # source checkout or install.sh install (<app>/bin/ccenter)
+elif [ -f "$base/share/ccenter/shell.qml" ]; then
+    dir=$base/share/ccenter                       # installed with a prefix layout (/usr or ~/.local)
 else
     dir=/usr/share/ccenter
 fi
@@ -43,8 +45,8 @@ Kullanım: ccenter [komut]
   open | hide | toggle
   status             Fanlar, sıcaklıklar, aktif profil
   profiles           Profilleri listele (* = aktif)
-  profile <ad>       Profil uygula (büyük/küçük harf fark etmez)
-  boost <dk>         Maksimum fan: dakika, 0 = kapat, -1 = süresiz
+  profile [ad]       Profil uygula (büyük/küçük harf fark etmez); adsız: aktif profili göster
+  boost [dk|on|off]  Maksimum fan: dakika, on = süresiz, off (ya da 0) = kapat; boşsa: durumu göster
   kbd                Klavye ışığı durumu
   kbd info           Klavye algılama raporu (laptop, sürücü, ışık, izin, destek)
   kbd color <#hex>   Klavye rengi (ör. kbd color "#ff0000")
@@ -54,10 +56,15 @@ Kullanım: ccenter [komut]
   kbd speed <%>      Efekt hızı 0-100
   kbd range <% %>    Nefesin en düşük ve en yüksek seviyesi (ör. kbd range 10 90)
   kbd themecount <n> Caelestia kaynağında renk sayısı (3-6)
-  lang <tr|en>       Arayüz dili
+  lang [tr|en]       Arayüz dili; boşsa: şu anki dili göster
   report             Hata bildirmek için tanı raporu oluştur (ev klasörüne bir metin dosyası)
-  quit               Tamamen kapat (Ccenter'ın kontrol ettiği fanlar NBFC'ye döner)
-  --help | --version
+  quit               Tamamen kapat (Ccenter'ın kontrol ettiği fanlar NBFC'ye döner); çalışmıyorsa bir şey yapmaz
+  help [komut]       Bu yardım ya da tek bir komutun yardımı (ccenter <komut> --help da olur)
+  --version
+
+Çıkış kodları: 0 tamam, 1 hata, 2 yanlış kullanım, 3 Ccenter zaten çalıştığı için başlatılmadı (başka bir kopya ya da
+servis dışındaki bu kopya), 4 uygulama çalışmıyor.
+Hatalar stderr'e yazılır.
 EOF
     else cat <<EOF
 Usage: ccenter [command]
@@ -67,8 +74,8 @@ Usage: ccenter [command]
   open | hide | toggle
   status             Fans, temperatures, active profile
   profiles           List profiles (* = active)
-  profile <name>     Apply a profile (case-insensitive)
-  boost <min>        Max fan: minutes, 0 = off, -1 = until turned off
+  profile [name]     Apply a profile (case-insensitive); without a name: show the active profile
+  boost [min|on|off] Max fan: minutes, on = until turned off, off (or 0) = turn off; without one: show its state
   kbd                Keyboard light status
   kbd info           Keyboard detection report (laptop, driver, light, permission, support)
   kbd color <#hex>   Keyboard color (e.g. kbd color "#ff0000")
@@ -78,29 +85,59 @@ Usage: ccenter [command]
   kbd speed <%>      Effect speed 0-100
   kbd range <% %>    Lowest and highest breathing level (e.g. kbd range 10 90)
   kbd themecount <n> Number of colors with the Caelestia source (3-6)
-  lang <tr|en>       UI language
+  lang [tr|en]       UI language; without one: show the current language
   report             Create a diagnostic report for bug reports (a text file in your home folder)
-  quit               Quit completely (fans driven by Ccenter go back to NBFC)
-  --help | --version
+  quit               Quit completely (fans driven by Ccenter go back to NBFC); does nothing if it isn't running
+  help [command]     This help, or the help of one command (ccenter <command> --help works too)
+  --version
+
+Exit codes: 0 done, 1 error, 2 wrong usage, 3 not started because Ccenter already runs (another copy, or this one
+outside the service), 4 the app isn't running.
+Errors go to stderr.
 EOF
     fi
 }
+# Help of one command: its lines of the full help (open/hide/toggle share one line)
+usage_for() {
+    usage | awk -v c="$1" 'NR == 1 { head = $0; next }
+        $1 == c || (c ~ /^(open|hide|toggle)$/ && $1 == "open") { lines = lines $0 "\n" }
+        END { if (lines == "") exit 1; printf "%s\n\n%s", head, lines }' \
+    || { err "ccenter: unknown command: $1" "ccenter: bilinmeyen komut: $1"; usage >&2; exit 2; }
+}
+
+# The app's instances are found by path on any display, so the commands also work from a TTY or over SSH
+ipc() { qs ipc --any-display -p "$dir" "$@"; }
 
 # Is this copy running?
-running() { qs ipc -p "$dir" show >/dev/null 2>&1; }
+running() { ipc show >/dev/null 2>&1; }
+
+# Calls an IPC function and prints its answer. An answer starting with "ERROR<tab>" or "USAGE<tab>" is a failure
+# (shell.qml): its message goes to stderr and the exit code is 1 or 2.
+call() {
+    out=$(ipc call cc "$@")                      # (qs' own errors go straight to stderr)
+    [ $? -eq 0 ] || return 1
+    tab=$(printf '\t')
+    case "$out" in
+        "ERROR$tab"*) printf '%s\n' "${out#ERROR$tab}" >&2; return 1 ;;
+        "USAGE$tab"*) printf '%s\n' "${out#USAGE$tab}" >&2; return 2 ;;
+    esac
+    [ -z "$out" ] || printf '%s\n' "$out"
+}
 
 # Is another Ccenter copy (development or installed) running? Two copies must never drive the fans at once.
+# (qs list --json keeps paths with spaces whole)
 other_instance() {
-    qs list --all 2>/dev/null | awk -v me="$dir/shell.qml" '
-        /Config path:/ { p = $3; low = tolower(p)
-                         if (p != me && low ~ /ccenter\/shell\.qml$/) { print p; exit } }'
+    qs list --all --json 2>/dev/null | sed -n 's/^ *"config_path": *"\(.*\)",*$/\1/p' | while IFS= read -r p; do
+        low=$(printf '%s' "$p" | tr '[:upper:]' '[:lower:]')
+        case "$low" in */ccenter/shell.qml) [ "$p" = "$dir/shell.qml" ] || { printf '%s\n' "$p"; break; } ;; esac
+    done
 }
-
-ipc() { qs ipc -p "$dir" call cc "$@"; }
 
 need_running() {
-    running || { err "ccenter: the app is not running (to start it: ccenter)" "ccenter: uygulama çalışmıyor (başlatmak için: ccenter)"; exit 1; }
+    running || { err "ccenter: the app is not running (to start it: ccenter)" "ccenter: uygulama çalışmıyor (başlatmak için: ccenter)"; exit 4; }
 }
+usage_error() { err "$@"; exit 2; }
+is_int() { case "$1" in ""|-|*[!0-9-]*|?*-*) return 1 ;; esac; }
 
 # Before starting: if another copy is running, warn and exit
 guard() {
@@ -111,6 +148,17 @@ guard() {
             "İki kopya aynı anda fanları kontrol etmesin diye başlatılmadı. Önce onu kapat."
         exit 3                                    # the systemd service does not retry on this code (RestartPreventExitStatus=3)
     fi
+}
+
+# Wait (at most ~10 s) until the app answers. 0 = it does
+wait_running() {
+    n=0
+    while [ "$n" -lt 50 ]; do
+        running && return 0
+        sleep 0.2
+        n=$((n + 1))
+    done
+    return 1
 }
 
 # If the user's systemd service is enabled and runs this very copy, start the app through it: then a crash
@@ -135,7 +183,7 @@ service_start() {
     # Type=simple: start returns before the app is ready, so wait until it answers (at most ~10 s)
     n=0
     while [ "$n" -lt 50 ]; do
-        ipc open >/dev/null 2>&1 && return 0
+        call open >/dev/null 2>&1 && return 0
         case "$(systemctl --user show -p SubState --value ccenter.service 2>/dev/null)" in
             start-pre|start|start-post|running) ;;
             *)
@@ -154,51 +202,122 @@ service_start() {
     return 2
 }
 
+# quit [--pid PID]: asks the app to quit and waits (at most ~10 s) until it has (the keyboard light and the fans
+# are handed back first), so the systemd service's stop doesn't cut that short. With --pid only that instance:
+# the service passes its own main process, which is empty if it has already exited (then there's nothing to stop,
+# and a copy running outside the service is left alone).
+quit_app() {
+    if [ "${1:-}" = --pid ]; then
+        pid=${2:-}
+        [ -n "$pid" ] || exit 0
+        is_int "$pid" || usage_error "Usage: ccenter quit [--pid <process id>]" "Kullanım: ccenter quit [--pid <süreç no>]"
+        qs ipc --pid "$pid" call cc quit >/dev/null 2>&1 || exit 0   # (--pid picks the instance; no --any-display with it)
+        n=0
+        while [ "$n" -lt 50 ] && [ -e "/proc/$pid" ]; do sleep 0.2; n=$((n + 1)); done
+        exit 0
+    fi
+    if ! running; then
+        err "ccenter: the app is not running" "ccenter: uygulama çalışmıyor"
+        exit 0
+    fi
+    call quit || exit $?
+    n=0
+    while [ "$n" -lt 50 ] && running; do sleep 0.2; n=$((n + 1)); done
+    running && { err "ccenter: the app hasn't quit yet" "ccenter: uygulama henüz kapanmadı"; exit 1; }
+    exit 0
+}
+
+# ccenter <command> --help
+case "${2:-}" in -h|--help) case "${1:-}" in ""|-*) ;; *) usage_for "$1"; exit 0 ;; esac ;; esac
+
 case "${1:-}" in
     "")
         if running; then
-            ipc open
+            call open
         else
             guard
             service_start
             case $? in
                 0) ;;
-                1) qs -p "$dir" -n -d >/dev/null 2>&1 ;;
+                1)
+                    qs -p "$dir" -n -d >/dev/null 2>&1
+                    if ! wait_running; then
+                        err "ccenter: the app didn't start. To see why, run: qs -p \"$dir\" -n" \
+                            "ccenter: uygulama başlamadı. Nedenini görmek için: qs -p \"$dir\" -n"
+                        exit 1
+                    fi
+                    call open ;;
                 *) exit 1 ;;
             esac
         fi ;;
     --background)
-        guard; exec env CCENTER_BACKGROUND=1 qs -p "$dir" -n ;;
-    open|hide|toggle|status|profiles|quit)
-        need_running; ipc "$1" ;;
+        # This copy already runs outside the service: starting a second one would only exit at once. (Another copy
+        # appearing between this check and the start is not caught: qs -n then exits 0. A tiny window.)
+        if running; then
+            err "ccenter: this copy is already running" "ccenter: bu kopya zaten çalışıyor"
+            exit 3
+        fi
+        guard
+        # Under the systemd service ($INVOCATION_ID) Quickshell's own crash handler is off: it would restart the app
+        # inside the same process (more than 10 s after start, src/launch/main.cpp), so systemd would never see the
+        # crash and ExecStopPost (fans back to NBFC) wouldn't run. Without it the process ends, systemd hands the
+        # fans back and starts the service again 3 s later (Restart=on-failure).
+        [ -z "${INVOCATION_ID:-}" ] || export QS_DISABLE_CRASH_HANDLER=1
+        exec env CCENTER_BACKGROUND=1 qs -p "$dir" -n ;;
+    open|hide|toggle|status|profiles)
+        need_running; call "$1" ;;
+    quit)
+        shift; quit_app "$@" ;;
     profile)
-        [ $# -ge 2 ] || { err "Usage: ccenter profile <name>" "Kullanım: ccenter profile <ad>"; exit 2; }
-        need_running; shift; ipc profile "$*" ;;
+        need_running
+        if [ $# -lt 2 ]; then call currentProfile; else shift; call profile "$*"; fi ;;
     boost)
-        [ $# -ge 2 ] || { err "Usage: ccenter boost <minutes>" "Kullanım: ccenter boost <dakika>"; exit 2; }
-        need_running; ipc boost -- "$2" ;;
-    kbd)
+        case "${2:-}" in
+            ""|on|off) ;;
+            *) is_int "$2" || usage_error "Usage: ccenter boost [minutes | on | off]" "Kullanım: ccenter boost [dakika | on | off]" ;;
+        esac
         need_running
         case "${2:-}" in
-            "") ipc kbd ;;
-            info) ipc kbdInfo ;;
-            color) [ $# -ge 3 ] || { err "Usage: ccenter kbd color <#rrggbb>" "Kullanım: ccenter kbd color <#rrggbb>"; exit 2; }; ipc kbdColor "$3" ;;
-            brightness) [ $# -ge 3 ] || { err "Usage: ccenter kbd brightness <0-100>" "Kullanım: ccenter kbd brightness <0-100>"; exit 2; }; ipc kbdBrightness -- "$3" ;;
-            effect) [ $# -ge 3 ] || { err "Usage: ccenter kbd effect <static|breathing|cycle>" "Kullanım: ccenter kbd effect <static|breathing|cycle>"; exit 2; }; ipc kbdEffect "$3" ;;
-            themecount) [ $# -ge 3 ] || { err "Usage: ccenter kbd themecount <3-6>" "Kullanım: ccenter kbd themecount <3-6>"; exit 2; }; ipc kbdThemeCount -- "$3" ;;
-            source) [ $# -ge 3 ] || { err "Usage: ccenter kbd source <single|multi|theme>" "Kullanım: ccenter kbd source <single|multi|theme>"; exit 2; }; ipc kbdSource "$3" ;;
-            range) [ $# -ge 4 ] || { err "Usage: ccenter kbd range <lowest %> <highest %>" "Kullanım: ccenter kbd range <en düşük %> <en yüksek %>"; exit 2; }; ipc kbdRange -- "$3" "$4" ;;
-            speed) [ $# -ge 3 ] || { err "Usage: ccenter kbd speed <0-100>" "Kullanım: ccenter kbd speed <0-100>"; exit 2; }; ipc kbdSpeed -- "$3" ;;
-            *) err "Usage: ccenter kbd [color <#hex> | brightness <0-100> | effect <name> | source <name> | speed <0-100> | range <% %> | themecount <3-6>]" "Kullanım: ccenter kbd [color <#hex> | brightness <0-100> | effect <ad> | source <ad> | speed <0-100> | range <% %> | themecount <3-6>]"; exit 2 ;;
+            "") call boostStatus ;;
+            on) call boost -- -1 ;;
+            off) call boost -- 0 ;;
+            *) call boost -- "$2" ;;
+        esac ;;
+    kbd)
+        # wrong usage is reported before "not running"
+        case "${2:-}" in
+            ""|info) ;;
+            color) [ $# -ge 3 ] || usage_error "Usage: ccenter kbd color <#rrggbb>" "Kullanım: ccenter kbd color <#rrggbb>" ;;
+            effect) [ $# -ge 3 ] || usage_error "Usage: ccenter kbd effect <static|breathing|cycle>" "Kullanım: ccenter kbd effect <static|breathing|cycle>" ;;
+            source) [ $# -ge 3 ] || usage_error "Usage: ccenter kbd source <single|multi|theme>" "Kullanım: ccenter kbd source <single|multi|theme>" ;;
+            brightness|speed|themecount)
+                [ $# -ge 3 ] && is_int "$3" || usage_error "Usage: ccenter kbd $2 <number>" "Kullanım: ccenter kbd $2 <sayı>" ;;
+            range)
+                [ $# -ge 4 ] && is_int "$3" && is_int "$4" || usage_error "Usage: ccenter kbd range <lowest %> <highest %>" "Kullanım: ccenter kbd range <en düşük %> <en yüksek %>" ;;
+            *) err "ccenter: unknown kbd command: $2" "ccenter: bilinmeyen kbd komutu: $2"; usage_for kbd >&2; exit 2 ;;
+        esac
+        need_running
+        case "${2:-}" in
+            "") call kbd ;;
+            info) call kbdInfo ;;
+            color) call kbdColor "$3" ;;
+            brightness) call kbdBrightness -- "$3" ;;
+            effect) call kbdEffect "$3" ;;
+            themecount) call kbdThemeCount -- "$3" ;;
+            source) call kbdSource "$3" ;;
+            range) call kbdRange -- "$3" "$4" ;;
+            speed) call kbdSpeed -- "$3" ;;
         esac ;;
     report)
         # Diagnostic report (works without the app running): one text file in your home folder
         exec sh "$dir/scripts/report.sh" "$dir" ;;
     lang)
-        [ $# -ge 2 ] || { err "Usage: ccenter lang <tr|en>" "Kullanım: ccenter lang <tr|en>"; exit 2; }
-        need_running; ipc lang "$2" ;;
-    -h|--help|help)
+        need_running
+        if [ $# -lt 2 ]; then call currentLang; else call lang "$2"; fi ;;
+    -h|--help)
         usage ;;
+    help)
+        if [ -n "${2:-}" ]; then usage_for "$2"; else usage; fi ;;
     -V|--version)
         v=$(cat "$dir/VERSION" 2>/dev/null || echo "?"); echo "ccenter $v ($dir)" ;;
     *)

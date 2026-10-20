@@ -65,10 +65,10 @@ if have qs; then
 fi
 if [ -n "$running" ]; then
     rdir=${running%/shell.qml}
-    run "Ccenter status" qs ipc -p "$rdir" call cc status
-    run "Profiles" qs ipc -p "$rdir" call cc profiles
-    run "Keyboard" qs ipc -p "$rdir" call cc kbd
-    run "Keyboard detection" qs ipc -p "$rdir" call cc kbdInfo
+    run "Ccenter status" qs ipc --any-display -p "$rdir" call cc status
+    run "Profiles" qs ipc --any-display -p "$rdir" call cc profiles
+    run "Keyboard" qs ipc --any-display -p "$rdir" call cc kbd
+    run "Keyboard detection" qs ipc --any-display -p "$rdir" call cc kbdInfo
 else
     echo 'Ccenter is not running.'
 fi

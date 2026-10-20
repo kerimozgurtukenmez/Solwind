@@ -29,13 +29,31 @@ ask() {
     if [ "$lang" = tr ]; then _q=$2; _h="[E/h]"; [ "$3" = y ] || _h="[e/H]"
     else _q=$1; _h="[Y/n]"; [ "$3" = y ] || _h="[y/N]"; fi
     printf '%s %s ' "$_q" "$_h"
-    read -r ans || ans=""
+    # No answer at all (no terminal, e.g. started with a file manager's "Run"): counts as no, so nothing happens unseen
+    if ! read -r ans; then say ""; return 1; fi
     case "$ans" in
         [eEyY]*) return 0 ;;
         [hHnN]*) return 1 ;;
         *) [ "$3" = y ] ;;
     esac
 }
+# Started straight by a terminal window instead of from a shell you typed in (a file manager's "run in terminal" does
+# `foot -e ./install.sh`): that window closes the moment the script ends, so wait for Enter first, also after an
+# error. Only with a terminal on both ends, so a pipe or another script never waits.
+hold=""
+if [ -t 0 ] && [ -t 1 ]; then
+    parent=""
+    [ -r "/proc/$PPID/comm" ] && read -r parent < "/proc/$PPID/comm" || true
+    case "$parent" in
+        "") ;;
+        sh|ash|bash|dash|zsh|ksh|mksh|fish|tcsh|csh|nu|xonsh|elvish)
+            # a shell started with -c (also -lc, -ic, --command) runs just this and then closes too
+            tr '\0' '\n' < "/proc/$PPID/cmdline" 2>/dev/null | tail -n +2 \
+                | grep -qE -- '^(-[A-Za-z]*c[A-Za-z]*|--command)$' && hold=1 || true ;;
+        *) hold=1 ;;
+    esac
+fi
+[ -z "$hold" ] || trap 'say ""; t "Press Enter to close this window." "Bu pencereyi kapatmak için Enter tuşuna bas."; read -r _hold || true' EXIT
 # Is the folder (or, if it doesn't exist yet, the closest existing parent) writable?
 # (POSIX sh has no local variables: _cw_-prefixed names so functions don't clobber the caller's variables)
 can_write() {
@@ -116,6 +134,9 @@ mark_begin="# >>> ccenter >>>"
 mark_end="# <<< ccenter <<<"
 in_path() { case ":$PATH:" in *":$1:"*) return 0 ;; esac; return 1; }
 writable_file() { if [ -e "$1" ]; then [ -w "$1" ]; else can_write "$(dirname "$1")"; fi; }
+# File lists are one path per line, so paths with spaces stay whole (loops split on newlines only: each_line)
+nl='
+'
 rcfiles=""; fishconf=""; path_done=""          # path_done: an earlier install already added the block
 if ! in_path "$cmddir"; then
     # bash / zsh: if the shell is in use (its startup file exists or it is the login shell) and our lines aren't there yet
@@ -123,7 +144,7 @@ if ! in_path "$cmddir"; then
         _f=${_rc%%:*}; _sh=${_rc##*:}
         if [ -f "$_f" ] || [ "${SHELL##*/}" = "$_sh" ]; then
             if grep -qF "$mark_begin" "$_f" 2>/dev/null; then path_done=1
-            elif writable_file "$_f"; then rcfiles="$rcfiles $_f"; fi
+            elif writable_file "$_f"; then rcfiles="$rcfiles$_f$nl"; fi
         fi
     done
     # fish: a separate drop-in file in conf.d (config.fish is not touched), unless fish already has the folder in PATH
@@ -145,19 +166,30 @@ say ""
 ask "Continue?" "Devam edilsin mi?" y || { t "Install cancelled, nothing changed." "Kurulum iptal edildi, hiçbir şey değişmedi."; exit 0; }
 
 # ---------- install ----------
-rm -rf "$app"
-mkdir -p "$app/bin" "$app/dist"
-cp -r "$src/shell.qml" "$src/VERSION" "$src/LICENSE" "$src/components" "$src/modules" "$src/services" "$src/utils" "$src/scripts" "$src/assets" "$app/"
-cp "$src/dist/90-ccenter.rules" "$app/dist/"            # used by the app's grant button
-install -m 755 "$src/bin/ccenter" "$launcher"
+# The new copy is built next to the old one and swapped in only when complete: a copy that fails half way (disk
+# full, ...) leaves the installed app as it was
+new=$app.new
+old=$app.old
+rm -rf "$new" "$old"
+mkdir -p "$new/bin" "$new/dist"
+cp -r "$src/shell.qml" "$src/VERSION" "$src/LICENSE" "$src/components" "$src/modules" "$src/services" "$src/utils" "$src/scripts" "$src/assets" "$new/"
+cp "$src/dist/90-ccenter.rules" "$new/dist/"            # used by the app's grant button
+install -m 755 "$src/bin/ccenter" "$new/bin/ccenter"
+if [ -e "$app" ]; then mv "$app" "$old"; fi
+mv "$new" "$app"
+rm -rf "$old"
+# The menu entry and the service call the launcher by full path (the session's PATH may not have ~/.local/bin);
+# a path with spaces is quoted
+exec_path=$launcher
+case "$launcher" in *[[:space:]]*) exec_path="\"$launcher\"" ;; esac
 if [ -n "$desktop" ]; then
     mkdir -p "$(dirname "$desktop")"
-    sed -e "s|@BINDIR@/ccenter|$launcher|g" -e "s|^Icon=ccenter\$|Icon=$app/assets/ccenter.svg|" \
+    sed -e "s|@BINDIR@/ccenter|$exec_path|g" -e "s|^Icon=ccenter\$|Icon=$app/assets/ccenter.svg|" \
         "$src/dist/ccenter.desktop" > "$desktop"
 fi
 if [ -n "$unitdir" ]; then
     mkdir -p "$unitdir"
-    sed "s|@BINDIR@/ccenter|$launcher|g" "$src/dist/ccenter.service" > "$unitdir/ccenter.service"
+    sed "s|@BINDIR@/ccenter|$exec_path|g" "$src/dist/ccenter.service" > "$unitdir/ccenter.service"
     command -v systemctl >/dev/null 2>&1 && systemctl --user daemon-reload 2>/dev/null || true
 fi
 if [ -n "$link" ]; then
@@ -176,19 +208,23 @@ if [ -n "$rcfiles$fishconf" ]; then
       "$cmddir terminalinin PATH'inde değil; 'ccenter' yazınca 'command not found' der."
     t "Ccenter can add it with a short block (between '$mark_begin' lines) to:" \
       "Ccenter bunu şu dosyalara kısa bir blokla ('$mark_begin' satırları arasında) ekleyebilir:"
+    _ifs=$IFS; IFS=$nl; set -f
     for _f in $rcfiles $fishconf; do say "  $_f"; done
+    IFS=$_ifs; set +f
     t "Nothing else in these files is changed. Undo: ./uninstall.sh removes exactly this block." \
       "Bu dosyalarda başka hiçbir şey değişmez. Geri alma: ./uninstall.sh tam olarak bu bloğu siler."
     if ask "Add it?" "Eklensin mi?" y; then
+        _ifs=$IFS; IFS=$nl; set -f
         for _f in $rcfiles; do
             # make sure the block starts on its own line
             if [ -s "$_f" ] && [ -n "$(tail -c1 "$_f")" ]; then printf '\n' >> "$_f"; fi
             printf '%s\n%s\n%s\n' "$mark_begin" \
                 "case \":\$PATH:\" in *\":$cmddir:\"*) ;; *) export PATH=\"$cmddir:\$PATH\" ;; esac" "$mark_end" >> "$_f"
         done
+        IFS=$_ifs; set +f
         if [ -n "$fishconf" ]; then
             mkdir -p "$(dirname "$fishconf")"
-            printf '%s\nfish_add_path -g %s\n%s\n' "$mark_begin" "$cmddir" "$mark_end" > "$fishconf"
+            printf "%s\nfish_add_path -g '%s'\n%s\n" "$mark_begin" "$cmddir" "$mark_end" > "$fishconf"
         fi
         path_added=1
         t "Added. Works in newly opened terminals." "Eklendi. Yeni açtığın terminallerde çalışır."

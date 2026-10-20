@@ -12,10 +12,12 @@ After=graphical-session.target
 Type=simple
 # Starts without a window; to open it: ccenter
 ExecStart=@BINDIR@/ccenter --background
-# When stopping, ask it to quit cleanly first: keyboard effect to the static colour, fans to NBFC (same as Quit)
-ExecStop=-@BINDIR@/ccenter quit
-# In any case (crash, timeout) the fans go back to NBFC's automatic control
-ExecStopPost=-/usr/bin/nbfc set -a
+# When stopping, ask it to quit cleanly first: keyboard effect to the static colour, fans to NBFC (same as Quit).
+# Only this service's own process ($MAINPID; empty if it has already exited), never a copy started outside it.
+ExecStop=-@BINDIR@/ccenter quit --pid $MAINPID
+# In any case (crash, timeout) the fans go back to NBFC's automatic control, unless the start was refused (exit 3)
+# because another Ccenter copy runs and drives them ($$ is a literal $ for the shell)
+ExecStopPost=-/bin/sh -c '[ "$${EXIT_STATUS:-}" = 3 ] || exec /usr/bin/nbfc set -a'
 Restart=on-failure
 RestartSec=3
 # If another Ccenter copy is running, ccenter exits with 3: don't keep restarting

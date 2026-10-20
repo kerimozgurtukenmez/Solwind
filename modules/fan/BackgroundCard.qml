@@ -10,11 +10,12 @@ Card {
     ToggleRow {
         icon: "login"
         label: I18n.t("Start in the background on login")
-        sub: Autostart.installed ? I18n.t("Starts without a window; your fan settings apply right away")
-                                 : I18n.t("Needs an installation first: ./install.sh")
+        sub: Autostart.ours ? I18n.t("Starts without a window; your fan settings apply right away")
+           : Autostart.installed ? I18n.t("The background service runs another Ccenter copy (%1)").arg(Autostart.serviceDir || "?")
+           : I18n.t("Needs an installation first: ./install.sh")
         controlled: true
         checked: Autostart.enabled
-        enabled: Autostart.installed && !Autostart.busy
+        enabled: Autostart.ours && !Autostart.busy
         opacity: enabled ? 1 : 0.5
         onToggled: v => Autostart.setEnabled(v)
     }

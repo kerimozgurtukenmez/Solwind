@@ -1,4 +1,5 @@
 [Desktop Entry]
+Version=1.5
 Type=Application
 Name=Ccenter
 GenericName=Fan Control
@@ -8,5 +9,7 @@ Exec=@BINDIR@/ccenter
 Icon=ccenter
 Terminal=false
 Categories=Settings;HardwareSettings;
-Keywords=fan;nbfc;cooling;temperature;keyboard;rgb;fan kontrol;sıcaklık;klavye;
+Keywords=fan;nbfc;cooling;temperature;keyboard;rgb;
+Keywords[tr]=fan;nbfc;soğutma;sıcaklık;klavye;rgb;fan kontrol;
 StartupWMClass=ccenter
+SingleMainWindow=true

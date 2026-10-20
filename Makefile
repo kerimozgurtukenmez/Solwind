@@ -22,6 +22,9 @@ KBD_ZONES = /sys/devices/platform/hp-wmi/rgb_zones/zone*
 # The rule gives access to one user: the one running "sudo make udev" (SUDO_UID), or UDEV_UID=<id>
 UDEV_UID ?= $(SUDO_UID)
 
+# The menu entry runs the short command where it is on every PATH (/usr/bin, /usr/local/bin), else the full path
+DESKTOP_EXEC = $(if $(filter /usr /usr/local,$(PREFIX)),ccenter,$(PREFIX)/bin/ccenter)
+
 # Files the app needs at runtime (README, dist etc. are not installed; the license goes to share/licenses)
 APP_FILES = shell.qml VERSION
 APP_DIRS  = components modules services utils scripts assets
@@ -38,7 +41,7 @@ install:
 	chmod 755 $(APPDIR)/scripts/*.sh $(APPDIR)/scripts/*.py
 	install -Dm 755 bin/ccenter $(BINDIR)/ccenter
 	install -d $(APPSDIR) $(UNITDIR)
-	sed 's|@BINDIR@|$(PREFIX)/bin|g' dist/ccenter.desktop > $(APPSDIR)/ccenter.desktop
+	sed 's|@BINDIR@/ccenter|$(DESKTOP_EXEC)|g' dist/ccenter.desktop > $(APPSDIR)/ccenter.desktop
 	chmod 644 $(APPSDIR)/ccenter.desktop
 	install -Dm 644 assets/ccenter.svg $(ICONDIR)/ccenter.svg
 	sed 's|@BINDIR@|$(PREFIX)/bin|g' dist/ccenter.service > $(UNITDIR)/ccenter.service
