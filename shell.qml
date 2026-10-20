@@ -73,7 +73,14 @@ ShellRoot {
             }
         }
     }
-    onShownChanged: if (!shown) gcTimer.restart()
+    // Closing the window keeps the app running: free the window's memory, and say so in the log (shown in the terminal
+    // it was started from)
+    onShownChanged: {
+        if (shown) return
+        gcTimer.restart()
+        console.info("[ccenter] Window closed; Ccenter keeps running in the background. "
+                     + "To quit: the tray menu, `ccenter quit`, or Ctrl+C in the terminal that started it.")
+    }
 
     Timer { id: gcTimer; interval: 1000; onTriggered: gc() }
 

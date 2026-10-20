@@ -40,8 +40,11 @@ usage() {
     if [ "$lang" = tr ]; then cat <<EOF
 Kullanım: ccenter [komut]
 
-  (komutsuz)         Pencereyi aç; uygulama çalışmıyorsa başlat
+  (komutsuz)         Pencereyi aç. Çalışmıyorsa burada başlatır: günlüğü bu terminalde akar, Ctrl+C kapatır
+                     (klavye ışığı ve fanlar normale döner; zorlamak için yine Ctrl+C)
+  -d | --detach      Terminale bağlamadan başlat (pencere açılır)
   --background       Pencere açmadan başlat (systemd servisi bunu kullanır)
+  log [-f]           Çalışan uygulamanın günlüğü; -f canlı izler (Ctrl+C sadece izlemeyi bırakır)
   open | hide | toggle
   status             Fanlar, sıcaklıklar, aktif profil
   profiles           Profilleri listele (* = aktif)
@@ -69,8 +72,11 @@ EOF
     else cat <<EOF
 Usage: ccenter [command]
 
-  (no command)       Open the window; start the app if it isn't running
+  (no command)       Open the window. If it isn't running, start it here: its log shows in this terminal and
+                     Ctrl+C quits it (keyboard light and fans back to normal; Ctrl+C again to force it)
+  -d | --detach      Start it without tying it to this terminal (the window opens)
   --background       Start without a window (used by the systemd service)
+  log [-f]           The running app's log; -f follows it (Ctrl+C only stops following)
   open | hide | toggle
   status             Fans, temperatures, active profile
   profiles           List profiles (* = active)
@@ -161,45 +167,115 @@ wait_running() {
     return 1
 }
 
-# If the user's systemd service is enabled and runs this very copy, start the app through it: then a crash
-# still hands the fans back to NBFC (ExecStopPost=nbfc set -a), which a directly started app can't do.
-# Returns 0 when the window is open, 1 when the service can't be used (the caller starts the app directly),
-# 2 when the service is running but the app didn't answer in time.
-service_start() {
-    [ -z "${CCENTER_DIR:-}" ] || return 1          # the service wouldn't get CCENTER_DIR and would run its own copy
-    command -v systemctl >/dev/null 2>&1 || return 1
-    [ "$(systemctl --user is-enabled ccenter.service 2>/dev/null)" = enabled ] || return 1
-    # ExecStart looks like "{ path=/…/bin/ccenter ; argv[]=… }": take the path and compare it canonicalized
-    exe=$(systemctl --user show -p ExecStart --value ccenter.service 2>/dev/null)
-    case "$exe" in *"path="*" ;"*) ;; *) return 1 ;; esac
-    exe=${exe#*path=}
-    exe=${exe%% ;*}
-    [ "$(readlink -f "$exe" 2>/dev/null)" = "$self" ] || return 1   # the service runs another copy (e.g. a source checkout)
-    if ! systemctl --user start ccenter.service 2>/dev/null; then
-        err "ccenter: the background service didn't start, starting directly (no crash protection for the fans)" \
-            "ccenter: arka plan servisi başlamadı, doğrudan başlatılıyor (fanlar için çökme koruması yok)"
-        return 1
+# ---------- running like other programs: in the foreground, Ctrl+C quits ----------
+# Quickshell has no handler for SIGINT, SIGHUP or SIGTERM: they would kill it at once and leave the fans at the speed
+# it last set. So this script stays as a small supervisor (like Syncthing's monitor): qs runs as its child in its own
+# session, so the terminal's Ctrl+C, Ctrl+Z and hang-up don't reach it; its log goes to this terminal.
+#   - Ctrl+C, a closed terminal or SIGTERM: a clean quit (keyboard light to its colour, fans back to NBFC), at most
+#     20 s; a second Ctrl+C forces it
+#   - whenever qs has ended (also after a crash): the fans go back to NBFC's automatic control, like the service's
+#     ExecStopPost (Quickshell's in-process restart after a crash is off here, so a crash really ends it)
+say() { if [ "$lang" = tr ]; then printf '%s\n' "$2" >&2 2>/dev/null; else printf '%s\n' "$1" >&2 2>/dev/null; fi; :; }
+# 0 = the fans were handed back, 1 = it failed (NBFC not running, no answer), 2 = nbfc isn't installed
+hand_back() {
+    command -v nbfc >/dev/null 2>&1 || return 2
+    ( trap '' INT HUP; exec timeout 15 nbfc set -a ) >/dev/null 2>&1 &
+    wait $! 2>/dev/null || return 1
+}
+on_sig() {
+    trapped=1
+    # A signal before qs was started: handled right after it starts (run_supervised)
+    if [ -z "$pid" ]; then early=$1; return 0; fi
+    if [ "$quitting" = 0 ]; then
+        quitting=1
+        # Helpers run in the background, ignoring Ctrl+C and the hang-up, so a second Ctrl+C or the closing terminal
+        # doesn't cut them short; they start before anything is written (a write to a broken pipe must not stop them).
+        # "quit" is asked again every 0.5 s until the app takes it: qs ipc exits 0 even when the app isn't ready yet
+        # and then prints why (an accepted quit prints nothing).
+        ( trap '' INT HUP
+          n=0
+          while [ "$n" -lt 40 ] && kill -0 "$pid" 2>/dev/null; do
+              out=$(qs ipc --pid "$pid" call cc quit 2>&1) && [ -z "$out" ] && exit 0
+              sleep 0.5
+              n=$((n + 1))
+          done ) >/dev/null 2>&1 &
+        ( trap '' INT HUP; sleep 20; kill -USR1 $$ ) >/dev/null 2>&1 &
+        timer=$!
+        # (after a hang-up there's no terminal to write to)
+        [ "$1" = HUP ] || say "Quitting: the keyboard light and the fans go back to normal… (Ctrl+C again to force it)" \
+                              "Kapatılıyor: klavye ışığı ve fanlar normale dönüyor… (zorlamak için yine Ctrl+C)"
+    elif [ "$1" != HUP ] && [ "$forced" = 0 ]; then
+        forced=1
+        say "Forcing it to quit." "Zorla kapatılıyor."
+        kill -TERM "$pid" 2>/dev/null
     fi
-    # Type=simple: start returns before the app is ready, so wait until it answers (at most ~10 s)
-    n=0
-    while [ "$n" -lt 50 ]; do
-        call open >/dev/null 2>&1 && return 0
-        case "$(systemctl --user show -p SubState --value ccenter.service 2>/dev/null)" in
-            start-pre|start|start-post|running) ;;
-            *)
-                # Crashed (auto-restart shows as "activating" too), failed or stopped: stop it so it doesn't keep
-                # restarting in the background, then start directly
-                systemctl --user stop ccenter.service >/dev/null 2>&1
-                err "ccenter: the background service stopped (see: journalctl --user -u ccenter), starting directly" \
-                    "ccenter: arka plan servisi durdu (bkz: journalctl --user -u ccenter), doğrudan başlatılıyor"
-                return 1 ;;
-        esac
-        sleep 0.2
-        n=$((n + 1))
+}
+on_timeout() {
+    trapped=1
+    [ "$forced" = 0 ] || return 0
+    forced=1
+    kill -TERM "$pid" 2>/dev/null
+    say "It didn't quit within 20 s, stopping it." "20 sn içinde kapanmadı, durduruluyor."
+}
+# $1: 1 = open the window, 0 = start in the background (no window)
+run_supervised() {
+    command -v setsid >/dev/null 2>&1 || { err "ccenter: setsid (util-linux) is needed" "ccenter: setsid (util-linux) gerekli"; exit 1; }
+    quitting=0 forced=0 timer="" pid="" trapped=0 early=""
+    trap 'on_sig INT' INT
+    trap 'on_sig INT' QUIT                       # Ctrl+\ quits like Ctrl+C (bash ignores it in scripts, dash doesn't)
+    trap 'on_sig HUP' HUP
+    trap 'on_sig TERM' TERM
+    trap 'on_timeout' USR1
+    trap '' TSTP                                 # no frozen fan controller (Ctrl+Z)
+    trap '' PIPE                                 # a broken pipe on stderr must not end the supervisor
+    # A background job of a script starts with Ctrl+C ignored, and the traps above would be inherited as ignored:
+    # give qs the defaults, like under the service (GNU env)
+    sigs=""; env --default-signal=INT true 2>/dev/null && sigs="--default-signal=INT,QUIT,TSTP"
+    bg=""; [ "$1" = 1 ] || bg=CCENTER_BACKGROUND=1
+    # The log goes to this terminal (Quickshell writes it to stdout). Not into a pipe: one that breaks could end qs.
+    # Without a terminal (started from the app menu, or piped) nobody reads it; qs keeps its own log (ccenter log).
+    if [ -t 1 ] && [ -t 2 ]; then
+        env $sigs QS_DISABLE_CRASH_HANDLER=1 $bg setsid qs -p "$dir" -n </dev/null &
+    else
+        env $sigs QS_DISABLE_CRASH_HANDLER=1 $bg setsid qs -p "$dir" -n </dev/null >/dev/null 2>&1 &
+    fi
+    pid=$!
+    [ -z "$early" ] || on_sig "$early"
+    # A signal's trap interrupts wait: wait again until qs has really ended
+    while :; do
+        trapped=0
+        wait "$pid"
+        st=$?
+        [ "$trapped" = 1 ] || break
     done
-    err "ccenter: started in the background but not answering yet, run ccenter again in a moment" \
-        "ccenter: arka planda başladı ama henüz yanıt vermiyor, biraz sonra yine ccenter çalıştır"
-    return 2
+    trap '' INT QUIT HUP TERM USR1               # the hand-back below is not interrupted
+    [ -z "$timer" ] || kill "$timer" 2>/dev/null
+    # qs -n exits 0 at once if this copy got started meanwhile: that one drives the fans, leave them alone
+    if [ "$st" = 0 ] && [ "$quitting" = 0 ] && running; then
+        err "ccenter: this copy is already running" "ccenter: bu kopya zaten çalışıyor"
+        exit 3
+    fi
+    hand_back
+    case $? in
+        0) fans_en="the fans went back to NBFC." fans_tr="fanlar NBFC'ye döndü." ;;
+        2) fans_en="nbfc not found: check the fans." fans_tr="nbfc bulunamadı: fanlara bak." ;;
+        *) fans_en="the fans could NOT be handed back (is NBFC running?): run nbfc set -a" \
+           fans_tr="fanlar NBFC'ye GERİ VERİLEMEDİ (NBFC çalışıyor mu?): nbfc set -a çalıştır" ;;
+    esac
+    if [ "$forced" = 1 ]; then
+        say "Stopped; $fans_en" "Durduruldu; $fans_tr"; exit 1
+    elif [ "$st" -gt 128 ] && [ "$st" -le 192 ]; then          # 128 + signal number (Linux signals go up to 64)
+        sn=$((st - 128))
+        case $sn in
+            1|2|9|15) say "Ccenter was stopped from outside (signal $sn); $fans_en" "Ccenter dışarıdan durduruldu (sinyal $sn); $fans_tr" ;;
+            *) say "Ccenter crashed (signal $sn); $fans_en" "Ccenter çöktü (sinyal $sn); $fans_tr" ;;
+        esac
+        exit 1
+    elif [ "$st" != 0 ]; then
+        say "Ccenter ended with code $st; $fans_en" "Ccenter $st koduyla bitti; $fans_tr"; exit 1
+    fi
+    say "Ccenter quit; $fans_en" "Ccenter kapandı; $fans_tr"
+    exit 0
 }
 
 # quit [--pid PID]: asks the app to quit and waits (at most ~10 s) until it has (the keyboard light and the fans
@@ -233,37 +309,44 @@ case "${2:-}" in -h|--help) case "${1:-}" in ""|-*) ;; *) usage_for "$1"; exit 0
 case "${1:-}" in
     "")
         if running; then
-            call open
-        else
-            guard
-            service_start
-            case $? in
-                0) ;;
-                1)
-                    qs -p "$dir" -n -d >/dev/null 2>&1
-                    if ! wait_running; then
-                        err "ccenter: the app didn't start. To see why, run: qs -p \"$dir\" -n" \
-                            "ccenter: uygulama başlamadı. Nedenini görmek için: qs -p \"$dir\" -n"
-                        exit 1
-                    fi
-                    call open ;;
-                *) exit 1 ;;
-            esac
-        fi ;;
+            call open || exit $?
+            err "ccenter: already running, the window is open. Its log: ccenter log -f" \
+                "ccenter: zaten çalışıyor, pencere açıldı. Günlüğü: ccenter log -f"
+            exit 0
+        fi
+        guard
+        run_supervised 1 ;;
+    -d|--detach)
+        # Like qs -d / caelestia shell -d: start it away from this terminal (still supervised), return once it answers
+        if running; then call open; exit $?; fi
+        guard
+        command -v setsid >/dev/null 2>&1 || { err "ccenter: setsid (util-linux) is needed" "ccenter: setsid (util-linux) gerekli"; exit 1; }
+        setsid -f "$self" </dev/null >/dev/null 2>&1
+        wait_running || { err "ccenter: the app didn't start. To see why, run: ccenter" "ccenter: uygulama başlamadı. Nedenini görmek için: ccenter"; exit 1; }
+        exit 0 ;;
     --background)
-        # This copy already runs outside the service: starting a second one would only exit at once. (Another copy
-        # appearing between this check and the start is not caught: qs -n then exits 0. A tiny window.)
+        # This copy already runs: starting a second one would only exit at once. (Another copy appearing between
+        # this check and the start is not caught: qs -n then exits 0. A tiny window.)
         if running; then
             err "ccenter: this copy is already running" "ccenter: bu kopya zaten çalışıyor"
             exit 3
         fi
         guard
-        # Under the systemd service ($INVOCATION_ID) Quickshell's own crash handler is off: it would restart the app
-        # inside the same process (more than 10 s after start, src/launch/main.cpp), so systemd would never see the
-        # crash and ExecStopPost (fans back to NBFC) wouldn't run. Without it the process ends, systemd hands the
-        # fans back and starts the service again 3 s later (Restart=on-failure).
-        [ -z "${INVOCATION_ID:-}" ] || export QS_DISABLE_CRASH_HANDLER=1
-        exec env CCENTER_BACKGROUND=1 qs -p "$dir" -n ;;
+        # Under the systemd service ExecStart runs this script itself, so SYSTEMD_EXEC_PID is this process.
+        # (Not INVOCATION_ID: a uwsm session hands it down to every terminal started from Hyprland.)
+        if [ "${SYSTEMD_EXEC_PID:-}" = "$$" ]; then
+            # Under the systemd service: qs itself is the main process (ExecStop/ExecStopPost rely on that), systemd
+            # supervises it. Quickshell's own crash handler is off: it would restart the app inside the same process
+            # (more than 10 s after start, src/launch/main.cpp), so systemd would never see the crash and
+            # ExecStopPost (fans back to NBFC) wouldn't run. Without it the process ends, systemd hands the fans
+            # back and starts the service again 3 s later (Restart=on-failure).
+            export QS_DISABLE_CRASH_HANDLER=1
+            exec env CCENTER_BACKGROUND=1 qs -p "$dir" -n
+        fi
+        run_supervised 0 ;;
+    log)
+        # The running app's log (also its earlier lines); -f keeps following it. Ctrl+C here only stops the viewer.
+        shift; exec qs log --any-display -p "$dir" "$@" ;;
     open|hide|toggle|status|profiles)
         need_running; call "$1" ;;
     quit)

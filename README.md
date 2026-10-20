@@ -189,13 +189,16 @@ The `Makefile` is for packagers (`make DESTDIR=… PREFIX=/usr install`) or a sy
 - Closing the window doesn't quit Ccenter, it keeps controlling the fans. Open it again from the launcher, the tray icon or with `ccenter`.
 - To quit for real: the "Quit" button, the tray menu or `ccenter quit`. The fans go back to NBFC first.
 - "Start in the background on login" in the app turns on the systemd user service. If Ccenter crashes while running as a service, the fans are handed back to NBFC right away and the service starts Ccenter again a few seconds later.
-- With that service on, starting Ccenter yourself (`ccenter`, the app launcher) also goes through the service, so the crash protection is there too. If the service can't be used, Ccenter starts directly and says so in the terminal.
+- Started from a terminal (`ccenter` while it isn't running), it stays there like other programs and shows its log. Ctrl+C or closing that terminal quits it cleanly (the keyboard light and the fans go back to normal; Ctrl+C again forces it). If it crashes, the fans are handed back too. `ccenter -d` starts it without tying it to the terminal.
+- If it's already running (for example the login service started it), `ccenter` just opens the window and returns. Its log: `ccenter log -f` (Ctrl+C there only stops following).
 - Only one Ccenter runs at a time, two copies would fight over the fans.
 
 ### Terminal commands
 
 ```sh
-ccenter                     # open the window (starts the app if needed)
+ccenter                     # open the window; if it isn't running, start it here (Ctrl+C quits it)
+ccenter -d                  # start it without tying it to this terminal
+ccenter log -f              # follow the running app's log
 ccenter status              # fans, temperatures, active profile
 ccenter profiles            # list profiles (* = active)
 ccenter profile quiet       # apply a profile (auto, quiet, balanced, performance or your own)
