@@ -20,7 +20,7 @@ import qs.utils
 //             Always cmd 0 (apply only, never 1 = save to BIOS) and mode 0 (static). kbd_rgb_mode can't be read back.
 //   led-mono  brightness only (ASUS non-RGB, Lenovo IdeaPad/ThinkPad, others)
 // Software effects run only on drivers they were tested with (effectsAllowed). Write access comes from the optional
-// udev rule (dist/90-ccenter.rules), which gives write access to the user who granted it only.
+// udev rule (dist/90-solwind.rules), which gives write access to the user who granted it only.
 // Effects are done in software (this service always runs, so they continue while the window is closed):
 //   breathing: intensity eases between the lowest and highest level; the colour changes at the darkest point.
 //   cycle:     continuous smooth transition between colours along the hue, without dimming.
@@ -44,6 +44,7 @@ Singleton {
     readonly property bool tested: backend === "led-rgb" && driver === "hp-wmi"
     property bool writable: false
     property bool ruleLegacy: false           // an older, less strict rule is installed (0666 or running a shell)
+    property bool ruleOld: false              // the rule has the old name (Ccenter's 90-ccenter.rules); updating renames it
     property bool ready: false                // first read finished?
     property int maxBrightness: 255
     property var maxIntensity: [255, 255, 255]
@@ -129,11 +130,12 @@ Singleton {
             else if (p[0] === "zone" && p.length >= 4) { const l = { name: p[1], driver: p[2], path: p.slice(3).join("|"), v: {}, w: {}, x: {} }; rgbZones.push(l); byName[p[1]] = l }
             else if ((p[0] === "v" || p[0] === "w" || p[0] === "x") && byName[p[1]]) byName[p[1]][p[0]][p[2]] = p[0] === "v" ? p.slice(3).join("|") : true
             else if (p[0] === "usb") usb.push({ vid: p[1], pid: p[2], name: p[3] || "" })
-            else if (p[0] === "rule") rule = rule || (p[1] === "etc" ? (p[2] === "legacy" ? "etc-legacy" : "etc") : "lib")
+            else if (p[0] === "rule") rule = rule || (p[1] === "etc" ? (p[2] === "legacy" ? "etc-legacy" : p[2] === "old" ? "etc-old" : "etc") : "lib")
         }
         if (!ready) loadSaved()               // load saved effect settings on the first read (the settings file is ready by now)
         ruleAt = rule.startsWith("etc") ? "etc" : rule
         ruleLegacy = rule === "etc-legacy"
+        ruleOld = rule === "etc-old"
 
         // Pick the backend
         const isRgb = l => !!l.v.multi_intensity && /red/.test(l.v.multi_index || "") && /green/.test(l.v.multi_index || "")
@@ -235,7 +237,7 @@ Singleton {
         Settings.setKbd({ color: hex(color) })
         if (!effectActive) queue("color", colorValue(color, 1))   // with an effect running, the next frame applies it
         // Picking a colour at brightness 0 shows nothing; turn the light on so the user sees it. The key that turns the
-        // light off (Fn) changes the brightness behind Ccenter's back, so a value older than a second is read again.
+        // light off (Fn) changes the brightness behind Solwind's back, so a value older than a second is read again.
         if (!hasBrightness) return
         const age = Date.now() - brightAt
         if (brightness === 0) setBrightness(maxBrightness)
@@ -447,12 +449,13 @@ Singleton {
     }
 
     // ---------- write permission (only when the user asks; via the system password dialog) ----------
-    // The rule template ships with the app (dist/90-ccenter.rules). @UID@ is replaced with the user who authenticated
+    // The rule template ships with the app (dist/90-solwind.rules). @UID@ is replaced with the user who authenticated
     // (PKEXEC_UID, set by pkexec itself), so only that user gets write access. The rendered rule is written to a
     // root-owned file first and checked line by line (scripts/kbd-rule-check.sh: only the expected chown lines);
     // nothing is changed if the check fails. Then the old world-writable permissions (0666, earlier versions) are
-    // reset, the rule goes to /etc/udev/rules.d and udev applies it right away.
-    readonly property string ruleFile: Quickshell.shellPath("dist/90-ccenter.rules")
+    // reset, the rule goes to /etc/udev/rules.d and udev applies it right away. The rule under the old name
+    // (Ccenter's 90-ccenter.rules, before 0.4.0) is removed with it, and also when the permission is removed.
+    readonly property string ruleFile: Quickshell.shellPath("dist/90-solwind.rules")
     readonly property string ruleCheck: Quickshell.shellPath("scripts/kbd-rule-check.sh")
     readonly property string resetPerms:
         'for d in /sys/class/leds/*::kbd_backlight /sys/class/leds/*::kbd_backlight_* /sys/class/leds/*::kbd_zoned_backlight-*; do ' +
@@ -467,10 +470,10 @@ Singleton {
         error = ""
         perm.go(["pkexec", "sh", "-c",
                  'uid=$PKEXEC_UID; case "$uid" in ""|*[!0-9]*) echo "unknown user" >&2; exit 1 ;; esac; ' +
-                 'new=/etc/udev/rules.d/90-ccenter.rules.new; ' +
+                 'new=/etc/udev/rules.d/90-solwind.rules.new; ' +
                  'sed "s/@UID@/$uid/g" "$1" > "$new" && sh "$2" "$new" "$uid" || { rm -f "$new"; exit 1; }; ' +
                  resetPerms +
-                 'chmod 644 "$new" && mv "$new" /etc/udev/rules.d/90-ccenter.rules && ' +
+                 'chmod 644 "$new" && mv "$new" /etc/udev/rules.d/90-solwind.rules && rm -f /etc/udev/rules.d/90-ccenter.rules && ' +
                  'udevadm control --reload-rules && udevadm trigger --action=change --subsystem-match=leds && ' +
                  'udevadm trigger --action=change --subsystem-match=platform --sysname-match=hp-wmi && udevadm settle',
                  "sh", ruleFile, ruleCheck],
@@ -483,7 +486,7 @@ Singleton {
         permBusy = true
         error = ""
         perm.go(["pkexec", "sh", "-c",
-                 'rm -f /etc/udev/rules.d/90-ccenter.rules && udevadm control --reload-rules; ' + resetPerms + 'true'],
+                 'rm -f /etc/udev/rules.d/90-solwind.rules /etc/udev/rules.d/90-ccenter.rules && udevadm control --reload-rules; ' + resetPerms + 'true'],
                 (code, out, err) => root.permDone(code, out, err))
     }
     function permDone(code, out, err) {
@@ -513,14 +516,14 @@ Singleton {
              : backend === "led-rgb" ? I18n.t("RGB, single zone")
              : I18n.t("single color, %1 brightness levels").arg(maxBrightness)
     }
-    // Detection report (ccenter kbd info): what was found, step by step, for bug reports
+    // Detection report (solwind kbd info): what was found, step by step, for bug reports
     function infoText() {
         const lines = [
             I18n.t("Laptop: %1").arg([dmi.vendor, dmi.product].filter(x => x).join(" · ") || "?") + (dmi.board ? " (" + dmi.board + ")" : ""),
             I18n.t("Kernel: %1").arg(kernel || "?"),
             I18n.t("Driver: %1").arg(driver || "-"),
             I18n.t("Light: %1").arg(available ? name + " (" + kindText() + ")" : I18n.t("none found")),
-            I18n.t("Permission: %1").arg(!available ? "-" : writable ? I18n.t("yes") + (ruleLegacy ? " (" + I18n.t("old, less strict rule") + ")" : "") : I18n.t("no")),
+            I18n.t("Permission: %1").arg(!available ? "-" : writable ? I18n.t("yes") + (ruleLegacy ? " (" + I18n.t("old, less strict rule") + ")" : ruleOld ? " (" + I18n.t("Ccenter's rule, old name") + ")" : "") : I18n.t("no")),
             I18n.t("Support: %1").arg(supportText())
         ]
         for (const n of notes) lines.push("- " + noteText(n))

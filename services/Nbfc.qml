@@ -106,9 +106,9 @@ Singleton {
     function stopService() { handBackThen(["nbfc", "stop"], code => { if (code === 0) root.userStopped = true }) }
     function restartService(ro) { sudo(["nbfc", "restart"].concat(ro ? ["-r"] : []), I18n.t("Waiting for admin permission…")) }
     // NBFC saves the fans' target speeds when it stops and sets them again at its next start (/var/lib/nbfc/state.json),
-    // also when Ccenter isn't running then, and a new config gets them by fan number. So before stopping or switching
+    // also when Solwind isn't running then, and a new config gets them by fan number. So before stopping or switching
     // the config, every fan goes back to NBFC's automatic control, and no speeds are written until the action has
-    // finished. If it fails or is cancelled, Ccenter takes its own fans again on the next round; fans it doesn't drive
+    // finished. If it fails or is cancelled, Solwind takes its own fans again on the next round; fans it doesn't drive
     // (no saved setting, or fixed from outside) stay on auto.
     property int holds: 0                     // admin actions that hand the fans back, still running
     readonly property bool holding: holds > 0
@@ -163,7 +163,7 @@ Singleton {
         // stdout + stderr together; some versions print the list to stderr or in a different format
         enqueue("cfg:list", ["sh", "-c", "nbfc config -l 2>&1"], (code, out) => {
             const ls = root.lines(out).filter(l => !/^(usage|error|warning)/i.test(l))
-            console.log("[ccenter] nbfc config -l (exit " + code + "): " + ls.length + " configs available; selected: " + (root.configId || "-"))
+            console.log("[solwind] nbfc config -l (exit " + code + "): " + ls.length + " configs available; selected: " + (root.configId || "-"))
             root.cfgFromCli = code === 0 ? ls : []
             root.cfgNoteCli = code === 0 ? (ls.length === 0 ? I18n.t("nbfc config -l returned nothing") : "")
                                          : I18n.t("nbfc config -l failed (code %1): %2").arg(code).arg(root.firstLine(out))
@@ -295,7 +295,7 @@ Singleton {
         statusCmd.go(["nbfc", "status", "-a"], (code, out, err) => {
             if (!root.logged) {
                 root.logged = true
-                console.log("[ccenter] nbfc status -a (exit " + code + "):\n" + out + err)
+                console.log("[solwind] nbfc status -a (exit " + code + "):\n" + out + err)
             }
             root.statusSeq = seq
             const was = root.running
@@ -325,7 +325,7 @@ Singleton {
     // ---------- fan control ----------
     // With a fan in Fixed/Curve mode, sensors are read even while the window is closed (the safety limit watches the GPU too)
     readonly property bool needsSensors: Object.keys(targets).length > 0
-    // Is Ccenter driving fans (Fixed/Curve/max fan)? Then poll often
+    // Is Solwind driving fans (Fixed/Curve/max fan)? Then poll often
     readonly property bool controlling: needsSensors || boosting
     property bool uiVisible: true             // is the window open (bound in shell.qml); slower polling while hidden
 
@@ -395,7 +395,7 @@ Singleton {
         }
     }
 
-    // A fan Ccenter handed back to NBFC's automatic control: confirmed by a status read started after it was asked,
+    // A fan Solwind handed back to NBFC's automatic control: confirmed by a status read started after it was asked,
     // otherwise asked again (every 4 s, at most 5 times, then reported)
     function markReleasing(i) { releasing[i] = { at: Date.now(), seq: pollSeq, tries: 0 } }
     function checkRelease(i, now) {
@@ -422,7 +422,7 @@ Singleton {
         const now = Date.now()
         for (let i = 0; i < fans.length; i++) {
             const f = fans[i]
-            // NBFC went back to auto or holds another speed than the one we sent (changed outside Ccenter, an old one
+            // NBFC went back to auto or holds another speed than the one we sent (changed outside Solwind, an old one
             // restored): write it again. Only judged from a status read started after NBFC took our command; not in
             // critical mode, where NBFC itself runs the fan at 100%.
             if (lastSent[i] !== undefined && statusSeq > (sentSeq[i] ?? 0)
@@ -539,16 +539,16 @@ Singleton {
             let fixed = false
             try { fixed = code === 0 && (JSON.parse(out).TargetFanSpeeds || []).some(v => Number(v) >= 0) } catch (e) {}
             if (fixed) {
-                console.log("[ccenter] NBFC is stopped with fixed fan speeds saved in /var/lib/nbfc/state.json")
+                console.log("[solwind] NBFC is stopped with fixed fan speeds saved in /var/lib/nbfc/state.json")
                 Notify.send(I18n.t("Fans may stay at a fixed speed"),
-                            I18n.t("NBFC is stopped and has saved fixed fan speeds; it sets them again when it starts. After starting it, run `nbfc set -a` or open Ccenter."),
+                            I18n.t("NBFC is stopped and has saved fixed fan speeds; it sets them again when it starts. After starting it, run `nbfc set -a` or open Solwind."),
                             "normal", "dialog-warning")
             }
             Qt.quit()
         })
     }
 
-    // Another config: the old one's settings don't belong to these fans. Fans Ccenter drove go back to NBFC's automatic
+    // Another config: the old one's settings don't belong to these fans. Fans Solwind drove go back to NBFC's automatic
     // control (followed up until NBFC reports it: a restart right after the switch can swallow the first command, and
     // the new config then gets the old speeds by fan number); FanState applies the new config's saved settings on the
     // next status read, which takes those fans over again.
@@ -568,7 +568,7 @@ Singleton {
     Cmd { id: runner; timeout: 15000 }
     Cmd { id: statusCmd; timeout: 10000 }
     Cmd { id: adminRunner }                   // no time limit: it waits for the password dialog
-    // 2 s while the window is open or Ccenter drives fans; 5 s when hidden and everything is on NBFC
+    // 2 s while the window is open or Solwind drives fans; 5 s when hidden and everything is on NBFC
     Timer { interval: root.uiVisible || root.controlling ? 2000 : 5000; running: true; repeat: true; triggeredOnStart: true; onTriggered: root.poll() }
 
     FileView {
@@ -578,7 +578,7 @@ Singleton {
         // A half-written file (empty while NBFC rewrites it) keeps the current id instead of switching configs
         onLoaded: {
             try { root.configId = JSON.parse(text()).SelectedConfigId || "" }
-            catch (e) { console.log("[ccenter] /etc/nbfc/nbfc.json could not be read: " + e) }
+            catch (e) { console.log("[solwind] /etc/nbfc/nbfc.json could not be read: " + e) }
         }
     }
 

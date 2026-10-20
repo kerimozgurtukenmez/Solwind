@@ -8,15 +8,15 @@ import QtQuick
 Singleton {
     id: root
     readonly property bool enabled: Settings.uiOn("tray")
-    // Tray icon: the app icon (theme icon "ccenter" if it can't be loaded)
-    readonly property string iconFile: Quickshell.shellPath("assets/ccenter.svg")
+    // Tray icon: the app icon (theme icon "solwind" if it can't be loaded)
+    readonly property string iconFile: Quickshell.shellPath("assets/solwind.svg")
 
     // bound in shell.qml
     property bool windowVisible: true
     property var profiles: []
     property string active: ""
     property bool boost: false
-    property string tooltip: "Ccenter"
+    property string tooltip: "Solwind"
     property var labels: ({})                 // menu texts in the UI language (bound in shell.qml)
 
     signal toggleRequested()
@@ -45,6 +45,6 @@ Singleton {
                 else if (cmd === "quit") Nbfc.releaseAndQuit()
             }
         }
-        stderr: SplitParser { onRead: line => console.warn("[ccenter] tepsi: " + line) }
+        stderr: SplitParser { onRead: line => console.warn("[solwind] tepsi: " + line) }
     }
 }

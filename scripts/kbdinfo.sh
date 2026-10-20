@@ -14,11 +14,12 @@
 #                                               0.0.4+ uses *::kbd_zoned_backlight-* LEDs instead). Hex RRGGBB, no brightness.
 #                                               Its v/w lines use the file name "color".
 #   usb|vendor|product|name                     USB devices of makers whose RGB keyboards are USB devices (ASUS, ITE/Lenovo)
-#   rule|etc|current|legacy  rule|lib           our udev permission rule; legacy = an older, less strict version
-#                                               (world-writable 0666, or running a shell)
-# Testing without the hardware: CCENTER_SYS=<folder> makes it read a fake /sys tree from that folder instead (the app
+#   rule|etc|current|old|legacy  rule|lib       our udev permission rule; legacy = an older, less strict version
+#                                               (world-writable 0666, or running a shell); old = as strict, but under
+#                                               the old name (Ccenter, before 0.4.0: 90-ccenter.rules)
+# Testing without the hardware: SOLWIND_SYS=<folder> makes it read a fake /sys tree from that folder instead (the app
 # then also writes into that fake tree, never to the real lights).
-sys=${CCENTER_SYS:-}/sys
+sys=${SOLWIND_SYS:-}/sys
 dmi=$sys/class/dmi/id
 r() { v=""; [ -r "$1" ] && read -r v < "$1"; printf '%s' "$v"; }
 echo "dmi|$(r $dmi/sys_vendor)|$(r $dmi/product_name)|$(r $dmi/product_version)|$(r $dmi/product_family)|$(r $dmi/board_name)"
@@ -65,9 +66,10 @@ for u in "$sys"/bus/usb/devices/*; do
   echo "usb|$vid|$(r "$u/idProduct")|$(r "$u/product")"
 done
 
-f=/etc/udev/rules.d/90-ccenter.rules
-if [ -f "$f" ]; then
-  if grep -q -e 'chmod 0666' -e '/bin/sh' "$f"; then echo "rule|etc|legacy"; else echo "rule|etc|current"; fi
-fi
-[ -f /usr/lib/udev/rules.d/90-ccenter.rules ] && echo "rule|lib"
+f=/etc/udev/rules.d/90-solwind.rules
+o=/etc/udev/rules.d/90-ccenter.rules
+if grep -q -s -e 'chmod 0666' -e '/bin/sh' "$f" "$o"; then echo "rule|etc|legacy"
+elif [ -f "$o" ]; then echo "rule|etc|old"
+elif [ -f "$f" ]; then echo "rule|etc|current"; fi
+if [ -f /usr/lib/udev/rules.d/90-solwind.rules ] || [ -f /usr/lib/udev/rules.d/90-ccenter.rules ]; then echo "rule|lib"; fi
 true

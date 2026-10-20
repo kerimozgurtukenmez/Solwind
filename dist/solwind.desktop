@@ -1,15 +1,15 @@
 [Desktop Entry]
 Version=1.5
 Type=Application
-Name=Ccenter
+Name=Solwind
 GenericName=Fan Control
 Comment=Laptop fan and keyboard control center for Caelestia
 Comment[tr]=Caelestia için dizüstü fan ve klavye kontrol merkezi
-Exec=@BINDIR@/ccenter
-Icon=ccenter
+Exec=@BINDIR@/solwind
+Icon=solwind
 Terminal=false
 Categories=Settings;HardwareSettings;
 Keywords=fan;nbfc;cooling;temperature;keyboard;rgb;
 Keywords[tr]=fan;nbfc;soğutma;sıcaklık;klavye;rgb;fan kontrol;
-StartupWMClass=ccenter
+StartupWMClass=solwind
 SingleMainWindow=true

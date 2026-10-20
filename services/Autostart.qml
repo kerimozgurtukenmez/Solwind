@@ -3,12 +3,12 @@ import Quickshell
 import QtQuick
 import qs.utils
 
-// Start in the background on login: the systemd user service ccenter.service installed by install.sh / make install.
+// Start in the background on login: the systemd user service solwind.service installed by install.sh / make install.
 // The toggle only works for the copy the service runs: without an installation (development copy), or when the
 // service runs another copy, it stays disabled. systemctl only changes something when the user flips the toggle.
 Singleton {
     id: root
-    readonly property string unit: "ccenter.service"
+    readonly property string unit: "solwind.service"
     property bool installed: false            // the service exists
     property string serviceDir: ""            // the app folder the service's launcher uses ("" = unknown)
     readonly property string ownDir: Quickshell.shellPath("shell.qml").replace(/\/shell\.qml$/, "")
@@ -18,14 +18,14 @@ Singleton {
     property string message: ""
 
     function refresh() {
-        // The launcher in ExecStart tells which app folder it runs (ccenter --version: "ccenter <version> (<folder>)")
+        // The launcher in ExecStart tells which app folder it runs (solwind --version: "solwind <version> (<folder>)")
         cmd.go(["sh", "-c",
                 'systemctl --user show -p LoadState,UnitFileState "$1"; ' +
                 'e=$(systemctl --user show -p ExecStart --value "$1"); ' +
                 'case "$e" in *"path="*" ;"*) e=${e#*path=}; e=${e%% ;*}; ' +
-                // only ask a Ccenter launcher (a ccenter.service of another program is not run)
-                'head -n 2 "$e" 2>/dev/null | grep -q "^# Ccenter launcher" || exit 0; ' +
-                'printf "Dir=%s\\n" "$(env -u CCENTER_DIR "$e" --version 2>/dev/null | sed -n "s/^ccenter .* (\\(.*\\))$/\\1/p")" ;; esac',
+                // only ask a Solwind launcher (a solwind.service of another program is not run)
+                'head -n 2 "$e" 2>/dev/null | grep -q "^# Solwind launcher" || exit 0; ' +
+                'printf "Dir=%s\\n" "$(env -u SOLWIND_DIR "$e" --version 2>/dev/null | sed -n "s/^solwind .* (\\(.*\\))$/\\1/p")" ;; esac',
                 "sh", unit], (code, out) => {
             root.installed = /LoadState=loaded/.test(out)
             root.enabled = /UnitFileState=enabled/.test(out)

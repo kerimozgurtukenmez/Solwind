@@ -69,10 +69,10 @@ Card {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
                     onClicked: {
-                        console.log("[ccenter] profile button: " + chip.modelData.name)
+                        console.log("[solwind] profile button: " + chip.modelData.name)
                         if (chip.deleting) { card.confirmDelete = ""; return }   // cancel the delete
                         card.confirmDelete = ""
-                        console.log("[ccenter] " + FanState.applyByName(chip.modelData.name, false))
+                        console.log("[solwind] " + FanState.applyByName(chip.modelData.name, false))
                     }
                 }
                 MouseArea {

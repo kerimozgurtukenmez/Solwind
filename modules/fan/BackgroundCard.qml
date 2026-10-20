@@ -11,7 +11,7 @@ Card {
         icon: "login"
         label: I18n.t("Start in the background on login")
         sub: Autostart.ours ? I18n.t("Starts without a window; your fan settings apply right away")
-           : Autostart.installed ? I18n.t("The background service runs another Ccenter copy (%1)").arg(Autostart.serviceDir || "?")
+           : Autostart.installed ? I18n.t("The background service runs another Solwind copy (%1)").arg(Autostart.serviceDir || "?")
            : I18n.t("Needs an installation first: ./install.sh")
         controlled: true
         checked: Autostart.enabled
@@ -30,7 +30,7 @@ Card {
     StyledText {
         Layout.fillWidth: true
         wrapMode: Text.WordWrap
-        text: I18n.t("Closing the window keeps the app running in the background. To open it again use the app menu or the terminal: ccenter")
+        text: I18n.t("Closing the window keeps the app running in the background. To open it again use the app menu or the terminal: solwind")
         color: Colours.fgDim
         font.pixelSize: 11
     }

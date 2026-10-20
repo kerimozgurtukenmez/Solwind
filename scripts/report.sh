@@ -1,18 +1,20 @@
 #!/bin/sh
 # Diagnostic report for bug reports: collects everything useful into one text file in your home folder.
-# Works even when Ccenter doesn't start (it doesn't need the app running; if it runs, its own status is added).
+# Works even when Solwind doesn't start (it doesn't need the app running; if it runs, its own status is added).
 # Read only: nothing on the system is changed, nothing is sent anywhere. You read the file and decide what to share.
 # Privacy: no serial numbers, MAC/IP addresses or passwords are collected; your home folder, user name and computer
 # name are replaced with ~, <user> and <host> at the end.
-# Usage: report.sh [app folder]   (ccenter report / the app's "Create report" button call it)
+# Usage: report.sh [app folder]   (solwind report / the app's "Create report" button call it)
 set +e
 self=$(readlink -f "$0")
 app=${1:-${self%/scripts/report.sh}}
-out=$HOME/ccenter-report-$(date +%Y%m%d-%H%M%S).txt
+out=$HOME/solwind-report-$(date +%Y%m%d-%H%M%S).txt
 
-# Message language, same rules as bin/ccenter (CCENTER_LANG > app setting > system locale)
-lang=${CCENTER_LANG:-}
-cfg=${XDG_CONFIG_HOME:-$HOME/.config}/ccenter/settings.json
+# Message language, same rules as bin/solwind (SOLWIND_LANG > app setting > system locale)
+lang=${SOLWIND_LANG:-}
+cfg=${XDG_CONFIG_HOME:-$HOME/.config}/solwind/settings.json
+# (before 0.4.0 Solwind was called Ccenter; its settings are copied over on the first start)
+[ -e "$cfg" ] || cfg=${XDG_CONFIG_HOME:-$HOME/.config}/ccenter/settings.json
 if [ -z "$lang" ]; then
     grep -q '"lang": *"tr"' "$cfg" 2>/dev/null && lang=tr
     grep -q '"lang": *"en"' "$cfg" 2>/dev/null && lang=en
@@ -33,9 +35,9 @@ run() {
 section() { printf '\n\n===== %s =====\n' "$1"; }
 
 {
-printf 'Ccenter diagnostic report\n'
+printf 'Solwind diagnostic report\n'
 printf 'Created: %s\n' "$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-printf 'Ccenter version: %s\n' "$(cat "$app/VERSION" 2>/dev/null || echo '?')"
+printf 'Solwind version: %s\n' "$(cat "$app/VERSION" 2>/dev/null || echo '?')"
 printf 'App folder: %s\n' "$app"
 
 section "System"
@@ -57,20 +59,21 @@ for f in sys_vendor product_name product_version product_family product_sku boar
     printf '%s: %s\n' "$f" "$(cat /sys/class/dmi/id/$f 2>/dev/null)"
 done
 
-section "Ccenter instances"
-have qs && qs list --all 2>&1 | grep -iE 'instance|config path|launch time|ccenter' | grep -B1 -A1 -i 'ccenter/shell'
+section "Solwind instances"
+# (a copy under the old name, Ccenter, counts too)
+have qs && qs list --all 2>&1 | grep -iE 'instance|config path|launch time|solwind|ccenter' | grep -B1 -A1 -iE '(solwind|ccenter)/shell'
 running=""
 if have qs; then
-    running=$(qs list --all 2>/dev/null | sed -n 's/.*Config path: \(.*ccenter\/shell\.qml\)$/\1/Ip' | head -1)
+    running=$(qs list --all 2>/dev/null | sed -n 's/.*Config path: \(.*\(solwind\|ccenter\)\/shell\.qml\)$/\1/Ip' | head -1)
 fi
 if [ -n "$running" ]; then
     rdir=${running%/shell.qml}
-    run "Ccenter status" qs ipc --any-display -p "$rdir" call cc status
+    run "Solwind status" qs ipc --any-display -p "$rdir" call cc status
     run "Profiles" qs ipc --any-display -p "$rdir" call cc profiles
     run "Keyboard" qs ipc --any-display -p "$rdir" call cc kbd
     run "Keyboard detection" qs ipc --any-display -p "$rdir" call cc kbdInfo
 else
-    echo 'Ccenter is not running.'
+    echo 'Solwind is not running.'
 fi
 
 section "NBFC"
@@ -104,31 +107,38 @@ if [ -d /sys/module/hp_wmi ]; then
     command -v modinfo >/dev/null 2>&1 && run "hp_wmi module file" modinfo -F filename hp_wmi
     [ -r /sys/module/hp_wmi/srcversion ] && run "hp_wmi srcversion" cat /sys/module/hp_wmi/srcversion
 fi
-[ -f /etc/udev/rules.d/90-ccenter.rules ] && run "Permission rule" cat /etc/udev/rules.d/90-ccenter.rules
+[ -f /etc/udev/rules.d/90-solwind.rules ] && run "Permission rule" cat /etc/udev/rules.d/90-solwind.rules
+[ -f /etc/udev/rules.d/90-ccenter.rules ] && run "Old permission rule (Ccenter)" cat /etc/udev/rules.d/90-ccenter.rules
 
 section "Settings"
-[ -r "$cfg" ] && cat "$cfg" || echo "(no settings file: $cfg)"
+[ -r "$cfg" ] && { printf '(%s)\n' "$cfg"; cat "$cfg"; } || echo "(no settings file: $cfg)"
 
 section "Background service"
 if have systemctl; then
-    run "Status" systemctl --user --no-pager status ccenter.service
-    have journalctl && run "Journal (last 80 lines)" journalctl --user -u ccenter.service -n 80 --no-pager
+    run "Status" systemctl --user --no-pager status solwind.service
+    have journalctl && run "Journal (last 80 lines)" journalctl --user -u solwind.service -n 80 --no-pager
+    # the old name's service (Ccenter, before 0.4.0), if it is still there
+    old=$(systemctl --user is-enabled ccenter.service 2>/dev/null)
+    [ -n "$old" ] && [ "$old" != not-found ] \
+        && printf '\nOld ccenter.service: %s, %s (%s)\n' "$old" "$(systemctl --user is-active ccenter.service 2>&1)" \
+                  "$(systemctl --user show -p FragmentPath --value ccenter.service 2>&1)"
 fi
 
 section "App logs (latest runs, also ones that crashed; kept until reboot)"
 rt=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/quickshell/by-id
 n=0
 if have qs && [ -d "$rt" ]; then
-    # newest first; an instance belongs to Ccenter if its lock file names a .../ccenter/shell.qml config
+    # newest first; an instance belongs to Solwind if its lock file names a .../solwind/shell.qml config (or the old
+    # name's .../ccenter/shell.qml)
     for d in $(ls -dt "$rt"/* 2>/dev/null); do
         [ -f "$d/log.qslog" ] || continue
-        tr -d '\000' < "$d/instance.lock" 2>/dev/null | grep -qi 'ccenter/shell\.qml' || continue
+        tr -d '\000' < "$d/instance.lock" 2>/dev/null | grep -qiE '(solwind|ccenter)/shell\.qml' || continue
         n=$((n + 1))
         run "Log of instance ${d##*/} ($(date -r "$d/log.qslog" '+%Y-%m-%d %H:%M'), last 250 lines)" qs log -t 250 "$d/log.qslog"
         [ $n -ge 3 ] && break
     done
 fi
-[ $n -eq 0 ] && echo '(no Ccenter logs found; they are cleared on reboot)'
+[ $n -eq 0 ] && echo '(no Solwind logs found; they are cleared on reboot)'
 } > "$out" 2>&1
 
 # Terminal colour codes (qs log) out

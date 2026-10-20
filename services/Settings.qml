@@ -4,13 +4,13 @@ import Quickshell.Io
 import QtQuick
 import qs.utils
 
-// Persistent settings: ~/.config/ccenter/settings.json (or $XDG_CONFIG_HOME/ccenter).
+// Persistent settings: ~/.config/solwind/settings.json (or $XDG_CONFIG_HOME/solwind).
 // The app writes only this file; it is created on the first change. Deleting it resets everything.
 // Format: { version, safety, configs: { "<NBFC config name>": { fans: { "0": st, ... }, global: { on, st } } } }
 Singleton {
     id: root
 
-    readonly property string dir: (Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config") + "/ccenter"
+    readonly property string dir: (Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config") + "/solwind"
     readonly property string path: dir + "/settings.json"
     property var data: ({ version: 1, configs: {} })
     property bool dirReady: false
@@ -169,7 +169,7 @@ Singleton {
     function write() {
         if (!dirReady) {
             mkdir.go(["mkdir", "-p", dir], code => {
-                if (code !== 0) { console.warn("[ccenter] could not create the settings folder: " + root.dir); return }
+                if (code !== 0) { console.warn("[solwind] could not create the settings folder: " + root.dir); return }
                 root.dirReady = true
                 root.write()
             })
@@ -204,7 +204,7 @@ Singleton {
                     root.dirReady = true
                 }
             } catch (e) {
-                console.warn("[ccenter] could not read settings.json, using defaults: " + e)
+                console.warn("[solwind] could not read settings.json, using defaults: " + e)
             }
         }
     }

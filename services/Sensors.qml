@@ -8,7 +8,7 @@ import qs.utils
 Singleton {
     id: root
     property bool active: true
-    // fast: window open or Ccenter driving fans -> every 3 s, GPU every round.
+    // fast: window open or Solwind driving fans -> every 3 s, GPU every round.
     // Otherwise every 5 s and the GPU (nvidia-smi, expensive) every 4th round (~20 s).
     property bool fast: true
     property int tick: 0
@@ -105,10 +105,10 @@ Singleton {
             const wait = nvFails < 2 ? 0 : Math.min(600000, 30000 * Math.pow(2, nvFails - 2))
             nvRetryAt = Date.now() + wait
             if (nvFails === 2 || wait === 600000 && nvFails % 6 === 0)
-                console.log("[ccenter] nvidia-smi gave no temperature (failures: " + nvFails + "), next try in "
+                console.log("[solwind] nvidia-smi gave no temperature (failures: " + nvFails + "), next try in "
                             + Math.round(wait / 1000) + " s. After an NVIDIA driver update a reboot usually fixes this.")
         } else if (isFinite(nv) && nvFails > 0) {
-            console.log("[ccenter] nvidia-smi works again")
+            console.log("[solwind] nvidia-smi works again")
             nvFails = 0
             nvRetryAt = 0
         }

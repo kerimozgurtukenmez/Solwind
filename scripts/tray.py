@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Ccenter tray icon (StatusNotifierItem + com.canonical.dbusmenu).
+# Solwind tray icon (StatusNotifierItem + com.canonical.dbusmenu).
 # Quickshell can show tray icons but can't publish one itself; this small helper does that.
 # The app (services/Tray.qml) runs it as a child process:
 #   stdin  <- JSON state lines: {"profiles": [...], "active": "...", "boost": bool, "visible": bool, "tooltip": "..."}
@@ -21,7 +21,7 @@ from gi.repository import Gio, GLib  # noqa: E402
 
 # Icon: image files tried in order (e.g. the app icon); if none loads, the theme icon
 ICON_FILES = sys.argv[1:]
-FALLBACK_ICON = "ccenter"
+FALLBACK_ICON = "solwind"
 
 SNI_XML = """
 <node>
@@ -103,7 +103,7 @@ SNI_PATH = "/StatusNotifierItem"
 MENU_PATH = "/MenuBar"
 
 # Menu texts come from the app in the UI language (see services/Tray.qml); these are the defaults until then
-state = {"profiles": [], "active": "", "boost": False, "visible": True, "tooltip": "Ccenter",
+state = {"profiles": [], "active": "", "boost": False, "visible": True, "tooltip": "Solwind",
          "labels": {"show": "Show window", "hide": "Hide window", "boost": "Max fan (15 min)",
                     "boostOff": "Turn max fan off", "quit": "Quit"}}
 revision = 1
@@ -158,8 +158,8 @@ PIXMAP = next((p for p in map(load_pixmap, ICON_FILES) if p), [])
 # Static properties are built once: converting the icon data on every request is expensive (~20 KB, byte by byte)
 STATIC_PROPS = {
     "Category": GLib.Variant("s", "Hardware"),
-    "Id": GLib.Variant("s", "ccenter"),
-    "Title": GLib.Variant("s", "Ccenter"),
+    "Id": GLib.Variant("s", "solwind"),
+    "Title": GLib.Variant("s", "Solwind"),
     "Status": GLib.Variant("s", "Active"),
     "WindowId": GLib.Variant("i", 0),
     "IconName": GLib.Variant("s", "" if PIXMAP else FALLBACK_ICON),
@@ -211,7 +211,7 @@ def layout_variant():
 
 
 def tooltip_variant():
-    return GLib.Variant("(sa(iiay)ss)", ("", [], "Ccenter", state["tooltip"]))
+    return GLib.Variant("(sa(iiay)ss)", ("", [], "Solwind", state["tooltip"]))
 
 
 def sni_get_property(_c, _s, _p, _i, prop):

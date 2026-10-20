@@ -1,6 +1,6 @@
 #!/bin/sh
 # Checks a rendered udev rule (template with @UID@ already replaced) before it is installed as root.
-# Accepts only comments, empty lines and the seven chown lines of dist/90-ccenter.rules for one numeric user id.
+# Accepts only comments, empty lines and the seven chown lines of dist/90-solwind.rules for one numeric user id.
 # A udev rule can run anything as root, so a tampered or broken file must never be installed. Exit 0 = ok.
 # Usage: kbd-rule-check.sh <rule file> <uid>
 f=$1 uid=$2

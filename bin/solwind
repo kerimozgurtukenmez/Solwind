@@ -1,16 +1,21 @@
 #!/bin/sh
-# Ccenter launcher and terminal commands.
-# The app folder is looked up in order: CCENTER_DIR, <this script's folder>/.. (a source checkout, or install.sh's
-# ~/.local/share/ccenter/bin/ccenter), <prefix>/share/ccenter (/usr/bin -> /usr/share/ccenter), /usr/share/ccenter.
-# Exit codes: 0 done, 1 error, 2 wrong usage, 3 not started because Ccenter already runs, 4 the app isn't running.
+# Solwind launcher and terminal commands.
+# The app folder is looked up in order: SOLWIND_DIR, <this script's folder>/.. (a source checkout, or install.sh's
+# ~/.local/share/solwind/bin/solwind), <prefix>/share/solwind (/usr/bin -> /usr/share/solwind), /usr/share/solwind.
+# Exit codes: 0 done, 1 error, 2 wrong usage, 3 not started because Solwind already runs, 4 the app isn't running.
 
 set -u
 
-# Message language: CCENTER_LANG, else the language chosen in the app (settings.json), else the system locale
-lang=${CCENTER_LANG:-}
+cfg=${XDG_CONFIG_HOME:-$HOME/.config}
+# Solwind was called Ccenter before 0.4.0: until the first start copies its settings over, the old file is read
+settings=$cfg/solwind/settings.json
+[ -e "$settings" ] || settings=$cfg/ccenter/settings.json
+
+# Message language: SOLWIND_LANG, else the language chosen in the app (settings.json), else the system locale
+lang=${SOLWIND_LANG:-}
 if [ -z "$lang" ]; then
-    grep -q '"lang": *"tr"' "${XDG_CONFIG_HOME:-$HOME/.config}/ccenter/settings.json" 2>/dev/null && lang=tr
-    grep -q '"lang": *"en"' "${XDG_CONFIG_HOME:-$HOME/.config}/ccenter/settings.json" 2>/dev/null && lang=en
+    grep -q '"lang": *"tr"' "$settings" 2>/dev/null && lang=tr
+    grep -q '"lang": *"en"' "$settings" 2>/dev/null && lang=en
 fi
 [ -n "$lang" ] || case "${LC_ALL:-${LC_MESSAGES:-${LANG:-}}}" in tr*) lang=tr ;; *) lang=en ;; esac
 # t "English" "Türkçe": print the message in the chosen language
@@ -20,25 +25,25 @@ err() { t "$@" >&2; }
 
 self=$(readlink -f "$0")
 base=${self%/bin/*}                               # the folder that holds bin/ (works whatever the command is called)
-if [ -n "${CCENTER_DIR:-}" ]; then
-    dir=$CCENTER_DIR
+if [ -n "${SOLWIND_DIR:-}" ]; then
+    dir=$SOLWIND_DIR
 elif [ -f "$base/shell.qml" ]; then
-    dir=$base                                     # source checkout or install.sh install (<app>/bin/ccenter)
-elif [ -f "$base/share/ccenter/shell.qml" ]; then
-    dir=$base/share/ccenter                       # installed with a prefix layout (/usr or ~/.local)
+    dir=$base                                     # source checkout or install.sh install (<app>/bin/solwind)
+elif [ -f "$base/share/solwind/shell.qml" ]; then
+    dir=$base/share/solwind                       # installed with a prefix layout (/usr or ~/.local)
 else
-    dir=/usr/share/ccenter
+    dir=/usr/share/solwind
 fi
 
 if [ ! -f "$dir/shell.qml" ]; then
-    err "ccenter: app files not found ($dir)" "ccenter: uygulama dosyaları bulunamadı ($dir)"
+    err "solwind: app files not found ($dir)" "solwind: uygulama dosyaları bulunamadı ($dir)"
     exit 1
 fi
-command -v qs >/dev/null 2>&1 || { err "ccenter: quickshell (qs) is not installed" "ccenter: quickshell (qs) kurulu değil"; exit 1; }
+command -v qs >/dev/null 2>&1 || { err "solwind: quickshell (qs) is not installed" "solwind: quickshell (qs) kurulu değil"; exit 1; }
 
 usage() {
     if [ "$lang" = tr ]; then cat <<EOF
-Kullanım: ccenter [komut]
+Kullanım: solwind [komut]
 
   (komutsuz)         Pencereyi aç. Çalışmıyorsa burada başlatır: günlüğü bu terminalde akar, Ctrl+C kapatır
                      (klavye ışığı ve fanlar normale döner; zorlamak için yine Ctrl+C)
@@ -61,16 +66,16 @@ Kullanım: ccenter [komut]
   kbd themecount <n> Caelestia kaynağında renk sayısı (3-6)
   lang [tr|en]       Arayüz dili; boşsa: şu anki dili göster
   report             Hata bildirmek için tanı raporu oluştur (ev klasörüne bir metin dosyası)
-  quit               Tamamen kapat (Ccenter'ın kontrol ettiği fanlar NBFC'ye döner); çalışmıyorsa bir şey yapmaz
-  help [komut]       Bu yardım ya da tek bir komutun yardımı (ccenter <komut> --help da olur)
+  quit               Tamamen kapat (Solwind'in kontrol ettiği fanlar NBFC'ye döner); çalışmıyorsa bir şey yapmaz
+  help [komut]       Bu yardım ya da tek bir komutun yardımı (solwind <komut> --help da olur)
   --version
 
-Çıkış kodları: 0 tamam, 1 hata, 2 yanlış kullanım, 3 Ccenter zaten çalıştığı için başlatılmadı (başka bir kopya ya da
+Çıkış kodları: 0 tamam, 1 hata, 2 yanlış kullanım, 3 Solwind zaten çalıştığı için başlatılmadı (başka bir kopya ya da
 servis dışındaki bu kopya), 4 uygulama çalışmıyor.
 Hatalar stderr'e yazılır.
 EOF
     else cat <<EOF
-Usage: ccenter [command]
+Usage: solwind [command]
 
   (no command)       Open the window. If it isn't running, start it here: its log shows in this terminal and
                      Ctrl+C quits it (keyboard light and fans back to normal; Ctrl+C again to force it)
@@ -93,11 +98,11 @@ Usage: ccenter [command]
   kbd themecount <n> Number of colors with the Caelestia source (3-6)
   lang [tr|en]       UI language; without one: show the current language
   report             Create a diagnostic report for bug reports (a text file in your home folder)
-  quit               Quit completely (fans driven by Ccenter go back to NBFC); does nothing if it isn't running
-  help [command]     This help, or the help of one command (ccenter <command> --help works too)
+  quit               Quit completely (fans driven by Solwind go back to NBFC); does nothing if it isn't running
+  help [command]     This help, or the help of one command (solwind <command> --help works too)
   --version
 
-Exit codes: 0 done, 1 error, 2 wrong usage, 3 not started because Ccenter already runs (another copy, or this one
+Exit codes: 0 done, 1 error, 2 wrong usage, 3 not started because Solwind already runs (another copy, or this one
 outside the service), 4 the app isn't running.
 Errors go to stderr.
 EOF
@@ -108,7 +113,7 @@ usage_for() {
     usage | awk -v c="$1" 'NR == 1 { head = $0; next }
         $1 == c || (c ~ /^(open|hide|toggle)$/ && $1 == "open") { lines = lines $0 "\n" }
         END { if (lines == "") exit 1; printf "%s\n\n%s", head, lines }' \
-    || { err "ccenter: unknown command: $1" "ccenter: bilinmeyen komut: $1"; usage >&2; exit 2; }
+    || { err "solwind: unknown command: $1" "solwind: bilinmeyen komut: $1"; usage >&2; exit 2; }
 }
 
 # The app's instances are found by path on any display, so the commands also work from a TTY or over SSH
@@ -130,17 +135,19 @@ call() {
     [ -z "$out" ] || printf '%s\n' "$out"
 }
 
-# Is another Ccenter copy (development or installed) running? Two copies must never drive the fans at once.
-# (qs list --json keeps paths with spaces whole)
+# Is another Solwind copy (development or installed) running? Two copies must never drive the fans at once.
+# A copy under the old name (Ccenter, before 0.4.0) counts too. (qs list --json keeps paths with spaces whole)
 other_instance() {
     qs list --all --json 2>/dev/null | sed -n 's/^ *"config_path": *"\(.*\)",*$/\1/p' | while IFS= read -r p; do
         low=$(printf '%s' "$p" | tr '[:upper:]' '[:lower:]')
-        case "$low" in */ccenter/shell.qml) [ "$p" = "$dir/shell.qml" ] || { printf '%s\n' "$p"; break; } ;; esac
+        case "$low" in
+            */solwind/shell.qml|*/ccenter/shell.qml) [ "$p" = "$dir/shell.qml" ] || { printf '%s\n' "$p"; break; } ;;
+        esac
     done
 }
 
 need_running() {
-    running || { err "ccenter: the app is not running (to start it: ccenter)" "ccenter: uygulama çalışmıyor (başlatmak için: ccenter)"; exit 4; }
+    running || { err "solwind: the app is not running (to start it: solwind)" "solwind: uygulama çalışmıyor (başlatmak için: solwind)"; exit 4; }
 }
 usage_error() { err "$@"; exit 2; }
 is_int() { case "$1" in ""|-|*[!0-9-]*|?*-*) return 1 ;; esac; }
@@ -149,10 +156,29 @@ is_int() { case "$1" in ""|-|*[!0-9-]*|?*-*) return 1 ;; esac; }
 guard() {
     other=$(other_instance)
     if [ -n "$other" ]; then
-        err "ccenter: another Ccenter copy is running: $other" "ccenter: başka bir Ccenter kopyası çalışıyor: $other"
+        case "$(printf '%s' "$other" | tr '[:upper:]' '[:lower:]')" in
+            */ccenter/shell.qml) err "solwind: another copy is running (Solwind or Ccenter, its old name): $other" \
+                                     "solwind: başka bir kopya çalışıyor (Solwind ya da eski adıyla Ccenter): $other" ;;
+            *) err "solwind: another Solwind copy is running: $other" "solwind: başka bir Solwind kopyası çalışıyor: $other" ;;
+        esac
         err "Not started, so that two copies never drive the fans at once. Quit that one first." \
             "İki kopya aynı anda fanları kontrol etmesin diye başlatılmadı. Önce onu kapat."
         exit 3                                    # the systemd service does not retry on this code (RestartPreventExitStatus=3)
+    fi
+}
+
+# Coming from Ccenter (the old name): before the first start its settings are copied over once. A copy, not a move:
+# the old file stays where it was (uninstall.sh offers to remove it). The app reads only the new file.
+copy_old_settings() {
+    if [ -e "$cfg/solwind/settings.json" ] || [ ! -f "$cfg/ccenter/settings.json" ]; then return 0; fi
+    if mkdir -p "$cfg/solwind" && cp "$cfg/ccenter/settings.json" "$cfg/solwind/settings.json.part" \
+       && mv "$cfg/solwind/settings.json.part" "$cfg/solwind/settings.json"; then
+        err "solwind: settings copied from Ccenter (Solwind's old name): $cfg/ccenter -> $cfg/solwind" \
+            "solwind: ayarlar Ccenter'den (Solwind'in eski adı) kopyalandı: $cfg/ccenter -> $cfg/solwind"
+    else
+        rm -f "$cfg/solwind/settings.json.part"
+        err "solwind: could not copy the settings from $cfg/ccenter; starting with default settings" \
+            "solwind: ayarlar $cfg/ccenter klasöründen kopyalanamadı; varsayılan ayarlarla başlıyor"
     fi
 }
 
@@ -219,7 +245,7 @@ on_timeout() {
 }
 # $1: 1 = open the window, 0 = start in the background (no window)
 run_supervised() {
-    command -v setsid >/dev/null 2>&1 || { err "ccenter: setsid (util-linux) is needed" "ccenter: setsid (util-linux) gerekli"; exit 1; }
+    command -v setsid >/dev/null 2>&1 || { err "solwind: setsid (util-linux) is needed" "solwind: setsid (util-linux) gerekli"; exit 1; }
     quitting=0 forced=0 timer="" pid="" trapped=0 early=""
     trap 'on_sig INT' INT
     trap 'on_sig INT' QUIT                       # Ctrl+\ quits like Ctrl+C (bash ignores it in scripts, dash doesn't)
@@ -231,9 +257,9 @@ run_supervised() {
     # A background job of a script starts with Ctrl+C ignored, and the traps above would be inherited as ignored:
     # give qs the defaults, like under the service (GNU env)
     sigs=""; env --default-signal=INT true 2>/dev/null && sigs="--default-signal=INT,QUIT,TSTP"
-    bg=""; [ "$1" = 1 ] || bg=CCENTER_BACKGROUND=1
+    bg=""; [ "$1" = 1 ] || bg=SOLWIND_BACKGROUND=1
     # The log goes to this terminal (Quickshell writes it to stdout). Not into a pipe: one that breaks could end qs.
-    # Without a terminal (started from the app menu, or piped) nobody reads it; qs keeps its own log (ccenter log).
+    # Without a terminal (started from the app menu, or piped) nobody reads it; qs keeps its own log (solwind log).
     if [ -t 1 ] && [ -t 2 ]; then
         env $sigs QS_DISABLE_CRASH_HANDLER=1 $bg setsid qs -p "$dir" -n </dev/null &
     else
@@ -252,7 +278,7 @@ run_supervised() {
     [ -z "$timer" ] || kill "$timer" 2>/dev/null
     # qs -n exits 0 at once if this copy got started meanwhile: that one drives the fans, leave them alone
     if [ "$st" = 0 ] && [ "$quitting" = 0 ] && running; then
-        err "ccenter: this copy is already running" "ccenter: bu kopya zaten çalışıyor"
+        err "solwind: this copy is already running" "solwind: bu kopya zaten çalışıyor"
         exit 3
     fi
     hand_back
@@ -267,14 +293,14 @@ run_supervised() {
     elif [ "$st" -gt 128 ] && [ "$st" -le 192 ]; then          # 128 + signal number (Linux signals go up to 64)
         sn=$((st - 128))
         case $sn in
-            1|2|9|15) say "Ccenter was stopped from outside (signal $sn); $fans_en" "Ccenter dışarıdan durduruldu (sinyal $sn); $fans_tr" ;;
-            *) say "Ccenter crashed (signal $sn); $fans_en" "Ccenter çöktü (sinyal $sn); $fans_tr" ;;
+            1|2|9|15) say "Solwind was stopped from outside (signal $sn); $fans_en" "Solwind dışarıdan durduruldu (sinyal $sn); $fans_tr" ;;
+            *) say "Solwind crashed (signal $sn); $fans_en" "Solwind çöktü (sinyal $sn); $fans_tr" ;;
         esac
         exit 1
     elif [ "$st" != 0 ]; then
-        say "Ccenter ended with code $st; $fans_en" "Ccenter $st koduyla bitti; $fans_tr"; exit 1
+        say "Solwind ended with code $st; $fans_en" "Solwind $st koduyla bitti; $fans_tr"; exit 1
     fi
-    say "Ccenter quit; $fans_en" "Ccenter kapandı; $fans_tr"
+    say "Solwind quit; $fans_en" "Solwind kapandı; $fans_tr"
     exit 0
 }
 
@@ -286,52 +312,54 @@ quit_app() {
     if [ "${1:-}" = --pid ]; then
         pid=${2:-}
         [ -n "$pid" ] || exit 0
-        is_int "$pid" || usage_error "Usage: ccenter quit [--pid <process id>]" "Kullanım: ccenter quit [--pid <süreç no>]"
+        is_int "$pid" || usage_error "Usage: solwind quit [--pid <process id>]" "Kullanım: solwind quit [--pid <süreç no>]"
         qs ipc --pid "$pid" call cc quit >/dev/null 2>&1 || exit 0   # (--pid picks the instance; no --any-display with it)
         n=0
         while [ "$n" -lt 50 ] && [ -e "/proc/$pid" ]; do sleep 0.2; n=$((n + 1)); done
         exit 0
     fi
     if ! running; then
-        err "ccenter: the app is not running" "ccenter: uygulama çalışmıyor"
+        err "solwind: the app is not running" "solwind: uygulama çalışmıyor"
         exit 0
     fi
     call quit || exit $?
     n=0
     while [ "$n" -lt 50 ] && running; do sleep 0.2; n=$((n + 1)); done
-    running && { err "ccenter: the app hasn't quit yet" "ccenter: uygulama henüz kapanmadı"; exit 1; }
+    running && { err "solwind: the app hasn't quit yet" "solwind: uygulama henüz kapanmadı"; exit 1; }
     exit 0
 }
 
-# ccenter <command> --help
+# solwind <command> --help
 case "${2:-}" in -h|--help) case "${1:-}" in ""|-*) ;; *) usage_for "$1"; exit 0 ;; esac ;; esac
 
 case "${1:-}" in
     "")
         if running; then
             call open || exit $?
-            err "ccenter: already running, the window is open. Its log: ccenter log -f" \
-                "ccenter: zaten çalışıyor, pencere açıldı. Günlüğü: ccenter log -f"
+            err "solwind: already running, the window is open. Its log: solwind log -f" \
+                "solwind: zaten çalışıyor, pencere açıldı. Günlüğü: solwind log -f"
             exit 0
         fi
         guard
+        copy_old_settings
         run_supervised 1 ;;
     -d|--detach)
         # Like qs -d / caelestia shell -d: start it away from this terminal (still supervised), return once it answers
         if running; then call open; exit $?; fi
         guard
-        command -v setsid >/dev/null 2>&1 || { err "ccenter: setsid (util-linux) is needed" "ccenter: setsid (util-linux) gerekli"; exit 1; }
+        command -v setsid >/dev/null 2>&1 || { err "solwind: setsid (util-linux) is needed" "solwind: setsid (util-linux) gerekli"; exit 1; }
         setsid -f "$self" </dev/null >/dev/null 2>&1
-        wait_running || { err "ccenter: the app didn't start. To see why, run: ccenter" "ccenter: uygulama başlamadı. Nedenini görmek için: ccenter"; exit 1; }
+        wait_running || { err "solwind: the app didn't start. To see why, run: solwind" "solwind: uygulama başlamadı. Nedenini görmek için: solwind"; exit 1; }
         exit 0 ;;
     --background)
         # This copy already runs: starting a second one would only exit at once. (Another copy appearing between
         # this check and the start is not caught: qs -n then exits 0. A tiny window.)
         if running; then
-            err "ccenter: this copy is already running" "ccenter: bu kopya zaten çalışıyor"
+            err "solwind: this copy is already running" "solwind: bu kopya zaten çalışıyor"
             exit 3
         fi
         guard
+        copy_old_settings
         # Under the systemd service ExecStart runs this script itself, so SYSTEMD_EXEC_PID is this process.
         # (Not INVOCATION_ID: a uwsm session hands it down to every terminal started from Hyprland.)
         if [ "${SYSTEMD_EXEC_PID:-}" = "$$" ]; then
@@ -341,7 +369,7 @@ case "${1:-}" in
             # ExecStopPost (fans back to NBFC) wouldn't run. Without it the process ends, systemd hands the fans
             # back and starts the service again 3 s later (Restart=on-failure).
             export QS_DISABLE_CRASH_HANDLER=1
-            exec env CCENTER_BACKGROUND=1 qs -p "$dir" -n
+            exec env SOLWIND_BACKGROUND=1 qs -p "$dir" -n
         fi
         run_supervised 0 ;;
     log)
@@ -357,7 +385,7 @@ case "${1:-}" in
     boost)
         case "${2:-}" in
             ""|on|off) ;;
-            *) is_int "$2" || usage_error "Usage: ccenter boost [minutes | on | off]" "Kullanım: ccenter boost [dakika | on | off]" ;;
+            *) is_int "$2" || usage_error "Usage: solwind boost [minutes | on | off]" "Kullanım: solwind boost [dakika | on | off]" ;;
         esac
         need_running
         case "${2:-}" in
@@ -370,14 +398,14 @@ case "${1:-}" in
         # wrong usage is reported before "not running"
         case "${2:-}" in
             ""|info) ;;
-            color) [ $# -ge 3 ] || usage_error "Usage: ccenter kbd color <#rrggbb>" "Kullanım: ccenter kbd color <#rrggbb>" ;;
-            effect) [ $# -ge 3 ] || usage_error "Usage: ccenter kbd effect <static|breathing|cycle>" "Kullanım: ccenter kbd effect <static|breathing|cycle>" ;;
-            source) [ $# -ge 3 ] || usage_error "Usage: ccenter kbd source <single|multi|theme>" "Kullanım: ccenter kbd source <single|multi|theme>" ;;
+            color) [ $# -ge 3 ] || usage_error "Usage: solwind kbd color <#rrggbb>" "Kullanım: solwind kbd color <#rrggbb>" ;;
+            effect) [ $# -ge 3 ] || usage_error "Usage: solwind kbd effect <static|breathing|cycle>" "Kullanım: solwind kbd effect <static|breathing|cycle>" ;;
+            source) [ $# -ge 3 ] || usage_error "Usage: solwind kbd source <single|multi|theme>" "Kullanım: solwind kbd source <single|multi|theme>" ;;
             brightness|speed|themecount)
-                [ $# -ge 3 ] && is_int "$3" || usage_error "Usage: ccenter kbd $2 <number>" "Kullanım: ccenter kbd $2 <sayı>" ;;
+                [ $# -ge 3 ] && is_int "$3" || usage_error "Usage: solwind kbd $2 <number>" "Kullanım: solwind kbd $2 <sayı>" ;;
             range)
-                [ $# -ge 4 ] && is_int "$3" && is_int "$4" || usage_error "Usage: ccenter kbd range <lowest %> <highest %>" "Kullanım: ccenter kbd range <en düşük %> <en yüksek %>" ;;
-            *) err "ccenter: unknown kbd command: $2" "ccenter: bilinmeyen kbd komutu: $2"; usage_for kbd >&2; exit 2 ;;
+                [ $# -ge 4 ] && is_int "$3" && is_int "$4" || usage_error "Usage: solwind kbd range <lowest %> <highest %>" "Kullanım: solwind kbd range <en düşük %> <en yüksek %>" ;;
+            *) err "solwind: unknown kbd command: $2" "solwind: bilinmeyen kbd komutu: $2"; usage_for kbd >&2; exit 2 ;;
         esac
         need_running
         case "${2:-}" in
@@ -402,7 +430,7 @@ case "${1:-}" in
     help)
         if [ -n "${2:-}" ]; then usage_for "$2"; else usage; fi ;;
     -V|--version)
-        v=$(cat "$dir/VERSION" 2>/dev/null || echo "?"); echo "ccenter $v ($dir)" ;;
+        v=$(cat "$dir/VERSION" 2>/dev/null || echo "?"); echo "solwind $v ($dir)" ;;
     *)
-        err "ccenter: unknown command: $1" "ccenter: bilinmeyen komut: $1"; usage >&2; exit 2 ;;
+        err "solwind: unknown command: $1" "solwind: bilinmeyen komut: $1"; usage >&2; exit 2 ;;
 esac

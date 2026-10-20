@@ -11,7 +11,7 @@ Singleton {
     // urgency: "low" | "normal" | "critical"
     function send(title, body, urgency, icon) {
         if (!enabled) return
-        Quickshell.execDetached(["notify-send", "-a", "Ccenter", "-u", urgency || "normal",
+        Quickshell.execDetached(["notify-send", "-a", "Solwind", "-u", urgency || "normal",
                                  "-i", icon || "dialog-information", title, body || ""])
     }
 }

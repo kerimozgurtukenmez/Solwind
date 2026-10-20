@@ -158,11 +158,12 @@ Flickable {
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
                     text: (Keyboard.hasBrightness
-                           ? I18n.t("What is done: /etc/udev/rules.d/90-ccenter.rules is added; only the color and brightness files of the %1 light become writable (what you do by hand with 'sudo tee').").arg(Keyboard.name)
-                           : I18n.t("What is done: /etc/udev/rules.d/90-ccenter.rules is added; only the color files of the %1 light become writable (what you do by hand with 'sudo tee').").arg(Keyboard.name)) + "\n"
+                           ? I18n.t("What is done: /etc/udev/rules.d/90-solwind.rules is added; only the color and brightness files of the %1 light become writable (what you do by hand with 'sudo tee').").arg(Keyboard.name)
+                           : I18n.t("What is done: /etc/udev/rules.d/90-solwind.rules is added; only the color files of the %1 light become writable (what you do by hand with 'sudo tee').").arg(Keyboard.name)) + "\n"
                         + (Keyboard.hasBrightness ? I18n.t("What changes: only your user can change the keyboard light's color and brightness; it gives no access to the fans, files or the system, and nothing to other users.")
                                                   : I18n.t("What changes: only your user can change the keyboard light's color; it gives no access to the fans, files or the system, and nothing to other users.")) + "\n"
-                        + I18n.t("Undo: 'Remove permission' here. Your password is asked in the system's own window; Ccenter never sees it.")
+                        + (Keyboard.ruleOld ? I18n.t("The old rule of Ccenter (Solwind's old name), 90-ccenter.rules, is removed.") + "\n" : "")
+                        + I18n.t("Undo: 'Remove permission' here. Your password is asked in the system's own window; Solwind never sees it.")
                     color: Colours.fgDim
                     font.pixelSize: 11
                 }
@@ -174,15 +175,16 @@ Flickable {
                     onClicked: Keyboard.grantPermission()
                 }
             }
-            // The old rule (earlier versions) let every user write; offer the per-user version
+            // The old rule (earlier versions) let every user write, or has the old name (Ccenter): offer the current one
             RowLayout {
-                visible: Keyboard.writable && Keyboard.ruleLegacy
+                visible: Keyboard.writable && (Keyboard.ruleLegacy || Keyboard.ruleOld)
                 Layout.fillWidth: true
                 spacing: 8
                 StyledText {
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
-                    text: I18n.t("The installed permission is from an older, less strict version. The new version allows only your user.")
+                    text: Keyboard.ruleLegacy ? I18n.t("The installed permission is from an older, less strict version. The new version allows only your user.")
+                                              : I18n.t("The installed permission was added by Ccenter, Solwind's old name (/etc/udev/rules.d/90-ccenter.rules). Updating it moves it to 90-solwind.rules.")
                     color: Colours.warning
                     font.pixelSize: 11
                 }
@@ -196,13 +198,13 @@ Flickable {
             }
             // If the permission comes from the rule the app added, it can be removed here
             RowLayout {
-                visible: Keyboard.writable && Keyboard.ruleAt === "etc" && !Keyboard.ruleLegacy
+                visible: Keyboard.writable && Keyboard.ruleAt === "etc" && !Keyboard.ruleLegacy && !Keyboard.ruleOld
                 Layout.fillWidth: true
                 spacing: 8
                 StyledText {
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
-                    text: I18n.t("Keyboard light permission is on (/etc/udev/rules.d/90-ccenter.rules).")
+                    text: I18n.t("Keyboard light permission is on (/etc/udev/rules.d/90-solwind.rules).")
                     color: Colours.fgDim
                     font.pixelSize: 11
                 }

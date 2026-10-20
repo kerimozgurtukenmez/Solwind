@@ -31,6 +31,6 @@ Card {
         text: I18n.t("Send a test notification")
         enabled: Notify.enabled
         opacity: enabled ? 1 : 0.4
-        onClicked: Notify.send("Ccenter", I18n.t("Notifications work."), "normal", "dialog-information")
+        onClicked: Notify.send("Solwind", I18n.t("Notifications work."), "normal", "dialog-information")
     }
 }

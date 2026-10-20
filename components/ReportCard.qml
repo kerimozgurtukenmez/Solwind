@@ -4,7 +4,7 @@ import Quickshell
 import qs.services
 import qs.utils
 
-// "Something wrong?" card: creates the diagnostic report (scripts/report.sh, same as `ccenter report`) and offers to
+// "Something wrong?" card: creates the diagnostic report (scripts/report.sh, same as `solwind report`) and offers to
 // open it. The report is a text file in the home folder; nothing is sent anywhere.
 Card {
     id: card
@@ -17,7 +17,7 @@ Card {
     StyledText {
         Layout.fillWidth: true
         wrapMode: Text.WordWrap
-        text: I18n.t("Create a report with your system details and Ccenter's recent logs, and attach it to a GitHub issue. It is saved as a text file in your home folder; nothing is sent anywhere. Personal names and paths are removed.")
+        text: I18n.t("Create a report with your system details and Solwind's recent logs, and attach it to a GitHub issue. It is saved as a text file in your home folder; nothing is sent anywhere. Personal names and paths are removed.")
         color: Colours.fgDim
         font.pixelSize: 11
     }
@@ -33,7 +33,7 @@ Card {
                 card.busy = true
                 cmd.go(["sh", Quickshell.shellPath("scripts/report.sh")], (code, out) => {
                     card.busy = false
-                    const m = out.match(/(\/\S*ccenter-report-[0-9-]+\.txt)/)
+                    const m = out.match(/(\/\S*solwind-report-[0-9-]+\.txt)/)
                     card.file = m ? m[1] : ""
                 })
             }

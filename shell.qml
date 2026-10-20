@@ -1,4 +1,4 @@
-//@ pragma AppId ccenter
+//@ pragma AppId solwind
 import Quickshell
 import Quickshell.Io
 import QtQuick
@@ -13,17 +13,17 @@ ShellRoot {
     id: root
     // The window state lives outside the window: closing the window destroys it completely
     // (UI, graphics context and render caches are freed; fan control keeps running in FanState)
-    // Started by the service (CCENTER_BACKGROUND=1) it runs in the background without opening the window
-    property bool shown: Quickshell.env("CCENTER_BACKGROUND") !== "1"
+    // Started by the service (SOLWIND_BACKGROUND=1) it runs in the background without opening the window
+    property bool shown: Quickshell.env("SOLWIND_BACKGROUND") !== "1"
     property int tab: 0
 
     LazyLoader {
         active: root.shown
         // FloatingWindow = a normal xdg window (Hyprland tiles it). PanelWindow is layer-shell and doesn't tile.
         FloatingWindow {
-            title: "Ccenter-Caelestia"
+            title: "Solwind"
             visible: true
-            // Closing the window doesn't quit the app; it keeps running in the background (reopen with `ccenter`)
+            // Closing the window doesn't quit the app; it keeps running in the background (reopen with `solwind`)
             onClosed: root.shown = false
             implicitWidth: 600
             implicitHeight: 780
@@ -37,8 +37,10 @@ ShellRoot {
 
                 RowLayout {
                     Layout.fillWidth: true
-                    StyledText { text: "Ccenter"; color: Colours.fg; font { pixelSize: 26; bold: true } }
-                    StyledText { text: "-Caelestia"; color: Colours.primary; font { pixelSize: 26; bold: true } }
+                    Row {                                    // one word in two colours: no gap between them
+                        StyledText { text: "Sol"; color: Colours.fg; font { pixelSize: 26; bold: true } }
+                        StyledText { text: "wind"; color: Colours.primary; font { pixelSize: 26; bold: true } }
+                    }
                     Item { Layout.fillWidth: true }
                     // Language switch (saved in settings; default follows the system language)
                     Segment {
@@ -78,19 +80,19 @@ ShellRoot {
     onShownChanged: {
         if (shown) return
         gcTimer.restart()
-        console.info("[ccenter] Window closed; Ccenter keeps running in the background. "
-                     + "To quit: the tray menu, `ccenter quit`, or Ctrl+C in the terminal that started it.")
+        console.info("[solwind] Window closed; Solwind keeps running in the background. "
+                     + "To quit: the tray menu, `solwind quit`, or Ctrl+C in the terminal that started it.")
     }
 
     Timer { id: gcTimer; interval: 1000; onTriggered: gc() }
 
-    // Sensors are read while the fan tab is open, while Ccenter drives fans, or while notifications are on (critical temperature)
+    // Sensors are read while the fan tab is open, while Solwind drives fans, or while notifications are on (critical temperature)
     Binding { target: Sensors; property: "active"; value: (root.shown && root.tab === 0) || Nbfc.needsSensors || Notify.enabled }
     // Always-running services (also while the window is closed): event watcher and fan state
     readonly property var alerts: Alerts
     readonly property var fanState: FanState
     readonly property var keyboard: Keyboard     // keyboard effects keep running while the window is closed
-    // Polling pace: fast while the window is open or Ccenter drives fans, otherwise relaxed (performance)
+    // Polling pace: fast while the window is open or Solwind drives fans, otherwise relaxed (performance)
     Binding { target: Nbfc; property: "uiVisible"; value: root.shown }
     Binding { target: Sensors; property: "fast"; value: root.shown || Nbfc.controlling }
 
@@ -117,9 +119,9 @@ ShellRoot {
         function onProfileRequested(name) { FanState.applyByName(name, false) }
     }
 
-    // Terminal control: ccenter <command> (= qs ipc -p <app folder> call cc <command> [argument]).
+    // Terminal control: solwind <command> (= qs ipc -p <app folder> call cc <command> [argument]).
     // A failure is answered with "ERROR<tab>message" (exit code 1) or, for a wrong argument, "USAGE<tab>message"
-    // (exit code 2); bin/ccenter prints the message to stderr.
+    // (exit code 2); bin/solwind prints the message to stderr.
     function fail(msg) { return "ERROR\t" + msg }
     function badArg(msg) { return "USAGE\t" + msg }
     IpcHandler {
@@ -127,7 +129,7 @@ ShellRoot {
         function toggle(): void { root.shown = !root.shown }
         function open(): void { root.shown = true }
         function hide(): void { root.shown = false }
-        // Quit completely: fans driven by Ccenter go back to NBFC's automatic control
+        // Quit completely: fans driven by Solwind go back to NBFC's automatic control
         function quit(): void { Nbfc.releaseAndQuit() }
         // Applies a profile (same code as the button in the UI). Case-insensitive.
         function profile(name: string): string {
