@@ -8,12 +8,9 @@ A small control center for laptops: **fan control** and **keyboard lighting**, m
 > [!WARNING]
 > **This is an early project, use it at your own risk.**
 >
-> - I've only been able to test it on my own laptop, an **HP Victus 16-r0xxx** (i7-13700H, RTX 3050, Arch Linux, Hyprland). It may not work on other HP models or on other brands.
->   - Fan control needs a working NBFC config for your exact model.
->   - The keyboard part is only tested on HP's single-zone RGB keyboard. Other keyboards in the table below are supported based on the kernel drivers, but nobody has tried them on real hardware yet.
+> - I've only tested it on my own **HP Victus 16-r0xxx** (Arch Linux, Hyprland). Other models and brands may not work.
 > - The fan part **writes fan speeds to your hardware** through NBFC. A bad setting can make your laptop run hot, so keep an eye on the temperatures.
-> - In *Fixed* and *Curve* mode Solwind drives the fans itself. Closing the window keeps it running in the background, and quitting hands the fans back to NBFC. Started with `solwind` or as the background service, the fans are also handed back if it crashes. If that watcher is killed too (for example `kill -9` on both), the fans **stay at the last speed**; `nbfc set -a` gives them back to NBFC.
-> - Things can still change or break.
+> - If Solwind crashes, its launcher or service hands the fans back to NBFC. Only if both are killed (for example with `kill -9`) do the fans stay at the last speed; `nbfc set -a` gives them back.
 
 ## Screenshots
 
@@ -21,7 +18,7 @@ A small control center for laptops: **fan control** and **keyboard lighting**, m
 |---|---|---|
 | ![Fan control](docs/screenshots/fan.png) | ![Curve editor](docs/screenshots/curve.png) | ![Keyboard lighting](docs/screenshots/keyboard.png) |
 
-Colors follow your Caelestia theme. Same app, different wallpaper:
+Colors follow your Caelestia theme:
 
 | Fan control | Keyboard |
 |---|---|
@@ -29,119 +26,76 @@ Colors follow your Caelestia theme. Same app, different wallpaper:
 
 ## Features
 
-### Fan control (through NBFC-Linux)
-- Live temperatures, fan speeds and NBFC service status
-- Three modes per fan: **Auto** (NBFC decides), **Fixed** (a constant %), **Curve** (temperature → speed)
-- Curve editor: drag the points, fine-tune them, smooth or stepped curves
-- A "Global" card to give every fan the same setting
-- Profiles: NBFC Auto, Quiet, Balanced, Performance, plus your own
-- Curve mode can follow the CPU, the GPU or whichever is hotter
-- The fans don't rev up and down all the time: they speed up right away but slow down gently
-- Shows your NBFC config's own curve, and you can copy it to edit it
-- Max fan button (5 min, 15 min or until you turn it off)
-- Graph of the last 10 minutes (temperatures and fan speed)
-- Notifications through Caelestia: critical temperature, NBFC stopped, fan speed couldn't be set, max fan ended, profile changed from a keybind (you can turn them off)
-- Tray icon in the Caelestia bar: click to show/hide, hover for profiles, max fan and quit
-- Safety limit: above 90 °C, fans in Fixed/Curve mode go to 100%
-- NBFC service controls (start, stop, restart, read-only mode, start on boot) and config picker
-- Light on resources: around 0.5% CPU in the background while NBFC is in control
+**Fans** (through [NBFC-Linux](https://github.com/nbfc-linux/nbfc-linux)):
+- Per fan: **Auto** (NBFC decides), **Fixed** or **Curve** (following the CPU, the GPU or the hotter one)
+- Curve editor, profiles (Quiet, Balanced, Performance and your own), max fan button, a 10 minute graph
+- Speeds up right away, slows down gently. Above 90 °C every fan it controls goes to 100%
+- NBFC service controls and config picker, notifications, tray icon
 
-### Keyboard lighting
-- **Color** (color wheel, presets or your Caelestia theme color) and **brightness**
-- Finds your laptop and keyboard light step by step (maker → driver → light → permission) and only shows what your keyboard can actually do. `solwind kbd info` prints the same thing
-- **Breathing**: fades in and out with one color, up to 6 colors of your choice, or your Caelestia theme colors. Speed and lowest/highest level are adjustable. Keeps going when the window is closed
-- **Color cycle**: flows smoothly between colors without dimming
-- Caelestia colors: 3 to 6 colors picked from your current theme, and they update when the theme changes
+**Keyboard:**
+- Color, brightness, breathing and color cycle effects (also with your Caelestia theme colors)
+- Detects your laptop and light, and only shows what your keyboard can do (`solwind kbd info`)
 
-#### Supported keyboards
+English and Turkish. Colors, rounding and fonts come from your Caelestia setup; Solwind only reads Caelestia's files.
 
-Solwind only uses the files a **kernel driver** offers for keyboard lights (in `/sys`). It never talks to the firmware or USB devices directly, so the driver checks everything it writes.
+### Supported keyboards
+
+Solwind only uses the files a kernel driver offers in `/sys`, never the firmware or USB directly. Only the first row is tested on real hardware.
 
 | Laptop | Kernel light | What works |
 |---|---|---|
-| HP Victus / OMEN, single-zone RGB | `hp::kbd_backlight` (needs an extra module, [see below](#hp-laptops)) | Color, brightness, effects (tested on my Victus 16-r0) |
-| HP OMEN / Victus, four-zone RGB | `hp::kbd_zoned_backlight-*`, or `hp::kbd_backlight_zone0`–`3` in the module's 0.0.3 (extra module) | Color (same on all zones), brightness (not tested yet) |
-| HP OMEN / Victus, four-zone RGB | `rgb_zones/zone00`–`zone03` (extra module, older copies) | Color only, same on all zones (not tested yet) |
-| ASUS TUF with RGB | `asus::kbd_backlight` + `kbd_rgb_mode` | Static color and 4 brightness levels (not tested yet). Never saves anything to the BIOS |
-| ASUS (other) | `asus::kbd_backlight` | Brightness levels |
-| ASUS ROG (Aura N-KEY) | colors go through USB | Brightness only; for colors use [asusctl](https://gitlab.com/asus-linux/asusctl) |
-| Lenovo IdeaPad / LOQ / ThinkPad | `platform::kbd_backlight` / `tpacpi::kbd_backlight` | Brightness levels |
-| Lenovo Legion RGB | colors go through USB | Brightness if available; for colors use [L5P-Keyboard-RGB](https://github.com/4JX/L5P-Keyboard-RGB) or [OpenRGB](https://openrgb.org) |
-| HP per-key RGB | not supported by the kernel or the module | — |
-| HP with a white (single-color) backlight | not offered by the kernel or the module | — (the Fn key only) |
-| HP with other OMEN keyboard modules (`omen-rgb-keyboard`, `hp-omen-wmi-dkms`, `hp-omen-gaming-wmi-dkms`) | their own files | Not supported (with `omen-rgb-keyboard` only its brightness shows, not tested) |
-| Chromebooks with a backlit keyboard | `chromeos::kbd_backlight` | Brightness levels (not tested yet) |
+| HP Victus / OMEN, single-zone RGB | `hp::kbd_backlight` (extra module, [see below](#hp-laptops)) | Color, brightness, effects |
+| HP OMEN / Victus, four-zone RGB | `hp::kbd_zoned_backlight-*` or `hp::kbd_backlight_zone0`–`3` (extra module) | Color (same on all zones), brightness |
+| HP OMEN / Victus, four-zone RGB | `rgb_zones/zone00`–`zone03` (older copies of the module) | Color only, same on all zones |
+| ASUS TUF with RGB | `asus::kbd_backlight` + `kbd_rgb_mode` | Static color, brightness. Never saves to the BIOS |
+| ASUS (other), Lenovo, Chromebooks | `asus::`, `platform::`, `tpacpi::`, `chromeos::kbd_backlight` | Brightness |
+| ASUS ROG, Lenovo Legion RGB | colors go through USB | Brightness only; use [asusctl](https://gitlab.com/asus-linux/asusctl) / [L5P-Keyboard-RGB](https://github.com/4JX/L5P-Keyboard-RGB) for colors |
+| HP per-key RGB, HP white backlight, other OMEN modules | not offered by the kernel or the module | — |
 
-The effects write to the light many times a second, so for now they're only turned on for the HP single-zone keyboard I could test them on.
+Effects are only on for the HP single-zone keyboard, the one I could test them on.
 
-#### HP laptops
+### HP laptops
 
-Installing Solwind alone isn't enough on HP:
-
-- **Keyboard colors:** the official Linux kernel doesn't support HP keyboard lights yet (as of Linux 7.3). You need the extra kernel module [hp-wmi-fan-and-backlight-control](https://github.com/TUXOV/hp-wmi-fan-and-backlight-control). It covers single-zone and four-zone RGB keyboards and detects which one you have (its author still calls four-zone support experimental). Without it, Solwind's keyboard tab tells you the light isn't available.
-- **Not every HP:** the module only adds a light for RGB keyboards. HP laptops with a white (single-color) backlight and per-key RGB keyboards get nothing from it, so Solwind can't control them; their light only changes with the Fn key. Don't install the module for those.
-- **Fans:** NBFC with a config for your exact model (step 2 below). Configs that use BIOS (ACPI) methods also need the `acpi_call` module (`acpi_call-dkms` on Arch).
-
-Installing the keyboard module (this is the module's own way, see its README for other distros and NixOS):
+- **Keyboard colors** need the extra kernel module [hp-wmi-fan-and-backlight-control](https://github.com/TUXOV/hp-wmi-fan-and-backlight-control); the official kernel doesn't support HP keyboard lights yet (as of Linux 7.3). It only helps RGB keyboards.
+- **Fans** need NBFC with a config for your exact model. Configs using ACPI methods also need `acpi_call` (`acpi_call-dkms` on Arch).
 
 ```sh
 git clone https://github.com/TUXOV/hp-wmi-fan-and-backlight-control
 cd hp-wmi-fan-and-backlight-control
-make install-arch                  # Arch: builds and installs a DKMS package (asks for your password)
-# other distros: make && sudo make install-dkms
+make install-arch          # Arch (DKMS package); other distros: make && sudo make install-dkms
 ```
 
-Then reboot. Check that it worked: `ls /sys/class/leds | grep hp::` should show `hp::kbd_backlight` (single-zone) or four `hp::kbd_zoned_backlight-…` lights (four-zone; the module's 0.0.3 calls them `hp::kbd_backlight_zone0`–`3`).
-
-- If an older copy of the module is already installed (for example through victus-control), remove it first so only one version is installed. Check with `dkms status`, then `sudo dkms remove hp-wmi-fan-and-backlight-control/<old version> --all`.
-- To undo on Arch: `sudo pacman -R hp-wmi-fan-and-backlight-control-dkms` and reboot. Your laptop goes back to the kernel's own driver (no keyboard colors).
-- Solwind only uses the module's keyboard files, never its fan controls.
-
-### Languages
-- English and Turkish. Switch with the **TR / EN** button at the top (or `solwind lang en`).
-- It starts in your system language and remembers your choice.
-- Terminal commands, notifications, the tray menu and the messages of `make install` / `make remove-old` use the same language.
-- Profile names work in either language from the terminal (`quiet` and `Sessiz` are the same profile).
-
-### Caelestia integration
-- Colors follow Caelestia's color scheme live.
-- Rounding, spacing, fonts, animations and transparency come from your Caelestia settings, so it looks like the rest of your shell. With Hyprland blur on, the window is blurred like Caelestia's panels.
-- Solwind only **reads** Caelestia's files, it never changes them.
+Reboot, then `ls /sys/class/leds | grep hp::` should list the light. Remove older copies of the module first (`dkms status`). Undo on Arch: `sudo pacman -R hp-wmi-fan-and-backlight-control-dkms`. Solwind never uses the module's fan controls.
 
 ## Installation
 
-### 1. Requirements
+### Requirements
 
-If you already use [Caelestia dots](https://github.com/caelestia-dots), you most likely have the first three.
+| Needed | Arch package |
+|---|---|
+| [Quickshell](https://quickshell.org) 0.3.x | `quickshell` / `quickshell-git` (AUR) |
+| [Caelestia shell](https://github.com/caelestia-dots/shell) (Solwind won't start without it) | `caelestia-shell` (AUR) |
+| Material Symbols font | `ttf-material-symbols-variable` |
+| [NBFC-Linux](https://github.com/nbfc-linux/nbfc-linux) with a config for your laptop (fans) | `nbfc-linux` (AUR) |
+| A polkit agent (password dialogs) | e.g. `hyprpolkitagent` |
+| Optional: tray icon, NVIDIA temperature, GPU names | `python-gobject`, `nvidia-utils`, `pciutils` |
 
-| Needed | What for | Arch Linux package |
-|---|---|---|
-| [Quickshell](https://quickshell.org) (0.3.x) | the app runs on it | `quickshell` / `quickshell-git` (AUR) |
-| [Caelestia shell](https://github.com/caelestia-dots/shell) | colors and styling; Solwind **won't start without it** | `caelestia-shell` (AUR) |
-| [Material Symbols](https://fonts.google.com/icons) font | icons | `ttf-material-symbols-variable` |
-| [NBFC-Linux](https://github.com/nbfc-linux/nbfc-linux) with a config for your laptop | fan control (step 2) | `nbfc-linux` (AUR) |
-| A polkit agent | the password dialog for admin actions (Caelestia/Hyprland setups usually have one) | e.g. `hyprpolkitagent` |
-| Optional: `python-gobject` | tray icon | `python-gobject` |
-| Optional: `nvidia-smi`, `lspci` | NVIDIA GPU temperature, GPU names | `nvidia-utils`, `pciutils` |
+### NBFC
 
-### 2. Set up NBFC (for fan control)
-
-Solwind doesn't control the fans on its own. It tells **NBFC-Linux** what to do, and NBFC talks to the laptop. So first NBFC needs a config that works for your laptop. The full guide is in the **[NBFC-Linux README](https://github.com/nbfc-linux/nbfc-linux#readme)**, but in short:
+Solwind tells NBFC what to do, NBFC talks to the laptop. Set it up first ([full guide](https://github.com/nbfc-linux/nbfc-linux#readme)):
 
 ```sh
-yay -S nbfc-linux                      # Arch (AUR). Other distros: see the NBFC-Linux README
-sudo nbfc update                       # download the latest laptop configs
+sudo nbfc update                       # download the laptop configs
 nbfc config -r                         # configs that may fit your laptop
-sudo nbfc config -s "<config name>"    # pick one (or: sudo nbfc config -s auto)
-sudo nbfc start --read-only            # try it safely first: it only reads, never sets fan speeds
+sudo nbfc config -s "<config name>"
+sudo nbfc start --read-only            # try it safely: it only reads
 nbfc status -a                         # do the fans and temperature look right?
-sudo nbfc restart                      # then run it normally
-sudo systemctl enable nbfc_service     # start NBFC on boot
+sudo nbfc restart && sudo systemctl enable nbfc_service
 ```
 
-If no config fits your laptop, **don't force one**, a wrong config can make the fans act weird. The keyboard part of Solwind works without NBFC. You can also try configs later from Solwind (Fan tab > NBFC config, with read-only mode).
+If no config fits, don't force one. The keyboard part works without NBFC.
 
-### 3. Install Solwind
+### Install
 
 ```sh
 git clone https://github.com/kerimozgurtukenmez/Ccenter-Caelestia.git
@@ -149,255 +103,77 @@ cd Ccenter-Caelestia
 sudo make install
 ```
 
-Then open **Solwind** from your app launcher, or run `solwind`. (On a first install `/usr/local/share/applications` may be new; Caelestia's launcher only sees a new folder after you log in again or restart the shell.)
+It goes under `/usr/local` (command, app, menu entry, icon, background service). Then open **Solwind** from the app launcher or run `solwind`. On a first install the launcher may only show it after you log in again or restart the shell.
 
-It installs for the whole system, under `/usr/local` (the usual place for things you install yourself, so it never gets mixed up with your distro's packages):
+- **Update:** `git pull`, `solwind quit`, `sudo make install`, then `solwind` (`make install` prints the command if you use the background service).
+- **Uninstall:** `solwind quit`, then `sudo make uninstall`. Turn the background service off first; it tells you if you forgot. Your settings stay in `~/.config/solwind`.
+- **Packaging:** `make DESTDIR=/package/root PREFIX=/usr install`.
 
-| What | Where |
-|---|---|
-| The `solwind` command | `/usr/local/bin/solwind` |
-| The app | `/usr/local/share/solwind/` |
-| App launcher entry and icon | `/usr/local/share/applications/solwind.desktop`, `/usr/local/share/icons/hicolor/scalable/apps/solwind.svg` |
-| Background service (off until you turn it on in the app) | `/usr/local/lib/systemd/user/solwind.service` |
+`make install` stops without changing anything while Solwind runs or when it finds an older install in your home folder.
 
-`make install` stops without changing anything if Solwind is running, or if it finds an older install in your home folder (see below). The keyboard light permission is separate and optional (next section).
-
-Settings are your own: `~/.config/solwind/settings.json`, saved only once you change something.
-
-**Update:**
+**Coming from Ccenter** (Solwind's old name) or an older Solwind installed with `install.sh`: remove that copy first, without sudo, then install. Your settings are copied over on the first start.
 
 ```sh
-git pull
-solwind quit
-sudo make install
-solwind
-```
-
-If you use the background service, `make install` tells you the command to start it again instead.
-
-**Coming from Ccenter** (Solwind's name before 0.4.0) **or an older Solwind** installed with the old `install.sh`: those lived in your home folder. Remove that copy first, as yourself (no `sudo`), then install:
-
-```sh
-ccenter quit             # or: solwind quit
-make remove-old          # shows what it will remove and asks
+ccenter quit        # or: solwind quit
+make remove-old     # shows what it removes and asks
 sudo make install
 ```
 
-`make remove-old` removes the old app, its launcher entry, its background service and its command. A terminal that already ran the old command may still look for it there: run `hash -r` in it, or open a new one. A `PATH` line it added for `~/.local/bin` stays, other programs may use that folder. Your Ccenter settings are copied over the first time Solwind starts (the old folder stays until you delete it). If its background service was on, turn Solwind's on afterwards (it tells you how). The old keyboard rule keeps working; `sudo make udev` (or **Update permission** in the app) moves it to the new name. Keybinds, scripts or window rules that use `ccenter` need `solwind` now.
+Keybinds or scripts that use `ccenter` need `solwind` now.
 
-### Permissions: always asked, never taken silently
+### Permissions
 
-- **Keyboard light (optional).** To change the keyboard's color and brightness, your user needs write access to the light's own files. The **Grant permission** button in the Keyboard tab explains this and asks for your password; **Remove permission** undoes it. From a terminal: `sudo make udev` and `sudo make uninstall-udev`. Only your user gets access, nothing else on the system changes. The rule is `/etc/udev/rules.d/90-solwind.rules`. (Versions before 0.3 gave every user access; the app offers to update that.)
-- **NBFC service actions** (start/stop/restart, applying a config) ask for your password every time. Setting fan speeds doesn't.
+- **Keyboard light (optional):** your user needs write access to the light's files. Use **Grant permission** in the Keyboard tab (or `sudo make udev`); **Remove permission** undoes it. Only your user gets access.
+- **NBFC service actions** (start, stop, applying a config) ask for your password every time. Setting fan speeds doesn't.
 
-### Uninstall
+## Usage
 
-```sh
-solwind quit
-sudo make uninstall
-```
-
-It removes the app and the keyboard permission (the permission stays if another Solwind install still uses it). If you turned the background service on, turn it off first (in the app, or `systemctl --user disable solwind.service`); `make uninstall` tells you if you forgot. Your settings stay in `~/.config/solwind`, delete that folder if you want.
-
-### Packaging
-
-`make DESTDIR=/package/root PREFIX=/usr install`. With `DESTDIR` the checks against the running system are skipped. `PREFIX` and `DESTDIR` must be plain absolute paths (no spaces). Outside `/usr` and `/usr/local` the command may not be on `PATH`, the launcher entry may not show up and the background service can't be turned on, because systemd only looks for user services in its own folders. The keyboard rule needs a user id, so it can't be part of a package; users grant it from the app.
-
-### Running in the background
-- Closing the window doesn't quit Solwind, it keeps controlling the fans. Open it again from the launcher, the tray icon or with `solwind`.
-- To quit for real: the "Quit" button, the tray menu or `solwind quit`. The fans go back to NBFC first.
-- "Start in the background on login" in the app turns on the systemd user service. If Solwind crashes while running as a service, the fans are handed back to NBFC right away and the service starts Solwind again a few seconds later.
-- Started from a terminal (`solwind` while it isn't running), it stays there like other programs and shows its log. Ctrl+C or closing that terminal quits it cleanly (the keyboard light and the fans go back to normal; Ctrl+C again forces it). If it crashes, the fans are handed back too. `solwind -d` starts it without tying it to the terminal.
-- If it's already running (for example the login service started it), `solwind` just opens the window and returns. Its log: `solwind log -f` (Ctrl+C there only stops following).
-- Only one Solwind runs at a time, two copies would fight over the fans.
-
-### Terminal commands
+- Closing the window doesn't quit Solwind, it keeps controlling the fans. Quit with the **Quit** button, the tray menu or `solwind quit`; the fans go back to NBFC first.
+- **Start in the background on login** is a switch in the app (a systemd user service). If Solwind crashes there, the fans go back to NBFC and it starts again.
+- Started from a terminal, it stays there and shows its log; Ctrl+C quits it cleanly. `solwind -d` starts it detached. If it's already running, `solwind` just opens the window.
 
 ```sh
-solwind                     # open the window; if it isn't running, start it here (Ctrl+C quits it)
-solwind -d                  # start it without tying it to this terminal
-solwind log -f              # follow the running app's log
 solwind status              # fans, temperatures, active profile
-solwind profiles            # list profiles (* = active)
-solwind profile quiet       # apply a profile (auto, quiet, balanced, performance or your own)
-solwind profile             # show the active profile
-solwind boost 15            # max fan for 15 minutes (also: on = until turned off, off; no argument: its state)
-solwind kbd color "#ff0000" # keyboard color
-solwind kbd brightness 50   # keyboard brightness in % (0 = off)
-solwind kbd effect cycle    # static | breathing | cycle
-solwind kbd source theme    # effect colors: single | multi | theme (Caelestia)
-solwind kbd speed 60        # effect speed 0-100
-solwind kbd range 20 80     # breathing: lowest and highest level in %
-solwind kbd themecount 5    # number of Caelestia colors (3-6)
-solwind kbd info            # what was detected: laptop, driver, light, permission
-solwind report              # make a report for bug reports (see below)
-solwind lang en             # language: en | tr (no argument: the current one)
-solwind hide                # also: open, toggle
-solwind quit                # quit; fans go back to NBFC
-solwind --help              # all commands; solwind help kbd (or solwind kbd --help) for one
+solwind profile quiet       # apply a profile (no name: show the active one)
+solwind boost 15            # max fan for 15 minutes (on / off)
+solwind kbd color "#ff0000" # also: brightness, effect, source, speed, range, info
+solwind log -f              # follow the log
+solwind --help              # everything; solwind help kbd for one command
 ```
 
-Exit codes, for scripts: 0 done, 1 error, 2 wrong usage, 3 not started because Solwind already runs, 4 the app isn't running. Errors go to stderr. The commands also find the app when the terminal has no Wayland display set.
-
-Nice for Hyprland keybinds:
-
-```lua
--- Hyprland with a Lua config (like mine: Hyprland 0.56 with Caelestia)
-hl.bind("SUPER + F9", hl.dsp.exec_cmd("solwind profile performance"))
-```
-
-```ini
-# hyprland.conf (older Hyprland)
-bind = SUPER, F9, exec, solwind profile performance
-```
-
-`/usr/local/bin` is on Hyprland's `PATH` (it is on mine), so the short command works. The window's class (app ID) is `solwind`, if you want a window rule for it.
+Exit codes: 0 done, 1 error, 2 wrong usage, 3 already running, 4 not running. For a Hyprland keybind: `hl.bind("SUPER + F9", hl.dsp.exec_cmd("solwind profile performance"))` (`/usr/local/bin` is on Hyprland's `PATH`, at least on mine). The window class is `solwind`.
 
 ## Reporting a problem
 
-If something's wrong, please make a report and attach it to a [GitHub issue](https://github.com/kerimozgurtukenmez/Ccenter-Caelestia/issues):
-
-```sh
-solwind report
-```
-
-or press **Create report** at the bottom of the Fan or Keyboard tab. It works even if Solwind doesn't start.
-
-You get one text file in your home folder (`~/solwind-report-<date>.txt`) with the versions, your laptop model (no serial numbers), NBFC status, what Solwind detected, your Solwind settings and the logs of the last few runs, including crashed ones. Those logs are cleared when you reboot, so make the report before rebooting. Your home folder, user name and computer name are replaced with `~`, `<user>` and `<host>`. Nothing gets sent anywhere, just read it and share what you're okay with.
+Run `solwind report` (or **Create report** at the bottom of a tab) and attach the file to a [GitHub issue](https://github.com/kerimozgurtukenmez/Ccenter-Caelestia/issues). It's one text file in your home folder with versions, your laptop model (no serial numbers), NBFC status, what Solwind detected, your settings and recent logs. Your user name and computer name are replaced, nothing is sent anywhere. Logs are cleared on reboot, so make it before rebooting.
 
 ## Undoing things
 
-- Give the fans back to NBFC: `nbfc set -a`
-- Solwind never edits NBFC config files, it only changes which config is selected. To go back: `sudo nbfc config --set "<config name>"` and `sudo nbfc restart`
-- Remove the app: `solwind quit`, then `sudo make uninstall`
-- Remove just the keyboard permission: Keyboard tab > "Remove permission" (or `sudo make uninstall-udev`)
+- Fans back to NBFC: `nbfc set -a`
+- Solwind never edits NBFC config files, it only selects one. To go back: `sudo nbfc config --set "<config name>"` and `sudo nbfc restart`
+- Keyboard permission: **Remove permission** in the app, or `sudo make uninstall-udev`
 
-## How it works
+## Security
 
-Solwind is one Quickshell process that keeps running in the background. The window is just a view: it's created when you open it and thrown away when you close it to save memory, while the logic in `services/` keeps going.
-
-```
-            ┌──────────── Solwind (one Quickshell process) ────────────┐
- you ──► window (only while open) ──────► services/ (always running)   │
- terminal ─ solwind <cmd> ──────────────►  FanState  Nbfc  Sensors     │
- tray ─ scripts/tray.py ────────────────►  Keyboard  Alerts Settings   │
-            └──────────────┬─────────────────────┬───────────────────────┘
-                           │                     │
-          nbfc status / nbfc set          /sys/class/hwmon (read)
-          (NBFC service → fans)           /sys/class/leds (keyboard)
-```
-
-**Fans.** Solwind reads `nbfc status -a` every 2 seconds (every 5 when the window is closed and NBFC is in charge). In *Auto* mode it just shows what NBFC does. In *Fixed* and *Curve* mode it works out the speed itself and sends it with `nbfc set`:
-
-1. Take the temperature (CPU, GPU or the hotter one).
-2. Find the speed on your curve.
-3. Speed up right away, but only slow down once it's cooled a few degrees below the curve, and then at most 5% every 2 seconds.
-4. Above the safety limit (90 °C by default, CPU or GPU) every fan it controls goes to 100%, no matter what.
-
-**Temperatures** come from the kernel's sensors (`/sys/class/hwmon`). The NVIDIA driver doesn't share its temperature there, so `nvidia-smi` is used, but only when the GPU is already awake. A sleeping GPU is never woken up just to read it.
-
-**Keyboard.** A small script reads which laptop, driver and keyboard light you have, and Solwind picks what to do from that. Colors and effects are written to the light's files in `/sys/class/leds`.
-
-**Settings** live in one file, `~/.config/solwind/settings.json`. Fan settings are saved per NBFC config, so they never end up on the fans of a different config, and everything read from the file is checked first.
-
-**Resource use:** about 0.5% CPU in the background with NBFC in charge, about 2% with a curve or with the window open; roughly 55–75 MB of memory with the window closed and 90 MB open (plus about 30 MB for the tray icon).
-
-### Security
-
-- **Day-to-day use needs no admin rights.** Fan speeds go through NBFC's own `nbfc set`, which doesn't need root.
-- **Admin actions only happen when you click them**, through your system's own password dialog: NBFC service start/stop/restart, applying an NBFC config, granting or removing the keyboard permission. Solwind never sees your password.
-- **The keyboard is only touched through the kernel**, no direct firmware or USB access. On ASUS it never saves anything to the BIOS.
-- **The keyboard permission is only for your user.** It just makes your user the owner of the light's brightness and color files; other users get nothing and no extra program runs. Before it's installed, the rule file is checked line by line and anything unexpected is refused.
-- **Never changed:** NBFC config files and Caelestia's files (those are only read).
-- Solwind's files belong to root (`sudo make install`), and it runs as your user. Your settings in `~/.config/solwind` can be changed by anything that already runs as your user. Admin actions always still need your password.
-
-## Testing
-
-Everything was built and tested on my **HP Victus 16-r0xxx** (i7-13700H, RTX 3050 + Iris Xe), Arch Linux, kernel 7.2, Hyprland + Caelestia.
-
-- **Fans:** every mode, profile and the max fan button, checked against what NBFC reports.
-- **Interface:** both languages, every tab and card.
-- **Resources:** CPU and memory with the window open and closed, plus a one-hour run to check for leaks (none).
-- **Keyboard:** every color, brightness and effect on the real HP keyboard, read back from the hardware.
-- **Other keyboards:** ASUS TUF, HP four-zone, Lenovo with a Legion USB controller and ASUS ROG were checked with simulated hardware only. **If you have one of these, a report would really help.**
-- **Keyboard permission:** the rule and its checker were tested with good and tampered rules before installing it for real.
-- **Install:** `make install`, `make uninstall`, `make remove-old` and packaging with `DESTDIR` were tested with a throwaway prefix and home folders (installs from the old `install.sh` included); uninstall leaves nothing behind there. On my laptop I moved from the old home folder install to `/usr/local` with `make remove-old` and `sudo make install`.
-- **Not tested yet:** the critical temperature notification (I can't safely heat the laptop to 90 °C) and distros other than Arch.
+- Day-to-day use needs no admin rights; fan speeds go through `nbfc set`.
+- Admin actions only happen when you click them, through your system's password dialog. Solwind never sees your password.
+- The keyboard is only touched through the kernel. The keyboard permission is for your user only, and the rule is checked line by line before it's installed.
+- NBFC config files and Caelestia's files are never changed.
 
 ## Development
 
-Run it straight from the cloned folder:
-
-```sh
-./bin/solwind
-```
-
-It uses the folder it's in, so all the commands work the same (`./bin/solwind status`, …). Quit the installed copy first, only one can run at a time. Quickshell reloads the UI live when you save a file.
-
-### Notes for contributors and forks
-
-- **Structure:** the logic is in `services/` (keeps running when the window is closed), `modules/` is only the UI. `services/FanState.qml` is the one place fan settings live; the fan cards just show it and send changes back.
-- **Style:** sizes, spacing, fonts and animations come from Caelestia (`Tokens.*`, `StyledText`, `Anim`/`CAnim`), colors from `services/Colours.qml`. Avoid hard-coded values so the app keeps matching the user's shell.
-- **Text and translations:** write UI text in English and wrap it like `I18n.t("Fan %1").arg(n)`, then add the Turkish line to `services/translations.js` (the key is the exact English text). Missing translations just show English. To add a language, add a block to `translations.js` and an entry to `I18n.languages` in `services/I18n.qml`.
-- **Performance:** the app is always running, so keep `scripts/sensors.sh` to shell built-ins and skip heavy work while the window is hidden (`Nbfc.uiVisible`).
-- **Safety:** never write NBFC config files or Caelestia's files. Anything that changes the system should be opt-in and easy to undo.
-- The terminal commands are handy for testing without clicking around (`./bin/solwind status`, `profile …`, `kbd …`, `kbd info`).
-- **Testing keyboards you don't have:** make a fake `/sys` folder (`sys/class/dmi/id/*`, `sys/class/leds/<light>/…`, `sys/class/leds/<light>/device/driver` → a folder named after the driver) and run `SOLWIND_SYS=<that folder> XDG_CONFIG_HOME=<a test folder> ./bin/solwind`. Solwind then only reads and writes that fake folder, and your real settings stay untouched.
-
-## Project layout
-
-```
-shell.qml           window, tabs, terminal commands, tray wiring
-services/           always-running parts: NBFC, fan state, keyboard, settings, sensors, colors, notifications, tray
-services/I18n.qml   language; translations in services/translations.js
-modules/fan/        fan tab
-modules/keyboard/   keyboard tab
-components/         shared UI parts
-utils/              helpers
-scripts/            sensors.sh, hwinfo.sh, kbdinfo.sh (keyboard detection), kbd-rule-check.sh,
-                    report.sh (bug report), tray.py (tray icon)
-assets/             icons and images
-docs/screenshots/   README images
-bin/solwind         launcher and terminal commands
-dist/               app launcher entry, background service, keyboard permission rule,
-                    install-check.sh (checks for make install/uninstall), remove-old.sh (make remove-old)
-Makefile            install, uninstall, keyboard permission, packaging
-LICENSE             GPL-3.0
-```
-
-## Roadmap
-
-- [x] Fan control through NBFC
-- [x] Settings that survive restarts
-- [x] Profiles, background mode, tray icon, notifications
-- [x] One install with `make`, permissions only when you agree
-- [x] Keyboard color, brightness, breathing and color cycle
-- [x] Keyboard detection for HP, ASUS and Lenovo; keyboard permission for your user only
-- [x] English and Turkish
-- [ ] Testing on real ASUS / Lenovo / HP four-zone laptops (help wanted!)
-- [ ] Separate colors per zone on HP four-zone keyboards, ASUS TUF hardware effects
-- [ ] More keyboard effects (rainbow, …)
-
-Issues and feedback are very welcome, just expect some rough edges.
+Run it from the cloned folder with `./bin/solwind` (quit the installed copy first, only one runs at a time). The logic is in `services/`, `modules/` is only the UI. UI text is English in the code, wrapped in `I18n.t(…)`, with the Turkish text in `services/translations.js`.
 
 ## Thanks
 
-Solwind stands on other people's open-source work. Big thanks to the people behind:
-
-- **[Caelestia](https://github.com/caelestia-dots)**, the shell this app is made for. Its colors and overall look come from there.
-- **[Quickshell](https://quickshell.org)**, which the whole app is built with.
-- **[NBFC-Linux](https://github.com/nbfc-linux/nbfc-linux)**, which does the actual fan control, and everyone who made laptop configs for it.
-- **[Material Symbols](https://fonts.google.com/icons)** for the icons.
+[Caelestia](https://github.com/caelestia-dots), [Quickshell](https://quickshell.org), [NBFC-Linux](https://github.com/nbfc-linux/nbfc-linux) and everyone who made laptop configs for it, and [Material Symbols](https://fonts.google.com/icons).
 
 ## License
 
 Copyright (C) 2026 Kerim Özgür Tükenmez
 
-Solwind is free software: you can redistribute it and/or modify it under the terms of the **GNU General Public License version 3** as published by the Free Software Foundation. It comes **without any warranty**; see [`LICENSE`](LICENSE) for the full text.
+Solwind is free software under the **GNU General Public License version 3**, without any warranty; see [`LICENSE`](LICENSE).
 
-Third-party parts:
+The transparency math in `services/Colours.qml` is adapted from [Caelestia shell](https://github.com/caelestia-dots/shell) (GPL-3.0), whose QML plugin Solwind uses at runtime (not included). Quickshell (LGPL-3.0), NBFC-Linux (GPL-3.0) and Material Symbols (Apache-2.0) are separate and not included.
 
-- **[Caelestia shell](https://github.com/caelestia-dots/shell)** (GPL-3.0): Solwind uses its QML plugin at runtime, and the transparency math in `services/Colours.qml` is adapted from Caelestia's `Colours.qml`. Caelestia itself is not included.
-- **[Quickshell](https://quickshell.org)** (LGPL-3.0), **[NBFC-Linux](https://github.com/nbfc-linux/nbfc-linux)** (GPL-3.0) and the **[Material Symbols](https://fonts.google.com/icons)** font (Apache-2.0) are used as separate programs or fonts and are not included here.
-
-Solwind is made for Caelestia users but it's an independent project, not made or supported by the Caelestia, Quickshell or NBFC developers or by any laptop maker. Please report Solwind problems here, not to them.
+Solwind is an independent project, not made or supported by the Caelestia, Quickshell or NBFC developers or any laptop maker. Please report Solwind problems here.
