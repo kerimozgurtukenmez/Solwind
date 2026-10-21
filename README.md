@@ -12,8 +12,8 @@ A small control center for laptops: **fan control** and **keyboard lighting**, m
 >   - Fan control needs a working NBFC config for your exact model.
 >   - The keyboard part is only tested on HP's single-zone RGB keyboard. Other keyboards in the table below are supported based on the kernel drivers, but nobody has tried them on real hardware yet.
 > - The fan part **writes fan speeds to your hardware** through NBFC. A bad setting can make your laptop run hot, so keep an eye on the temperatures.
-> - In *Fixed* and *Curve* mode Solwind drives the fans itself. Closing the window keeps it running in the background, and quitting hands the fans back to NBFC. If it gets killed some other way, the fans **stay at the last speed**; `nbfc set -a` gives them back to NBFC.
-> - Things can still change or break. The name is temporary too.
+> - In *Fixed* and *Curve* mode Solwind drives the fans itself. Closing the window keeps it running in the background, and quitting hands the fans back to NBFC. Started with `solwind` or as the background service, the fans are also handed back if it crashes. If that watcher is killed too (for example `kill -9` on both), the fans **stay at the last speed**; `nbfc set -a` gives them back to NBFC.
+> - Things can still change or break.
 
 ## Screenshots
 
@@ -100,7 +100,7 @@ Then reboot. Check that it worked: `ls /sys/class/leds | grep hp::` should show 
 ### Languages
 - English and Turkish. Switch with the **TR / EN** button at the top (or `solwind lang en`).
 - It starts in your system language and remembers your choice.
-- Terminal commands, notifications, the tray menu and the install scripts use the same language.
+- Terminal commands, notifications, the tray menu and the messages of `make install` / `make remove-old` use the same language.
 - Profile names work in either language from the terminal (`quiet` and `Sessiz` are the same profile).
 
 ### Caelestia integration
@@ -197,7 +197,7 @@ solwind quit
 sudo make uninstall
 ```
 
-It removes the app and the keyboard permission. If you turned the background service on, turn it off first (in the app, or `systemctl --user disable solwind.service`); `make uninstall` tells you if you forgot. Your settings stay in `~/.config/solwind`, delete that folder if you want.
+It removes the app and the keyboard permission (the permission stays if another Solwind install still uses it). If you turned the background service on, turn it off first (in the app, or `systemctl --user disable solwind.service`); `make uninstall` tells you if you forgot. Your settings stay in `~/.config/solwind`, delete that folder if you want.
 
 ### Packaging
 
@@ -309,7 +309,7 @@ Solwind is one Quickshell process that keeps running in the background. The wind
 - **The keyboard is only touched through the kernel**, no direct firmware or USB access. On ASUS it never saves anything to the BIOS.
 - **The keyboard permission is only for your user.** It just makes your user the owner of the light's brightness and color files; other users get nothing and no extra program runs. Before it's installed, the rule file is checked line by line and anything unexpected is refused.
 - **Never changed:** NBFC config files and Caelestia's files (those are only read).
-- Solwind lives in your home folder and runs as your user, so anything that can already run as your user could also change it. Admin actions always still need your password.
+- Solwind's files belong to root (`sudo make install`), and it runs as your user. Your settings in `~/.config/solwind` can be changed by anything that already runs as your user. Admin actions always still need your password.
 
 ## Testing
 
@@ -321,7 +321,7 @@ Everything was built and tested on my **HP Victus 16-r0xxx** (i7-13700H, RTX 305
 - **Keyboard:** every color, brightness and effect on the real HP keyboard, read back from the hardware.
 - **Other keyboards:** ASUS TUF, HP four-zone, Lenovo with a Legion USB controller and ASUS ROG were checked with simulated hardware only. **If you have one of these, a report would really help.**
 - **Keyboard permission:** the rule and its checker were tested with good and tampered rules before installing it for real.
-- **Installer:** install and uninstall were tested in a throwaway home folder, uninstall leaves nothing behind.
+- **Install:** `make install`, `make uninstall`, `make remove-old` and packaging with `DESTDIR` were tested with a throwaway prefix and home folders (installs from the old `install.sh` included); uninstall leaves nothing behind there. On my laptop I moved from the old home folder install to `/usr/local` with `make remove-old` and `sudo make install`.
 - **Not tested yet:** the critical temperature notification (I can't safely heat the laptop to 90 °C) and distros other than Arch.
 
 ## Development
@@ -370,7 +370,7 @@ LICENSE             GPL-3.0
 - [x] Fan control through NBFC
 - [x] Settings that survive restarts
 - [x] Profiles, background mode, tray icon, notifications
-- [x] Install without sudo, permissions only when you agree
+- [x] One install with `make`, permissions only when you agree
 - [x] Keyboard color, brightness, breathing and color cycle
 - [x] Keyboard detection for HP, ASUS and Lenovo; keyboard permission for your user only
 - [x] English and Turkish
