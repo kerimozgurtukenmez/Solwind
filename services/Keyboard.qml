@@ -51,8 +51,8 @@ Singleton {
     property int brightness: 0
     property color color: "white"             // chosen colour (at full intensity; brightness is separate)
     property string error: ""
-    // Where the udev rule granting write access lives: "etc" (added by install.sh / "grant" button, removable from the app),
-    // "lib" (added by a system package), "" (none)
+    // Where the udev rule granting write access lives: "etc" (added by the "grant" button / sudo make udev, removable
+    // from the app), "lib" (added by a system package, or an old Makefile), "" (none)
     property string ruleAt: ""
     property bool permBusy: false
 
@@ -542,7 +542,7 @@ Singleton {
              : n === "hp-none" ? I18n.t("No HP keyboard light found. If this laptop has an RGB keyboard: the official kernel doesn't support HP keyboard lights yet, they need the extra hp-wmi-fan-and-backlight-control module (see the README). White (single-color) backlights and per-key RGB keyboards aren't supported by it either; their light only changes with the Fn key.")
              : n
     }
-    function noPermissionText() { return I18n.t("No write permission: Keyboard tab > 'Grant permission' (or install.sh)") }
+    function noPermissionText() { return I18n.t("No write permission: Keyboard tab > 'Grant permission' (or: sudo make udev)") }
     function statusText() {
         if (!available) return I18n.t("No keyboard light found")
         const src = { single: I18n.t("chosen color"), multi: I18n.t("%1 colors").arg(colors.length),

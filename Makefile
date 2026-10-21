@@ -1,84 +1,146 @@
-# For system-wide installs and packaging. For a normal user the recommended way is ./install.sh
-# (installs into the home folder, needs no admin password, asks about the keyboard permission).
-#   sudo make install      installs under /usr (does NOT add the keyboard permission)
-#   sudo make uninstall    removes it (does not touch user settings in ~/.config/solwind)
-#   sudo make udev         keyboard light permission (udev rule) for the user running sudo, optional and separate
-# Packaging: make DESTDIR=/package/root PREFIX=/usr install
+# Solwind is installed with make, for the whole system (the only way to install it):
+#   sudo make install          installs under /usr/local (somewhere else: PREFIX=...)
+#   sudo make uninstall        removes it, and the keyboard permission (your settings in ~/.config/solwind stay)
+#   sudo make udev             keyboard light permission for you (optional; the app's "Grant permission" does the same)
+#   sudo make uninstall-udev   removes that permission
+#   make remove-old            (without sudo) removes an install in your home folder made by the old install.sh
+#                              (Solwind 0.4.0, or Ccenter, its old name); make install asks for it when it finds one
+# Updating: git pull, solwind quit, sudo make install, then start it again (make install says how).
+# Packaging: make DESTDIR=/package/root PREFIX=/usr install   (the checks against the running system are skipped)
 
-PREFIX  ?= /usr
+PREFIX  ?= /usr/local
 DESTDIR ?=
+# A trailing slash would end up in the paths written into the menu entry and the service ("DESTDIR=/" = none)
+override PREFIX  := $(patsubst %/,%,$(PREFIX))
+override DESTDIR := $(patsubst %/,%,$(DESTDIR))
+# The recipes use the paths unquoted, so only plain absolute ones are accepted: a space would make "rm -rf" remove
+# another folder. Checked in the shell, through the environment (exactly as given).
+export SW_PREFIX  := $(PREFIX)
+export SW_DESTDIR := $(DESTDIR)
+CHECK_PATHS = case "$$SW_PREFIX" in /?*) ;; *) echo "PREFIX must be an absolute path (got: '$$SW_PREFIX')" >&2; exit 1 ;; esac; \
+	case "$$SW_DESTDIR" in ""|/?*) ;; *) echo "DESTDIR must be empty or an absolute path (got: '$$SW_DESTDIR')" >&2; exit 1 ;; esac; \
+	case "$$SW_PREFIX$$SW_DESTDIR" in *[!A-Za-z0-9_./+-]*) \
+		echo "PREFIX and DESTDIR may only use letters, digits and _ . / + - (no spaces)" >&2; exit 1 ;; esac
 
 APPDIR  = $(DESTDIR)$(PREFIX)/share/solwind
 BINDIR  = $(DESTDIR)$(PREFIX)/bin
 APPSDIR = $(DESTDIR)$(PREFIX)/share/applications
 ICONDIR = $(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/apps
 UNITDIR = $(DESTDIR)$(PREFIX)/lib/systemd/user
-UDEVDIR = $(DESTDIR)$(PREFIX)/lib/udev/rules.d
 LICDIR  = $(DESTDIR)$(PREFIX)/share/licenses/solwind
-# Keyboard lights (their files go back to root on uninstall)
+# The keyboard rule has one place, whatever the prefix: the app's grant/remove buttons use the same file
+UDEVDIR = $(DESTDIR)/etc/udev/rules.d
+# Keyboard lights (their files go back to root when the permission is removed)
 KBD_LEDS = /sys/class/leds/*::kbd_backlight /sys/class/leds/*::kbd_backlight_* /sys/class/leds/*::kbd_zoned_backlight-*
 # HP four-zone colour files (older copies of the hp-wmi-fan-and-backlight-control module)
 KBD_ZONES = /sys/devices/platform/hp-wmi/rgb_zones/zone*
 # The rule gives access to one user: the one running "sudo make udev" (SUDO_UID), or UDEV_UID=<id>
 UDEV_UID ?= $(SUDO_UID)
+# Old Makefiles (Ccenter) put the rule here; it is removed when the permission is set again or removed
+OLD_RULES = /usr/lib/udev/rules.d/90-ccenter.rules /usr/local/lib/udev/rules.d/90-ccenter.rules
 
-# The menu entry runs the short command where it is on every PATH (/usr/bin, /usr/local/bin), else the full path
-DESKTOP_EXEC = $(if $(filter /usr /usr/local,$(PREFIX)),solwind,$(PREFIX)/bin/solwind)
+# /usr and /usr/local are on every PATH and XDG_DATA_DIRS: the menu entry uses the short command and the theme icon;
+# anywhere else full paths
+STD          = $(filter /usr /usr/local,$(PREFIX))
+DESKTOP_EXEC = $(if $(STD),solwind,$(PREFIX)/bin/solwind)
+DESKTOP_ICON = $(if $(STD),solwind,$(PREFIX)/share/icons/hicolor/scalable/apps/solwind.svg)
+
+# Did the menu folder exist before this install? (read when make starts, before any recipe runs) A launcher that was
+# already running doesn't look at a folder that appeared after it started (Quickshell's, which Caelestia uses: checked in
+# its source, and seen here), so the message after the install says when Solwind shows up in the menu.
+APPS_NEW := $(if $(wildcard $(APPSDIR)),,1)
 
 # Files the app needs at runtime (README, dist etc. are not installed; the license goes to share/licenses)
 APP_FILES = shell.qml VERSION
 APP_DIRS  = components modules services utils scripts assets
 
-.PHONY: install uninstall udev uninstall-udev
+# The light files back to root (owner root, 0644; kbd_rgb_mode keeps its write-only mode); only as root, for a real
+# system (no DESTDIR)
+RESET_PERMS = for d in $(KBD_LEDS); do [ -d "$$d" ] || continue; \
+		for f in brightness multi_intensity; do [ -e "$$d/$$f" ] && chown root:root "$$d/$$f" && chmod 0644 "$$d/$$f"; done; \
+		[ -e "$$d/kbd_rgb_mode" ] && chown root:root "$$d/kbd_rgb_mode"; done; \
+	for f in $(KBD_ZONES); do [ -e "$$f" ] && chown root:root "$$f" && chmod 0644 "$$f"; done; true
+LIVE = [ -z "$(DESTDIR)" ] && [ "$$(id -u)" = 0 ]
+
+.PHONY: help install uninstall udev uninstall-udev remove-old
+
+help:
+	@echo "Solwind $$(cat VERSION)"
+	@echo "  sudo make install          install under $(PREFIX)"
+	@echo "  sudo make uninstall        remove it (your settings stay)"
+	@echo "  sudo make udev             keyboard light permission for you (optional)"
+	@echo "  sudo make uninstall-udev   remove that permission"
+	@echo "  make remove-old            (without sudo) remove an install in your home folder made by the old install.sh"
 
 install:
-	install -d $(APPDIR)
-	install -m 644 $(APP_FILES) $(APPDIR)/
-	cp -r --no-preserve=ownership $(APP_DIRS) $(APPDIR)/
-	install -Dm 644 dist/90-solwind.rules $(APPDIR)/dist/90-solwind.rules
-	find $(APPDIR) -type d -exec chmod 755 {} +
-	find $(APPDIR) -type f -exec chmod 644 {} +
-	chmod 755 $(APPDIR)/scripts/*.sh $(APPDIR)/scripts/*.py
+	@$(CHECK_PATHS)
+	@[ -n "$(DESTDIR)" ] || sh dist/install-check.sh install "$(PREFIX)"
+	@# the new copy is built next to the old one and swapped in only when complete (files of older versions go too)
+	rm -rf $(APPDIR).new $(APPDIR).old
+	install -d $(APPDIR).new/dist
+	cp -r --no-preserve=ownership,mode $(APP_FILES) $(APP_DIRS) $(APPDIR).new/
+	install -m 644 dist/90-solwind.rules $(APPDIR).new/dist/
+	find $(APPDIR).new -type d -exec chmod 755 {} +
+	find $(APPDIR).new -type f -exec chmod 644 {} +
+	chmod 755 $(APPDIR).new/scripts/*.sh $(APPDIR).new/scripts/*.py
+	if [ -e $(APPDIR) ]; then mv $(APPDIR) $(APPDIR).old; fi
+	mv $(APPDIR).new $(APPDIR)
+	rm -rf $(APPDIR).old
 	install -Dm 755 bin/solwind $(BINDIR)/solwind
-	install -d $(APPSDIR) $(UNITDIR)
-	sed 's|@BINDIR@/solwind|$(DESKTOP_EXEC)|g' dist/solwind.desktop > $(APPSDIR)/solwind.desktop
+	install -d $(APPSDIR)
+	sed -e 's|@BINDIR@/solwind|$(DESKTOP_EXEC)|g' -e 's|^Icon=solwind$$|Icon=$(DESKTOP_ICON)|' dist/solwind.desktop > $(APPSDIR)/solwind.desktop
 	chmod 644 $(APPSDIR)/solwind.desktop
 	install -Dm 644 assets/solwind.svg $(ICONDIR)/solwind.svg
+	install -d $(UNITDIR)
 	sed 's|@BINDIR@|$(PREFIX)/bin|g' dist/solwind.service > $(UNITDIR)/solwind.service
 	chmod 644 $(UNITDIR)/solwind.service
 	install -Dm 644 LICENSE $(LICDIR)/LICENSE
-	@echo
-	@echo "Solwind installed. To start it: solwind   (or from the app menu)"
-	@echo "The keyboard light permission was not added. If you want it: sudo make udev   (or 'Grant permission' in the app)"
+	@[ -n "$(DESTDIR)" ] || sh dist/install-check.sh installed "$(PREFIX)" "$(APPS_NEW)"
 
-uninstall: uninstall-udev
-	rm -rf $(APPDIR)
-	rm -f $(BINDIR)/solwind $(APPSDIR)/solwind.desktop $(ICONDIR)/solwind.svg $(UNITDIR)/solwind.service
-	rm -rf $(LICDIR)
-	@echo
-	@echo "Solwind removed. Your settings are kept in ~/.config/solwind (delete it by hand if you want)."
-	@echo "If you enabled the background service: systemctl --user disable solwind.service"
+uninstall:
+	@$(CHECK_PATHS)
+	@[ -n "$(DESTDIR)" ] || sh dist/install-check.sh uninstall "$(PREFIX)"
+	rm -rf $(APPDIR) $(APPDIR).new $(APPDIR).old $(LICDIR)
+	@# the command only if it is Solwind's launcher (a 'solwind' of another program stays)
+	if [ -f $(BINDIR)/solwind ] && head -n 2 $(BINDIR)/solwind | grep -q '^# Solwind launcher'; then rm -f $(BINDIR)/solwind; fi
+	rm -f $(APPSDIR)/solwind.desktop $(ICONDIR)/solwind.svg $(UNITDIR)/solwind.service
+	@# the keyboard permission (one rule in /etc for every install): only as root, and not while another Solwind
+	@# install is left that uses it
+	@if [ -n "$(DESTDIR)" ]; then $(MAKE) --no-print-directory uninstall-udev; \
+	elif [ "$$(id -u)" != 0 ]; then echo "(not root: the keyboard permission in $(UDEVDIR) is not touched)"; \
+	elif [ -f /usr/share/solwind/shell.qml ] || [ -f /usr/local/share/solwind/shell.qml ]; then \
+		echo "(the keyboard permission stays: another Solwind install uses it)"; \
+	else $(MAKE) --no-print-directory uninstall-udev; fi
+	@[ -n "$(DESTDIR)" ] || sh dist/install-check.sh removed "$(PREFIX)"
 
-# Keyboard light permission: install the rule for one user and apply it right away (packagers: the rule needs a user
-# id, so it can't be shipped in a package; users grant it from the app instead)
+# Keyboard light permission: the rule for one user, applied right away (packagers: the rule needs a user id, so it
+# can't be shipped in a package; users grant it from the app instead). The rendered rule is checked line by line
+# before it is put in place; the rule under the old name (Ccenter's) goes.
 udev:
-	@case "$(UDEV_UID)" in ""|*[!0-9]*) echo "Run it as: sudo make udev   (or UDEV_UID=<user id>)"; exit 1 ;; esac
+	@$(CHECK_PATHS)
+	@case "$(UDEV_UID)" in ""|*[!0-9]*) echo "Run it as: sudo make udev   (or UDEV_UID=<user id>)" >&2; exit 1 ;; esac
 	install -d $(UDEVDIR)
 	sed 's/@UID@/$(UDEV_UID)/g' dist/90-solwind.rules > $(UDEVDIR)/90-solwind.rules.new
 	sh scripts/kbd-rule-check.sh $(UDEVDIR)/90-solwind.rules.new $(UDEV_UID) || { rm -f $(UDEVDIR)/90-solwind.rules.new; exit 1; }
 	chmod 644 $(UDEVDIR)/90-solwind.rules.new
+	@# earlier versions made the files writable for everyone (0666): reset them first
+	@if $(LIVE); then $(RESET_PERMS); fi
 	mv $(UDEVDIR)/90-solwind.rules.new $(UDEVDIR)/90-solwind.rules
-	@if [ -z "$(DESTDIR)" ] && command -v udevadm >/dev/null; then \
+	rm -f $(UDEVDIR)/90-ccenter.rules
+	@if $(LIVE); then for f in $(OLD_RULES); do \
+		if [ -f "$$f" ] && head -n 1 "$$f" | grep -q '^# Ccenter: '; then echo "rm -f $$f"; rm -f "$$f"; fi; done; fi
+	@if $(LIVE) && command -v udevadm >/dev/null; then \
 		udevadm control --reload-rules && udevadm trigger --action=change --subsystem-match=leds \
-			&& udevadm trigger --action=change --subsystem-match=platform --sysname-match=hp-wmi; \
+			&& udevadm trigger --action=change --subsystem-match=platform --sysname-match=hp-wmi && udevadm settle; \
 	fi
 
 uninstall-udev:
-	rm -f $(UDEVDIR)/90-solwind.rules
-	@if [ -z "$(DESTDIR)" ]; then \
-		command -v udevadm >/dev/null && udevadm control --reload-rules; \
-		for d in $(KBD_LEDS); do [ -d "$$d" ] || continue; \
-			for f in brightness multi_intensity; do [ -e "$$d/$$f" ] && chown root:root "$$d/$$f" && chmod 0644 "$$d/$$f"; done; \
-			[ -e "$$d/kbd_rgb_mode" ] && chown root:root "$$d/kbd_rgb_mode"; done; \
-		for f in $(KBD_ZONES); do [ -e "$$f" ] && chown root:root "$$f" && chmod 0644 "$$f"; done; true; \
-	fi
+	@$(CHECK_PATHS)
+	rm -f $(UDEVDIR)/90-solwind.rules $(UDEVDIR)/90-ccenter.rules
+	@if $(LIVE); then for f in $(OLD_RULES); do \
+		if [ -f "$$f" ] && head -n 1 "$$f" | grep -q '^# Ccenter: '; then echo "rm -f $$f"; rm -f "$$f"; fi; done; fi
+	@if $(LIVE); then command -v udevadm >/dev/null && udevadm control --reload-rules; $(RESET_PERMS); fi
+
+# Runs as you (not root): it changes only your home folder
+remove-old:
+	@sh dist/remove-old.sh

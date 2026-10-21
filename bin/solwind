@@ -1,7 +1,7 @@
 #!/bin/sh
 # Solwind launcher and terminal commands.
-# The app folder is looked up in order: SOLWIND_DIR, <this script's folder>/.. (a source checkout, or install.sh's
-# ~/.local/share/solwind/bin/solwind), <prefix>/share/solwind (/usr/bin -> /usr/share/solwind), /usr/share/solwind.
+# The app folder is looked up in order: SOLWIND_DIR, <this script's folder>/.. (a source checkout),
+# <prefix>/share/solwind (make install: /usr/local/bin -> /usr/local/share/solwind), /usr/share/solwind.
 # Exit codes: 0 done, 1 error, 2 wrong usage, 3 not started because Solwind already runs, 4 the app isn't running.
 
 set -u
@@ -28,9 +28,9 @@ base=${self%/bin/*}                               # the folder that holds bin/ (
 if [ -n "${SOLWIND_DIR:-}" ]; then
     dir=$SOLWIND_DIR
 elif [ -f "$base/shell.qml" ]; then
-    dir=$base                                     # source checkout or install.sh install (<app>/bin/solwind)
+    dir=$base                                     # source checkout (<checkout>/bin/solwind)
 elif [ -f "$base/share/solwind/shell.qml" ]; then
-    dir=$base/share/solwind                       # installed with a prefix layout (/usr or ~/.local)
+    dir=$base/share/solwind                       # make install (<prefix>/bin/solwind)
 else
     dir=/usr/share/solwind
 fi
@@ -168,7 +168,7 @@ guard() {
 }
 
 # Coming from Ccenter (the old name): before the first start its settings are copied over once. A copy, not a move:
-# the old file stays where it was (uninstall.sh offers to remove it). The app reads only the new file.
+# the old file stays where it was (delete it by hand once you don't need it). The app reads only the new file.
 copy_old_settings() {
     if [ -e "$cfg/solwind/settings.json" ] || [ ! -f "$cfg/ccenter/settings.json" ]; then return 0; fi
     if mkdir -p "$cfg/solwind" && cp "$cfg/ccenter/settings.json" "$cfg/solwind/settings.json.part" \

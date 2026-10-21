@@ -1,6 +1,6 @@
 # Solwind: lets ONE user (the one who granted it) set the keyboard light's colour and brightness without root.
 # The numeric user id in the seven lines below is filled in when the rule is installed (the app's "Grant permission"
-# button or install.sh); other users of the computer get no access.
+# button or sudo make udev); other users of the computer get no access.
 # Only these files of keyboard backlight lights are touched, and only their owner changes (permission bits stay):
 #   brightness, multi_intensity (RGB colour), kbd_rgb_mode (ASUS TUF colour, write-only)
 #   rgb_zones/zone00..zone03 of the hp-wmi device (HP four-zone keyboards with older copies of the
@@ -10,7 +10,7 @@
 # No shell is involved: udev runs chown directly, and only if the file exists (TEST).
 # Manual equivalent: echo "r g b" | sudo tee /sys/class/leds/<light>/multi_intensity
 # Never installed silently. Location: /etc/udev/rules.d/90-solwind.rules. Removing it (app "Remove permission",
-# uninstall.sh) and giving the files back to root restores root-only access.
+# sudo make uninstall-udev) and giving the files back to root restores root-only access.
 # Before it is installed, every line of this file is checked: only comments and the seven lines below are accepted.
 SUBSYSTEM=="leds", ACTION=="add|change", KERNEL=="*::kbd_backlight|*::kbd_backlight_*|*::kbd_zoned_backlight-*", TEST=="brightness", RUN+="/bin/chown @UID@ /sys%p/brightness"
 SUBSYSTEM=="leds", ACTION=="add|change", KERNEL=="*::kbd_backlight|*::kbd_backlight_*|*::kbd_zoned_backlight-*", TEST=="multi_intensity", RUN+="/bin/chown @UID@ /sys%p/multi_intensity"

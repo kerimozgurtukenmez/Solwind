@@ -3,9 +3,10 @@ import Quickshell
 import QtQuick
 import qs.utils
 
-// Start in the background on login: the systemd user service solwind.service installed by install.sh / make install.
+// Start in the background on login: the systemd user service solwind.service installed by make install.
 // The toggle only works for the copy the service runs: without an installation (development copy), or when the
-// service runs another copy, it stays disabled. systemctl only changes something when the user flips the toggle.
+// service runs another copy, it stays disabled. systemctl only changes something when the user flips the toggle,
+// except a daemon-reload (no root, nothing restarted) when make install has replaced the unit file.
 Singleton {
     id: root
     readonly property string unit: "solwind.service"
@@ -18,8 +19,10 @@ Singleton {
     property string message: ""
 
     function refresh() {
-        // The launcher in ExecStart tells which app folder it runs (solwind --version: "solwind <version> (<folder>)")
+        // The launcher in ExecStart tells which app folder it runs (solwind --version: "solwind <version> (<folder>)").
+        // After make install changed the unit file, systemd still holds the old one (NeedDaemonReload): reload first.
         cmd.go(["sh", "-c",
+                '[ "$(systemctl --user show -p NeedDaemonReload --value "$1")" != yes ] || systemctl --user daemon-reload; ' +
                 'systemctl --user show -p LoadState,UnitFileState "$1"; ' +
                 'e=$(systemctl --user show -p ExecStart --value "$1"); ' +
                 'case "$e" in *"path="*" ;"*) e=${e#*path=}; e=${e%% ;*}; ' +

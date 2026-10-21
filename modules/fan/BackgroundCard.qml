@@ -12,7 +12,7 @@ Card {
         label: I18n.t("Start in the background on login")
         sub: Autostart.ours ? I18n.t("Starts without a window; your fan settings apply right away")
            : Autostart.installed ? I18n.t("The background service runs another Solwind copy (%1)").arg(Autostart.serviceDir || "?")
-           : I18n.t("Needs an installation first: ./install.sh")
+           : I18n.t("Needs an installation first: sudo make install")
         controlled: true
         checked: Autostart.enabled
         enabled: Autostart.ours && !Autostart.busy

@@ -146,44 +146,62 @@ If no config fits your laptop, **don't force one**, a wrong config can make the 
 ```sh
 git clone https://github.com/kerimozgurtukenmez/Ccenter-Caelestia.git
 cd Ccenter-Caelestia
-./install.sh
+sudo make install
 ```
 
-Then open **Solwind** from your app launcher, or run `solwind`.
+Then open **Solwind** from your app launcher, or run `solwind`. (On a first install `/usr/local/share/applications` may be new; Caelestia's launcher only sees a new folder after you log in again or restart the shell.)
 
-**No `sudo` needed.** Everything goes into your home folder, and `install.sh` shows you the plan before it writes anything. Optional parts are asked one by one:
+It installs for the whole system, under `/usr/local` (the usual place for things you install yourself, so it never gets mixed up with your distro's packages):
 
 | What | Where |
 |---|---|
-| App, `solwind` command and icon | `~/.local/share/solwind/` |
-| App launcher entry | `~/.local/share/applications/solwind.desktop` |
-| Background service (off until you turn it on) | `~/.local/share/systemd/user/solwind.service` |
-| Short `solwind` command | `~/.local/bin/solwind` (a link) |
-| `solwind` in your terminal's `PATH`, if it isn't already (asked) | a small marked block in `~/.bashrc` / `~/.zshrc`, or `~/.config/fish/conf.d/solwind.fish` (terminals only, not keybinds or the app menu) |
-| Keyboard light permission (asked, default no) | `/etc/udev/rules.d/90-solwind.rules` (the only step that asks for your password) |
+| The `solwind` command | `/usr/local/bin/solwind` |
+| The app | `/usr/local/share/solwind/` |
+| App launcher entry and icon | `/usr/local/share/applications/solwind.desktop`, `/usr/local/share/icons/hicolor/scalable/apps/solwind.svg` |
+| Background service (off until you turn it on in the app) | `/usr/local/lib/systemd/user/solwind.service` |
 
-If something can't be written (for example a `~/.local/bin` owned by root), or a file with the same name belongs to another program, that part is skipped and the installer tells you why. It never overwrites your files.
+`make install` stops without changing anything if Solwind is running, or if it finds an older install in your home folder (see below). The keyboard light permission is separate and optional (next section).
 
-To update: `git pull`, then `solwind quit` and `./install.sh` again. Your settings stay.
+Settings are your own: `~/.config/solwind/settings.json`, saved only once you change something.
 
-Settings are saved in `~/.config/solwind/settings.json`, only once you change something.
+**Update:**
+
+```sh
+git pull
+solwind quit
+sudo make install
+solwind
+```
+
+If you use the background service, `make install` tells you the command to start it again instead.
+
+**Coming from Ccenter** (Solwind's name before 0.4.0) **or an older Solwind** installed with the old `install.sh`: those lived in your home folder. Remove that copy first, as yourself (no `sudo`), then install:
+
+```sh
+ccenter quit             # or: solwind quit
+make remove-old          # shows what it will remove and asks
+sudo make install
+```
+
+`make remove-old` removes the old app, its launcher entry, its background service and its command. A terminal that already ran the old command may still look for it there: run `hash -r` in it, or open a new one. A `PATH` line it added for `~/.local/bin` stays, other programs may use that folder. Your Ccenter settings are copied over the first time Solwind starts (the old folder stays until you delete it). If its background service was on, turn Solwind's on afterwards (it tells you how). The old keyboard rule keeps working; `sudo make udev` (or **Update permission** in the app) moves it to the new name. Keybinds, scripts or window rules that use `ccenter` need `solwind` now.
 
 ### Permissions: always asked, never taken silently
 
-- **Keyboard light (optional).** To change the keyboard's color and brightness, your user needs write access to the light's own files. `install.sh` explains this and asks (default: no); you can also do it later with the **Grant permission** button in the Keyboard tab, and undo it there with **Remove permission**. Only your user gets access, nothing else on the system changes. (Versions before 0.3 gave every user access; the app offers to update that.)
+- **Keyboard light (optional).** To change the keyboard's color and brightness, your user needs write access to the light's own files. The **Grant permission** button in the Keyboard tab explains this and asks for your password; **Remove permission** undoes it. From a terminal: `sudo make udev` and `sudo make uninstall-udev`. Only your user gets access, nothing else on the system changes. The rule is `/etc/udev/rules.d/90-solwind.rules`. (Versions before 0.3 gave every user access; the app offers to update that.)
 - **NBFC service actions** (start/stop/restart, applying a config) ask for your password every time. Setting fan speeds doesn't.
 
 ### Uninstall
 
 ```sh
-./uninstall.sh
+solwind quit
+sudo make uninstall
 ```
 
-It shows what it will delete, closes Solwind (keyboard back to your static color, fans back to NBFC) and asks separately about the keyboard permission and your settings.
+It removes the app and the keyboard permission. If you turned the background service on, turn it off first (in the app, or `systemctl --user disable solwind.service`); `make uninstall` tells you if you forgot. Your settings stay in `~/.config/solwind`, delete that folder if you want.
 
-### System-wide install / packaging
+### Packaging
 
-The `Makefile` is for packagers (`make DESTDIR=… PREFIX=/usr install`) or a system-wide `sudo make install`. It doesn't add the keyboard permission; that's a separate, optional `sudo make udev`.
+`make DESTDIR=/package/root PREFIX=/usr install`. With `DESTDIR` the checks against the running system are skipped. `PREFIX` and `DESTDIR` must be plain absolute paths (no spaces). Outside `/usr` and `/usr/local` the command may not be on `PATH`, the launcher entry may not show up and the background service can't be turned on, because systemd only looks for user services in its own folders. The keyboard rule needs a user id, so it can't be part of a package; users grant it from the app.
 
 ### Running in the background
 - Closing the window doesn't quit Solwind, it keeps controlling the fans. Open it again from the launcher, the tray icon or with `solwind`.
@@ -225,22 +243,22 @@ Nice for Hyprland keybinds:
 
 ```lua
 -- Hyprland with a Lua config (like mine: Hyprland 0.56 with Caelestia)
-hl.bind("SUPER + F9", hl.dsp.exec_cmd("/home/you/.local/bin/solwind profile performance"))
+hl.bind("SUPER + F9", hl.dsp.exec_cmd("solwind profile performance"))
 ```
 
 ```ini
 # hyprland.conf (older Hyprland)
-bind = SUPER, F9, exec, /home/you/.local/bin/solwind profile performance
+bind = SUPER, F9, exec, solwind profile performance
 ```
 
-Use the full path (with your user name): Hyprland doesn't always have `~/.local/bin` in its `PATH` (mine doesn't), even when your terminal does. The window's class (app ID) is `solwind`, if you want a window rule for it.
+`/usr/local/bin` is on Hyprland's `PATH` (it is on mine), so the short command works. The window's class (app ID) is `solwind`, if you want a window rule for it.
 
 ## Reporting a problem
 
 If something's wrong, please make a report and attach it to a [GitHub issue](https://github.com/kerimozgurtukenmez/Ccenter-Caelestia/issues):
 
 ```sh
-solwind report        # or ~/.local/share/solwind/bin/solwind report
+solwind report
 ```
 
 or press **Create report** at the bottom of the Fan or Keyboard tab. It works even if Solwind doesn't start.
@@ -251,8 +269,8 @@ You get one text file in your home folder (`~/solwind-report-<date>.txt`) with t
 
 - Give the fans back to NBFC: `nbfc set -a`
 - Solwind never edits NBFC config files, it only changes which config is selected. To go back: `sudo nbfc config --set "<config name>"` and `sudo nbfc restart`
-- Remove the app: `./uninstall.sh`
-- Remove just the keyboard permission: Keyboard tab > "Remove permission" (or `sudo rm /etc/udev/rules.d/90-solwind.rules` and reboot)
+- Remove the app: `solwind quit`, then `sudo make uninstall`
+- Remove just the keyboard permission: Keyboard tab > "Remove permission" (or `sudo make uninstall-udev`)
 
 ## How it works
 
@@ -341,10 +359,9 @@ scripts/            sensors.sh, hwinfo.sh, kbdinfo.sh (keyboard detection), kbd-
 assets/             icons and images
 docs/screenshots/   README images
 bin/solwind         launcher and terminal commands
-dist/               app launcher entry, background service, keyboard permission rule
-install.sh          install into your home folder (no sudo)
-uninstall.sh        remove it again
-Makefile            system-wide install / packaging
+dist/               app launcher entry, background service, keyboard permission rule,
+                    install-check.sh (checks for make install/uninstall), remove-old.sh (make remove-old)
+Makefile            install, uninstall, keyboard permission, packaging
 LICENSE             GPL-3.0
 ```
 

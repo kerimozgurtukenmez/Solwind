@@ -1,5 +1,5 @@
 # Solwind background service (systemd user service).
-# install.sh installs it into ~/.local/share/systemd/user, make install into <prefix>/lib/systemd/user;
+# make install puts it into <prefix>/lib/systemd/user (/usr/local/lib/systemd/user);
 # @BINDIR@ is replaced at install time with the folder that contains solwind.
 # The app's "start in background on login" toggle enables/disables it.
 # Manually: systemctl --user enable --now solwind.service   |   off: systemctl --user disable --now solwind.service
