@@ -98,8 +98,8 @@ If no config fits, don't force one. The keyboard part works without NBFC.
 ### Install
 
 ```sh
-git clone https://github.com/kerimozgurtukenmez/Ccenter-Caelestia.git
-cd Ccenter-Caelestia
+git clone https://github.com/kerimozgurtukenmez/Solwind.git
+cd Solwind
 sudo make install
 ```
 
@@ -145,7 +145,7 @@ Exit codes: 0 done, 1 error, 2 wrong usage, 3 already running, 4 not running. Fo
 
 ## Reporting a problem
 
-Run `solwind report` (or **Create report** at the bottom of a tab) and attach the file to a [GitHub issue](https://github.com/kerimozgurtukenmez/Ccenter-Caelestia/issues). It's one text file in your home folder with versions, your laptop model (no serial numbers), NBFC status, what Solwind detected, your settings and recent logs. Your user name and computer name are replaced, nothing is sent anywhere. Logs are cleared on reboot, so make it before rebooting.
+Run `solwind report` (or **Create report** at the bottom of a tab) and attach the file to a [GitHub issue](https://github.com/kerimozgurtukenmez/Solwind/issues). It's one text file in your home folder with versions, your laptop model (no serial numbers), NBFC status, what Solwind detected, your settings and recent logs. Your user name and computer name are replaced, nothing is sent anywhere. Logs are cleared on reboot, so make it before rebooting.
 
 ## Undoing things
 

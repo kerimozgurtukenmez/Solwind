@@ -12,7 +12,7 @@ Card {
 
     property string file: ""                  // last report created
     property bool busy: false
-    readonly property string issues: "https://github.com/kerimozgurtukenmez/Ccenter-Caelestia/issues"
+    readonly property string issues: "https://github.com/kerimozgurtukenmez/Solwind/issues"
 
     StyledText {
         Layout.fillWidth: true

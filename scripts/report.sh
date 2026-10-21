@@ -152,5 +152,5 @@ sed -i "s|$(esc "$HOME")|~|g" "$out"
 [ ${#host} -ge 3 ] && sed -i "s|\b$(esc "$host")\b|<host>|g" "$out"
 
 t "Report saved: $out" "Rapor kaydedildi: $out"
-t "Please read it before sharing; attach it to a GitHub issue: https://github.com/kerimozgurtukenmez/Ccenter-Caelestia/issues" \
-  "Paylaşmadan önce göz at; GitHub'da bir issue'ya ekleyebilirsin: https://github.com/kerimozgurtukenmez/Ccenter-Caelestia/issues"
+t "Please read it before sharing; attach it to a GitHub issue: https://github.com/kerimozgurtukenmez/Solwind/issues" \
+  "Paylaşmadan önce göz at; GitHub'da bir issue'ya ekleyebilirsin: https://github.com/kerimozgurtukenmez/Solwind/issues"
