@@ -23,11 +23,14 @@ Singleton {
     property var hw: ({ cpu: "", cores: "", gpu: "", igpu: "" })
     // For fan control: discrete GPU temperature (NaN when asleep / absent)
     readonly property real gpu: { const r = readings.find(x => x.label === "GPU"); return r ? r.value : NaN }
+    readonly property real cpu: { const r = readings.find(x => x.label === "CPU"); return r ? r.value : NaN }
     readonly property bool hasGpu: readings.some(x => x.label === "GPU")
     // Fan RPM: trusted once the driver has reported a value above 0 (some drivers always return 0)
     property var rpms: []                    // in fan order (fan1 -> 0)
     property bool rpmWorks: false
-    function rpm(i) { return rpmWorks && i < rpms.length ? rpms[i] : NaN }
+    // NBFC's fan i is shown with the i-th fan of the first fan driver (right on the machine it was made on: hp,
+    // CPU_FAN = fan1). With a different number of fans that pairing can't be right, so nothing is shown.
+    function rpm(i) { return rpmWorks && rpms.length === Nbfc.fans.length && i < rpms.length ? rpms[i] : NaN }
 
     // "13th Gen Intel(R) Core(TM) i7-13700H" -> "Intel Core i7-13700H"
     function cleanCpu(n) {
@@ -125,6 +128,9 @@ Singleton {
         tick++
         cmd.go(["sh", Quickshell.shellPath("scripts/sensors.sh")].concat(gpu ? ["gpu"] : []), (code, out) => root.parse(out))
     }
+
+    // Not read any more: the last values would go stale in the tray tooltip, the status and the graph
+    onActiveChanged: if (!active) { readings = readings.map(r => Object.assign({}, r, { value: NaN })); rpms = [] }
 
     Cmd { id: cmd }
     Cmd { id: hwCmd }

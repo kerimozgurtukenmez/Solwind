@@ -55,11 +55,12 @@ APP_FILES = shell.qml VERSION
 APP_DIRS  = components modules services utils scripts assets
 
 # The light files back to root (owner root, 0644; kbd_rgb_mode keeps its write-only mode); only as root, for a real
-# system (no DESTDIR)
-RESET_PERMS = for d in $(KBD_LEDS); do [ -d "$$d" ] || continue; \
-		for f in brightness multi_intensity; do [ -e "$$d/$$f" ] && chown root:root "$$d/$$f" && chmod 0644 "$$d/$$f"; done; \
-		[ -e "$$d/kbd_rgb_mode" ] && chown root:root "$$d/kbd_rgb_mode"; done; \
-	for f in $(KBD_ZONES); do [ -e "$$f" ] && chown root:root "$$f" && chmod 0644 "$$f"; done; true
+# system (no DESTDIR). Only files our rule (owner changed) or an older one (0666) touched: a permission another rule
+# gave (a group, root-owned) stays.
+RESET_PERMS = rp() { [ -e "$$1" ] || return 0; case "$$(stat -c "%u %a" "$$1")" in "0 666") ;; "0 "*) return 0 ;; esac; \
+		chown root:root "$$1"; [ -z "$${2:-}" ] || chmod 0644 "$$1"; }; \
+	for d in $(KBD_LEDS); do [ -d "$$d" ] || continue; rp "$$d/brightness" m; rp "$$d/multi_intensity" m; rp "$$d/kbd_rgb_mode"; done; \
+	for f in $(KBD_ZONES); do rp "$$f" m; done; true
 LIVE = [ -z "$(DESTDIR)" ] && [ "$$(id -u)" = 0 ]
 
 .PHONY: help install uninstall udev uninstall-udev remove-old

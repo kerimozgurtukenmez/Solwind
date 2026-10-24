@@ -47,7 +47,8 @@ Singleton {
     property bool ruleOld: false              // the rule has the old name (Ccenter's 90-ccenter.rules); updating renames it
     property bool ready: false                // first read finished?
     property int maxBrightness: 255
-    property var maxIntensity: [255, 255, 255]
+    property var maxIntensity: [255, 255, 255]   // per hardware channel (multi_index order)
+    property var channels: [0, 1, 2]             // hardware channel k shows colour part channels[k] (0 red, 1 green, 2 blue)
     property int brightness: 0
     property color color: "white"             // chosen colour (at full intensity; brightness is separate)
     property string error: ""
@@ -75,12 +76,17 @@ Singleton {
         return c.hsvSaturation < 0.05 ? Qt.rgba(1, 1, 1, 1) : Qt.hsva(c.hsvHue, Math.max(c.hsvSaturation, 0.85), 1, 1)
     }
     // Theme colours: the theme's primary colour first, then from secondary/tertiary and the theme's accent colours
-    // the hues furthest from the ones already picked (themeCount in total). All from the theme; look-alikes are skipped.
+    // the hues furthest from the ones already picked (themeCount in total), so look-alikes come last. All from the
+    // theme. Grey/white (no hue, vivid() makes it white) counts as far from every hue and the same as another white.
     readonly property var themeColors: {
         const base = [vivid(Colours.primary)]
         const pool = [Colours.secondary, Colours.tertiary].concat(Colours.accents).map(vivid)
-        const hue = c => c.hsvHue < 0 ? -1 : c.hsvHue
-        const dist = (a, b) => { const x = Math.abs(hue(a) - hue(b)); return Math.min(x, 1 - x) }
+        const grey = c => c.hsvHue < 0 || c.hsvSaturation < 0.05
+        const dist = (a, b) => {
+            if (grey(a) || grey(b)) return grey(a) && grey(b) ? 0 : 0.5
+            const x = Math.abs(a.hsvHue - b.hsvHue)
+            return Math.min(x, 1 - x)
+        }
         const out = base
         while (out.length < themeCount && pool.length > 0) {
             let best = 0, bestD = -1
@@ -121,7 +127,7 @@ Singleton {
         const byName = {}
         const rgbZones = []                   // hp-wmi rgb_zones files, same shape as leds
         const usb = []
-        let rule = ""
+        let rule = "", ruleLib = "", libLegacy = false
         for (const line of out.split("\n")) {
             const p = line.split("|")
             if (p[0] === "dmi" && p.length >= 6) dmi = { vendor: p[1], product: p[2], family: p[4], board: p[5] }
@@ -130,15 +136,20 @@ Singleton {
             else if (p[0] === "zone" && p.length >= 4) { const l = { name: p[1], driver: p[2], path: p.slice(3).join("|"), v: {}, w: {}, x: {} }; rgbZones.push(l); byName[p[1]] = l }
             else if ((p[0] === "v" || p[0] === "w" || p[0] === "x") && byName[p[1]]) byName[p[1]][p[0]][p[2]] = p[0] === "v" ? p.slice(3).join("|") : true
             else if (p[0] === "usb") usb.push({ vid: p[1], pid: p[2], name: p[3] || "" })
-            else if (p[0] === "rule") rule = rule || (p[1] === "etc" ? (p[2] === "legacy" ? "etc-legacy" : p[2] === "old" ? "etc-old" : "etc") : "lib")
+            else if (p[0] === "rule" && p[1] === "etc") rule = rule || (p[2] === "legacy" ? "etc-legacy" : p[2] === "old" ? "etc-old" : "etc")
+            else if (p[0] === "rule" && p[1] === "lib") { ruleLib = "lib"; if (p[2] === "legacy") libLegacy = true }
         }
+        const firstRead = !ready
         if (!ready) loadSaved()               // load saved effect settings on the first read (the settings file is ready by now)
-        ruleAt = rule.startsWith("etc") ? "etc" : rule
-        ruleLegacy = rule === "etc-legacy"
+        ruleAt = rule.startsWith("etc") ? "etc" : ruleLib
+        // A less strict rule anywhere (also an old Makefile's under /usr/lib) is offered to be replaced
+        ruleLegacy = rule === "etc-legacy" || libLegacy
         ruleOld = rule === "etc-old"
 
         // Pick the backend
-        const isRgb = l => !!l.v.multi_intensity && /red/.test(l.v.multi_index || "") && /green/.test(l.v.multi_index || "")
+        // RGB: exactly the three channels red, green and blue, in whatever order the driver lists them
+        const isRgb = l => !!l.v.multi_intensity
+                        && (l.v.multi_index || "").trim().split(/\s+/).sort().join(" ") === "blue green red"
         // Numbered zone LEDs of one driver are one keyboard too, never a single light (that would write one zone only)
         const numbered = leds.filter(l => /::kbd_backlight_zone\d+$/.test(l.name))
         const named = leds.filter(l => l.name.indexOf("::kbd_zoned_backlight-") >= 0)
@@ -172,21 +183,29 @@ Singleton {
         // stopped it or there's no permission) it may still show one of the effect's frames; the chosen colour is kept then.
         // An effect saved on a light that has no effects (settings from another keyboard) doesn't count.
         const fromHw = !effectsAllowed || (effect === "static" && Settings.kbdOf().effect === "static")
+        // At startup a static light gets the saved colour again instead of being read back: the module writes colour x
+        // brightness to the hardware and reads that scaled value back as the colour after a reboot, and the brightness
+        // restored on top of it (systemd-backlight) scales it a second time, so it darkens a little more on every
+        // reboot below 100%. Not while it's off (Fn): writing a colour must not turn it on.
+        const applySaved = firstRead && fromHw && Settings.kbdOf().color !== "" && brightness > 0
+                         && (kind === "led-rgb" || kind === "hp-zoned")
         if (kind === "hp-rgbzones") {
             maxIntensity = [255, 255, 255]
+            channels = [0, 1, 2]
             if (fromHw) {
                 const h = parseInt(first.v.color, 16)
                 color = Qt.rgba((h >> 16 & 255) / 255, (h >> 8 & 255) / 255, (h & 255) / 255, 1)
             }
         } else if (kind === "led-rgb" || kind === "hp-zoned") {
             maxIntensity = (first.v.multi_max_intensity || "255 255 255").trim().split(/\s+/).map(x => parseInt(x) || 255)
-            if (fromHw) {
+            channels = first.v.multi_index.trim().split(/\s+/).map(n => ({ red: 0, green: 1, blue: 2 })[n])
+            if (fromHw && !applySaved) {
                 const it = first.v.multi_intensity.trim().split(/\s+/).map(x => parseInt(x) || 0)
                 const order = (first.v.multi_index || "red green blue").trim().split(/\s+/)
                 const ch = n => { const k = order.indexOf(n); return k < 0 ? 0 : it[k] / maxIntensity[k] }
                 color = Qt.rgba(ch("red"), ch("green"), ch("blue"), 1)
             }
-        } else maxIntensity = [255, 255, 255]
+        } else { maxIntensity = [255, 255, 255]; channels = [0, 1, 2] }
 
         // Findings worth explaining (RGB the kernel doesn't expose)
         const vendor = dmi.vendor.toLowerCase()
@@ -198,13 +217,15 @@ Singleton {
 
         // ASUS TUF: the colour can't be read back, so the saved colour is applied once at startup
         if (!ready && kind === "asus-tuf" && writable && Settings.kbdOf().color !== "") queue("color", colorValue(color, 1))
+        if (applySaved && writable) queue("color", colorValue(color, 1))
         ready = true
     }
 
     // ---------- writing ----------
     // colour (0..1) x level -> "R G B" (hardware scale)
     function intensity(c, level) {
-        return [c.r, c.g, c.b].map((x, i) => Math.round(Math.max(0, Math.min(1, x * level)) * (maxIntensity[i] ?? 255))).join(" ")
+        const p = [c.r, c.g, c.b]
+        return channels.map((ci, k) => Math.round(Math.max(0, Math.min(1, p[ci] * level)) * (maxIntensity[k] ?? 255))).join(" ")
     }
     // The value written for a colour, per backend
     function colorValue(c, level) {
@@ -394,7 +415,8 @@ Singleton {
     // when the strongest channel drops below this threshold the light turns off instead of showing a wrong colour
     readonly property int lowCut: 8
     function frame(c, level) {
-        const v = [c.r, c.g, c.b].map((x, i) => Math.max(0, Math.min(1, x * level)) * (maxIntensity[i] ?? 255))
+        const p = [c.r, c.g, c.b]
+        const v = channels.map((ci, k) => Math.max(0, Math.min(1, p[ci] * level)) * (maxIntensity[k] ?? 255))
         if (Math.max.apply(null, v) < lowCut) return "0 0 0"
         return v.map(Math.round).join(" ")
     }
@@ -457,11 +479,19 @@ Singleton {
     // (Ccenter's 90-ccenter.rules, before 0.4.0) is removed with it, and also when the permission is removed.
     readonly property string ruleFile: Quickshell.shellPath("dist/90-solwind.rules")
     readonly property string ruleCheck: Quickshell.shellPath("scripts/kbd-rule-check.sh")
+    // Only files our rule (owner changed) or an older one (0666) touched go back to root; a permission another rule gave
+    // (a group, root-owned) stays. "m": also mode 0644 (kbd_rgb_mode keeps its write-only mode).
+    // The rule old Makefiles (Ccenter) installed under /usr/lib or /usr/local/lib: removed with ours, but only if its
+    // first line says it is Ccenter's (every version starts with "# Ccenter: ")
+    readonly property string oldLibRules:
+        '{ for l in /usr/lib/udev/rules.d/90-ccenter.rules /usr/local/lib/udev/rules.d/90-ccenter.rules; do ' +
+        '[ -f "$l" ] && head -n 1 "$l" | grep -q "^# Ccenter: " && rm -f "$l"; done; true; } && '
     readonly property string resetPerms:
+        'rp() { [ -e "$1" ] || return 0; case "$(stat -c "%u %a" "$1")" in "0 666") ;; "0 "*) return 0 ;; esac; ' +
+        'chown root:root "$1"; [ -z "${2:-}" ] || chmod 0644 "$1"; }; ' +
         'for d in /sys/class/leds/*::kbd_backlight /sys/class/leds/*::kbd_backlight_* /sys/class/leds/*::kbd_zoned_backlight-*; do ' +
-        '[ -d "$d" ] || continue; for f in brightness multi_intensity; do [ -e "$d/$f" ] && chown root:root "$d/$f" && chmod 0644 "$d/$f"; done; ' +
-        '[ -e "$d/kbd_rgb_mode" ] && chown root:root "$d/kbd_rgb_mode"; done; ' +
-        'for f in /sys/devices/platform/hp-wmi/rgb_zones/zone*; do [ -e "$f" ] && chown root:root "$f" && chmod 0644 "$f"; done; '
+        '[ -d "$d" ] || continue; rp "$d/brightness" m; rp "$d/multi_intensity" m; rp "$d/kbd_rgb_mode"; done; ' +
+        'for f in /sys/devices/platform/hp-wmi/rgb_zones/zone*; do rp "$f" m; done; '
     function grantPermission() {
         // While the files change hands (old permissions reset, then the new owner set) a running effect must not write,
         // or it hits "Permission denied" in between. Pause it; permDone() resumes it once the new state has been read.
@@ -474,6 +504,7 @@ Singleton {
                  'sed "s/@UID@/$uid/g" "$1" > "$new" && sh "$2" "$new" "$uid" || { rm -f "$new"; exit 1; }; ' +
                  resetPerms +
                  'chmod 644 "$new" && mv "$new" /etc/udev/rules.d/90-solwind.rules && rm -f /etc/udev/rules.d/90-ccenter.rules && ' +
+                 oldLibRules +
                  'udevadm control --reload-rules && udevadm trigger --action=change --subsystem-match=leds && ' +
                  'udevadm trigger --action=change --subsystem-match=platform --sysname-match=hp-wmi && udevadm settle',
                  "sh", ruleFile, ruleCheck],
@@ -486,7 +517,8 @@ Singleton {
         permBusy = true
         error = ""
         perm.go(["pkexec", "sh", "-c",
-                 'rm -f /etc/udev/rules.d/90-solwind.rules /etc/udev/rules.d/90-ccenter.rules && udevadm control --reload-rules; ' + resetPerms + 'true'],
+                 'rm -f /etc/udev/rules.d/90-solwind.rules /etc/udev/rules.d/90-ccenter.rules && ' + oldLibRules +
+                 'udevadm control --reload-rules; ' + resetPerms + 'true'],
                 (code, out, err) => root.permDone(code, out, err))
     }
     function permDone(code, out, err) {

@@ -71,5 +71,10 @@ o=/etc/udev/rules.d/90-ccenter.rules
 if grep -q -s -e 'chmod 0666' -e '/bin/sh' "$f" "$o"; then echo "rule|etc|legacy"
 elif [ -f "$o" ]; then echo "rule|etc|old"
 elif [ -f "$f" ]; then echo "rule|etc|current"; fi
-if [ -f /usr/lib/udev/rules.d/90-solwind.rules ] || [ -f /usr/lib/udev/rules.d/90-ccenter.rules ]; then echo "rule|lib"; fi
+# Old Makefiles (Ccenter) put the rule under /usr/lib or /usr/local/lib; a less strict one there is reported too
+for l in /usr/lib/udev/rules.d/90-solwind.rules /usr/lib/udev/rules.d/90-ccenter.rules \
+         /usr/local/lib/udev/rules.d/90-ccenter.rules; do
+  [ -f "$l" ] || continue
+  if grep -q -e 'chmod 0666' -e '/bin/sh' "$l"; then echo "rule|lib|legacy"; else echo "rule|lib"; fi
+done
 true

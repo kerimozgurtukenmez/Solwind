@@ -11,10 +11,24 @@ Singleton {
     // ---- state ----
     property bool running: false
     property bool readOnly: false
+    // The config whose fans these are. NBFC loads its config only when it starts (service.c Service_Init in 0.4.1) and
+    // its status reports that one; `nbfc config -s` only changes /etc/nbfc/nbfc.json until the next (re)start. So while
+    // NBFC runs, the config it reports is the one; while it is stopped, the one selected in the file. Settings are
+    // saved per config: going by the file alone, a config selected without a restart would put its settings on the
+    // fans of the one still running.
     property string configId: ""
+    property string fileConfigId: ""          // selected in /etc/nbfc/nbfc.json
+    property string serviceConfigId: ""       // reported by the running service; forgotten once NBFC is really stopped
+    property int failedPolls: 0               // status reads in a row that failed (one can just time out)
     property bool configRead: false           // /etc/nbfc/nbfc.json was read (or found missing) at least once
     // No config selected yet (no nbfc.json, or no SelectedConfigId in it): NBFC can't start until one is picked
-    readonly property bool noConfig: configRead && configId === ""
+    readonly property bool noConfig: configRead && fileConfigId === "" && configId === ""
+    // Selected in the file but not running yet: it takes over at NBFC's next (re)start
+    readonly property bool configPending: running && fileConfigId !== "" && serviceConfigId !== "" && fileConfigId !== serviceConfigId
+    function updateConfigId() {
+        const id = serviceConfigId !== "" ? serviceConfigId : fileConfigId
+        if (id !== configId) configId = id
+    }
     property var fans: []                 // [{ name, temp, auto, current, target }]
     property real temp: NaN
     property bool bootEnabled: false
@@ -103,6 +117,7 @@ Singleton {
     property bool lostPending: false         // the service went away; reported once no admin action explains it
     signal serviceLost()                     // a running service stopped unexpectedly
     signal commandFailed(string msg)         // a fan speed could not be written
+    signal releaseFailed(string msg)         // a fan could not be handed back to NBFC's automatic control
     signal boostEnded()                      // a timed max fan run ended
 
     function startService() {
@@ -154,7 +169,7 @@ Singleton {
         const src = cfgFromDir.length > 0 ? cfgFromDir : cfgFromCli
         const seen = {}
         const all = []
-        for (const c of src.concat(configId !== "" ? [configId] : [])) {
+        for (const c of src.concat([configId, fileConfigId].filter(c => c !== ""))) {
             if (!seen[c]) { seen[c] = true; all.push(c) }
         }
         all.sort((a, b) => a.localeCompare(b))
@@ -255,7 +270,7 @@ Singleton {
     function isTrue(v) { return /^(true|yes|on|enabled|1)/i.test(v.trim()) }
 
     function parseStatus(txt) {
-        const res = { readOnly: null, temp: NaN, fans: [] }
+        const res = { readOnly: null, temp: NaN, fans: [], config: "" }
         let fan = null
         const fresh = name => {
             const f = { name: name, temp: NaN, auto: true, critical: false, current: 0, target: 0, curSeen: false }
@@ -268,6 +283,7 @@ Singleton {
             const k = line.slice(0, i).trim().toLowerCase()
             const v = line.slice(i + 1).trim()
             if (k.indexOf("fan") >= 0 && k.indexOf("name") >= 0) { fan = fresh(v); continue }
+            if (!fan && k.indexOf("config") >= 0 && k.indexOf("name") >= 0) { res.config = v; continue }   // "Selected Config Name"
             if (k.indexOf("read") >= 0 && k.indexOf("only") >= 0) { res.readOnly = root.isTrue(v); continue }
             if (k.indexOf("temp") >= 0) {
                 const n = parseFloat(v)
@@ -289,6 +305,9 @@ Singleton {
     }
 
     function applyStatus(res) {
+        // Before the fans: a config switch (forgetFans, FanState restoring the new config's settings) must happen
+        // before these fans' settings are restored
+        if (res.config !== "") { serviceConfigId = res.config; updateConfigId() }
         if (res.readOnly !== null) readOnly = res.readOnly
         const ft = res.fans.map(f => f.temp).filter(t => isFinite(t))
         temp = isFinite(res.temp) ? res.temp : (ft.length ? Math.max.apply(null, ft) : NaN)
@@ -315,6 +334,11 @@ Singleton {
                 root.lostPending = false
                 root.serviceLost()
             }
+            // Two failed reads in a row: NBFC is really stopped, so the config selected in the file is the one again.
+            // (Not after one: a single read can time out while NBFC still runs the old config, and switching then
+            // would put the file's config settings on the running config's fans.)
+            root.failedPolls = code === 0 ? 0 : root.failedPolls + 1
+            if (root.failedPolls >= 2 && root.serviceConfigId !== "") { root.serviceConfigId = ""; root.updateConfigId() }
             if (code === 0) {
                 // Only a service that came back clears "stopped by the user" (a read started before the stop
                 // finished can still succeed afterwards)
@@ -414,7 +438,7 @@ Singleton {
         if (r.tries >= 5) {
             if (adminQuiet()) return                      // an admin action may explain it: wait until it's over
             delete releasing[i]
-            commandFailed(I18n.t("Fan %1 could not be handed back to NBFC's automatic control").arg(i + 1))
+            releaseFailed(I18n.t("Fan %1 could not be handed back to NBFC's automatic control").arg(i + 1))
             return
         }
         r.at = now
@@ -546,10 +570,12 @@ Singleton {
             let fixed = false
             try { fixed = code === 0 && (JSON.parse(out).TargetFanSpeeds || []).some(v => Number(v) >= 0) } catch (e) {}
             if (fixed) {
-                console.log("[solwind] NBFC is stopped with fixed fan speeds saved in /var/lib/nbfc/state.json")
+                // Solwind is gone after this, so the warning goes out even with notifications turned off, and to the
+                // log / the terminal that started it
+                console.warn("[solwind] NBFC is stopped with fixed fan speeds saved in /var/lib/nbfc/state.json; it sets them again when it starts. After starting it, run `nbfc set -a` or open Solwind.")
                 Notify.send(I18n.t("Fans may stay at a fixed speed"),
                             I18n.t("NBFC is stopped and has saved fixed fan speeds; it sets them again when it starts. After starting it, run `nbfc set -a` or open Solwind."),
-                            "normal", "dialog-warning")
+                            "normal", "dialog-warning", true)
             }
             Qt.quit()
         })
@@ -584,14 +610,18 @@ Singleton {
         onFileChanged: reload()
         // A half-written file (empty while NBFC rewrites it) keeps the current id instead of switching configs
         onLoaded: {
-            try { root.configId = JSON.parse(text()).SelectedConfigId || "" }
+            try { root.fileConfigId = JSON.parse(text()).SelectedConfigId || "" }
             catch (e) { console.log("[solwind] /etc/nbfc/nbfc.json could not be read: " + e) }
             root.configRead = true
+            // While NBFC runs, the config it reports stays the one until it reports another; once it is stopped
+            // (see poll) the file's choice is the one
+            root.updateConfigId()
         }
         // Missing (no config was ever selected): the id stays as it was ("" on a fresh install)
         onLoadFailed: root.configRead = true
     }
 
     onConfigIdChanged: { forgetFans(); mergeConfigs(); loadConfigCurves() }
+    onFileConfigIdChanged: mergeConfigs()
     Component.onCompleted: { loadConfigs(); refreshBoot() }
 }

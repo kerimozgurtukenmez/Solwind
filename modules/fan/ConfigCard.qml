@@ -27,8 +27,9 @@ Card {
     // Header row: click -> open/close the list
     Item {
         Layout.fillWidth: true
-        implicitHeight: 48
+        implicitHeight: Math.max(48, headRow.implicitHeight)     // (a third line when a config is waiting for a restart)
         RowLayout {
+            id: headRow
             anchors.fill: parent
             spacing: 12
             StyledText { text: "tune"; color: Colours.primary; font { family: Colours.iconFont; pixelSize: 24 } }
@@ -45,6 +46,15 @@ Card {
                 StyledText {
                     text: Nbfc.fans.length > 0 ? I18n.t("%1 fans found").arg(Nbfc.fans.length) : I18n.t("No fan information")
                     color: Colours.fgDim
+                    font.pixelSize: 11
+                }
+                // `nbfc config -s` without a restart: NBFC still runs the old one
+                StyledText {
+                    Layout.fillWidth: true
+                    visible: Nbfc.configPending
+                    text: I18n.t("Selected: %1, used after NBFC restarts").arg(Nbfc.fileConfigId)
+                    elide: Text.ElideRight
+                    color: Colours.warning
                     font.pixelSize: 11
                 }
             }
