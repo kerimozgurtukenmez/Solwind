@@ -593,6 +593,45 @@ Singleton {
     Cmd { id: reader }
     Cmd { id: oneShot }
     Cmd { id: brightReader; timeout: 5000 }
+
+    // ---------- after the computer wakes up ----------
+    // Going to sleep, the LED core turns the light off through the driver, and the HP module then keeps brightness 0
+    // (hp-wmi.c hp_kbd_set_brightness, LED_OFF path). On waking up the firmware lights it again, but the module still
+    // says 0, and every colour written afterwards is applied at that brightness (led-class-multicolor.c
+    // multi_intensity_store): the light stays on with its last colour and an effect looks frozen. So after a wake-up
+    // the light's brightness is read again; if it says 0 although it was on before sleeping and the key that turns
+    // it off (Fn) wasn't used (brightness_hw_changed isn't "0"), the brightness from before is written back.
+    // A wake-up shows as a jump of the wall clock between two runs of this timer (timers don't count while asleep).
+    readonly property int wakeGap: 15000
+    property double lastAwake: Date.now()
+    Timer {
+        interval: 5000; repeat: true
+        running: root.available && root.hasBrightness
+        onTriggered: {
+            const now = Date.now()
+            const gap = now - root.lastAwake
+            root.lastAwake = now
+            if (gap > root.wakeGap) root.afterWake()
+        }
+    }
+    function afterWake() {
+        const before = brightness
+        if (!available || !hasBrightness || !writable || before === 0 || wakeReader.busy) return
+        wakeReader.go(["sh", "-c", 'cat "$1/brightness"; cat "$1/brightness_hw_changed" 2>/dev/null || echo none', "sh", dir],
+                      (code, out) => {
+            const v = out.trim().split("\n")
+            const b = parseInt(v[0]), hw = (v[1] || "").trim()
+            if (!isFinite(b) || root.pending.brightness !== undefined) return
+            if (b === 0 && hw !== "0") {
+                console.log("[solwind] after waking up the keyboard light says brightness 0; setting it back to " + before)
+                root.setBrightness(before)
+            } else {
+                root.brightness = b                // (turned off with Fn, or nothing to fix)
+                root.brightAt = Date.now()
+            }
+        })
+    }
+    Cmd { id: wakeReader; timeout: 5000 }
     function loadSaved() {
         const k = Settings.kbdOf()
         // Older versions could save a colour cycle on the single chosen colour (it can't cycle): use the colour list
