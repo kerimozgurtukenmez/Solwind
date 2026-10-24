@@ -231,6 +231,7 @@ var dict = {
         "yes": "var",
         "no": "yok",
         "old, less strict rule": "eski, daha gevşek kural",
+        "No NBFC config is selected yet, so NBFC can't start. Pick one below in \"NBFC config\" (the recommend button finds configs that may fit this laptop).": "Henüz NBFC config'i seçilmedi, bu yüzden NBFC başlayamıyor. Aşağıdaki \"NBFC config\" kartından seç (öneri düğmesi bu laptopa uyabilecek config'leri bulur).",
         "Ccenter's rule, old name": "Ccenter'in kuralı, eski ad",
         "Support: %1": "Destek: %1",
         "not supported": "desteklenmiyor",

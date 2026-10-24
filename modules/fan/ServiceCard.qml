@@ -20,6 +20,15 @@ Card {
         StyledText { visible: Nbfc.running && isFinite(Nbfc.temp); text: "thermostat"; color: Colours.primary; font { family: Colours.iconFont; pixelSize: 20 } }
         StyledText { visible: Nbfc.running && isFinite(Nbfc.temp); text: Math.round(Nbfc.temp) + "°C"; color: Colours.fg; font { pixelSize: 15; bold: true } }
     }
+    // A fresh NBFC has no config: say why it can't start and where to pick one
+    StyledText {
+        Layout.fillWidth: true
+        visible: Nbfc.noConfig && !Nbfc.running
+        text: I18n.t("No NBFC config is selected yet, so NBFC can't start. Pick one below in \"NBFC config\" (the recommend button finds configs that may fit this laptop).")
+        wrapMode: Text.WordWrap
+        color: Colours.warning
+        font.pixelSize: 12
+    }
     StyledText {
         Layout.fillWidth: true
         visible: Nbfc.message !== ""

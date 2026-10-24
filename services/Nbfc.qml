@@ -12,6 +12,9 @@ Singleton {
     property bool running: false
     property bool readOnly: false
     property string configId: ""
+    property bool configRead: false           // /etc/nbfc/nbfc.json was read (or found missing) at least once
+    // No config selected yet (no nbfc.json, or no SelectedConfigId in it): NBFC can't start until one is picked
+    readonly property bool noConfig: configRead && configId === ""
     property var fans: []                 // [{ name, temp, auto, current, target }]
     property real temp: NaN
     property bool bootEnabled: false
@@ -63,7 +66,11 @@ Singleton {
             Qt.callLater(root.pumpAdmin)
         })
     }
-    function firstLine(s) { return s.trim().split("\n")[0] }
+    // The first line that says something: nbfc_service starts every run with "INFO: ... comes with no warranty"
+    function firstLine(s) {
+        const all = s.trim().split("\n")
+        return all.find(l => !/^\s*INFO:/.test(l)) ?? all[0]
+    }
     function lines(s) { return s.split("\n").map(l => l.trim()).filter(l => l !== "") }
 
     // While an admin action runs and for a few seconds after it, NBFC may stop and start: that is not reported as
@@ -579,7 +586,10 @@ Singleton {
         onLoaded: {
             try { root.configId = JSON.parse(text()).SelectedConfigId || "" }
             catch (e) { console.log("[solwind] /etc/nbfc/nbfc.json could not be read: " + e) }
+            root.configRead = true
         }
+        // Missing (no config was ever selected): the id stays as it was ("" on a fresh install)
+        onLoadFailed: root.configRead = true
     }
 
     onConfigIdChanged: { forgetFans(); mergeConfigs(); loadConfigCurves() }
