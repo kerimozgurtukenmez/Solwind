@@ -1,32 +1,39 @@
 import QtQuick
 import QtQuick.Layouts
+import Caelestia.Config
 import qs.services
 
+// Pill button in Caelestia's styles (components/controls/TextButton.qml, GPL-3.0): filled (primary), tonal
+// (secondary container, the default) or text (no background)
 Rectangle {
     id: b
     property string text
     property string icon: ""
     property bool filled: false
-    readonly property color fgc: filled ? Colours.fgOnPrimary : Colours.fg
+    property bool textOnly: false
+    readonly property color fgc: filled ? Colours.fgOnPrimary : textOnly ? Colours.primary : Colours.fgOnSecondaryContainer
     signal clicked()
 
-    implicitHeight: 38
-    implicitWidth: row.implicitWidth + 28
-    radius: 19
-    color: filled ? Colours.primary : Colours.surfaceHigh
+    implicitHeight: Math.max(row.implicitHeight, 20) + Tokens.padding.small * 2
+    implicitWidth: row.implicitWidth + Tokens.padding.large * 2
+    radius: ma.pressed ? Tokens.rounding.small : height / 2
+    color: !enabled ? Qt.alpha(Colours.fg, 0.1) : filled ? Colours.primary : textOnly ? "transparent" : Colours.secondaryContainer
+    Behavior on radius { Anim { type: Anim.DefaultEffects } }
+    Behavior on color { CAnim {} }
 
     Rectangle {
         anchors.fill: parent
         radius: parent.radius
-        color: Colours.fg
-        opacity: ma.containsMouse ? 0.1 : 0
+        color: b.fgc
+        opacity: ma.pressed ? 0.12 : ma.containsMouse ? 0.08 : 0
+        Behavior on opacity { Anim { type: Anim.DefaultEffects } }
     }
     RowLayout {
         id: row
         anchors.centerIn: parent
-        spacing: 6
-        StyledText { visible: b.icon !== ""; text: b.icon; color: b.fgc; font { family: Colours.iconFont; pixelSize: 18 } }
-        StyledText { visible: b.text !== ""; text: b.text; color: b.fgc; font { pixelSize: 13; bold: true } }
+        spacing: Tokens.spacing.small
+        MaterialIcon { visible: b.icon !== ""; text: b.icon; color: b.enabled ? b.fgc : Qt.alpha(Colours.fg, 0.38); size: Tokens.font.icon.small; fill: 1 }
+        StyledText { visible: b.text !== ""; text: b.text; color: b.enabled ? b.fgc : Qt.alpha(Colours.fg, 0.38); font: Tokens.font.label.large }
     }
     MouseArea {
         id: ma

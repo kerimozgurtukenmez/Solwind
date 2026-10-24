@@ -123,12 +123,12 @@ Keybinds or scripts that use `ccenter` need `solwind` now.
 
 ### Permissions
 
-- **Keyboard light (optional):** your user needs write access to the light's files. Use **Grant permission** in the Keyboard tab (or `sudo make udev`); **Remove permission** undoes it. Only your user gets access.
+- **Keyboard light (optional):** your user needs write access to the light's files. Use **Grant permission** on the Keyboard page (or `sudo make udev`); **Remove permission** undoes it. Only your user gets access.
 - **NBFC service actions** (start, stop, applying a config) ask for your password every time. Setting fan speeds doesn't.
 
 ## Usage
 
-- Closing the window doesn't quit Solwind, it keeps controlling the fans. Quit with the **Quit** button, the tray menu or `solwind quit`; the fans go back to NBFC first.
+- Closing the window doesn't quit Solwind, it keeps controlling the fans. Quit with **Quit** in Settings, the tray menu or `solwind quit`; the fans go back to NBFC first.
 - **Start in the background on login** is a switch in the app (a systemd user service). If Solwind crashes there, the fans go back to NBFC and it starts again.
 - Started from a terminal, it stays there and shows its log; Ctrl+C quits it cleanly. `solwind -d` starts it detached. If it's already running, `solwind` just opens the window.
 
@@ -145,7 +145,7 @@ Exit codes: 0 done, 1 error, 2 wrong usage, 3 already running, 4 not running. Fo
 
 ## Reporting a problem
 
-Run `solwind report` (or **Create report** at the bottom of a tab) and attach the file to a [GitHub issue](https://github.com/kerimozgurtukenmez/Solwind/issues). It's one text file in your home folder with versions, your laptop model (no serial numbers), NBFC status, what Solwind detected, your settings and recent logs. Your user name and computer name are replaced, nothing is sent anywhere. Logs are cleared on reboot, so make it before rebooting.
+Run `solwind report` (or **Create report** in Settings) and attach the file to a [GitHub issue](https://github.com/kerimozgurtukenmez/Solwind/issues). It's one text file in your home folder with versions, your laptop model (no serial numbers), NBFC status, what Solwind detected, your settings and recent logs. Your user name and computer name are replaced, nothing is sent anywhere. Logs are cleared on reboot, so make it before rebooting.
 
 ## Undoing things
 

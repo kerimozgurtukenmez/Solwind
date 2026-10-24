@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import Caelestia.Config
 import qs.components
 import qs.services
 
@@ -21,7 +22,7 @@ Card {
         Layout.fillWidth: true
         text: card.active !== "" ? I18n.t("Active: %1").arg(FanState.activeName()) : I18n.t("Custom settings (no profile selected)")
         color: Colours.fgDim
-        font.pixelSize: 11
+        font: Tokens.font.label.small
     }
 
     Flow {
@@ -35,33 +36,34 @@ Card {
                 required property var modelData
                 readonly property bool on: modelData.name === card.active
                 readonly property bool deleting: card.confirmDelete === modelData.name
-                implicitHeight: 36
-                implicitWidth: row.implicitWidth + 28
+                implicitHeight: row.implicitHeight + Tokens.padding.small * 2 + 4
+                implicitWidth: row.implicitWidth + Tokens.padding.large * 2
                 radius: height / 2
-                color: deleting ? Colours.error : (on ? Colours.primary : Colours.surfaceHigh)
+                color: deleting ? Colours.error : (on ? Colours.primary : Colours.secondaryContainer)
                 Behavior on color { CAnim {} }
 
                 RowLayout {
                     id: row
                     anchors.centerIn: parent
                     spacing: 6
-                    StyledText {
+                    MaterialIcon {
                         text: chip.modelData.icon
-                        color: chip.on || chip.deleting ? Colours.fgOnPrimary : Colours.primary
-                        font { family: Colours.iconFont; pixelSize: 18 }
+                        color: chip.on || chip.deleting ? Colours.fgOnPrimary : Colours.fgOnSecondaryContainer
+                        fill: chip.on ? 1 : 0
+                        size: Tokens.font.icon.small
                     }
                     StyledText {
                         text: chip.deleting ? I18n.t("Delete?") : FanState.displayName(chip.modelData)
-                        color: chip.on || chip.deleting ? Colours.fgOnPrimary : Colours.fg
-                        font { pixelSize: 13; bold: true }
+                        color: chip.on || chip.deleting ? Colours.fgOnPrimary : Colours.fgOnSecondaryContainer
+                        font: Tokens.font.label.large
                     }
                     // Delete button on the user's own profiles (its click area is further down, on top)
-                    StyledText {
+                    MaterialIcon {
                         id: closeIcon
                         visible: !chip.modelData.builtin
                         text: "close"
-                        color: chip.on || chip.deleting ? Colours.fgOnPrimary : Colours.fgDim
-                        font { family: Colours.iconFont; pixelSize: 16 }
+                        color: chip.on || chip.deleting ? Colours.fgOnPrimary : Colours.fgOnSecondaryContainer
+                        size: Tokens.font.icon.small
                     }
                 }
                 // Click areas come after the content so they stay on top (z: -1 used to swallow clicks)
@@ -108,16 +110,16 @@ Card {
     RowLayout {
         Layout.fillWidth: true
         spacing: 8
-        StyledText {
+        MaterialIcon {
             text: "air"
             color: Nbfc.boosting ? Colours.error : Colours.primary
-            font { family: Colours.iconFont; pixelSize: 22 }
+            size: Tokens.font.icon.medium
         }
         StyledText {
             Layout.fillWidth: true
             text: Nbfc.boosting ? I18n.t("Max fan on") + (Nbfc.boostUntil > 0 ? " · " + I18n.t("%1 left").arg(card.remaining()) : "") : I18n.t("Max fan")
             color: Nbfc.boosting ? Colours.error : Colours.fg
-            font { pixelSize: 13; bold: Nbfc.boosting }
+            font: Tokens.font.label.large
         }
         Repeater {
             model: Nbfc.boosting ? [] : [{ t: I18n.t("5 min"), m: 5 }, { t: I18n.t("15 min"), m: 15 }, { t: I18n.t("Until off"), m: -1 }]
@@ -145,16 +147,16 @@ Card {
 
         Rectangle {
             Layout.fillWidth: true
-            implicitHeight: 38
-            radius: 19
-            color: Colours.surfaceHigh
+            implicitHeight: save.implicitHeight
+            radius: height / 2
+            color: Colours.surfaceHighest
             StyledText {
                 visible: nameInput.text === ""
                 x: 16
                 anchors.verticalCenter: parent.verticalCenter
                 text: I18n.t("Save the current settings: profile name…")
                 color: Colours.fgDim
-                font.pixelSize: 13
+                font: Tokens.font.body.small
             }
             TextInput {
                 id: nameInput
@@ -164,7 +166,7 @@ Card {
                 selectByMouse: true
                 clip: true
                 maximumLength: 32
-                font { family: Colours.fontFamily; pixelSize: 13 }
+                font: Tokens.font.body.medium
                 onAccepted: save.clicked()
             }
         }
@@ -187,6 +189,6 @@ Card {
         visible: card.nameTaken
         text: I18n.t("This name belongs to a built-in profile, pick another one.")
         color: Colours.error
-        font.pixelSize: 11
+        font: Tokens.font.label.small
     }
 }

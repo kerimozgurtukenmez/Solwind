@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import Caelestia.Config
 import qs.components
 import qs.services
 
@@ -9,7 +10,7 @@ Card {
     GridLayout {
         Layout.fillWidth: true
         columns: Math.max(1, Sensors.readings.length)
-        columnSpacing: 10
+        columnSpacing: Tokens.spacing.small
         Repeater {
             model: Sensors.readings.length
             Rectangle {
@@ -18,29 +19,29 @@ Card {
                 Layout.fillWidth: true
                 Layout.preferredWidth: 1
                 Layout.fillHeight: true
-                implicitHeight: info.implicitHeight + 24
-                radius: 16
+                implicitHeight: info.implicitHeight + Tokens.padding.large * 2
+                radius: Tokens.rounding.large
                 color: Colours.surfaceHigh
 
                 ColumnLayout {
                     id: info
-                    anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; margins: 12 }
-                    spacing: 2
+                    anchors { left: parent.left; right: parent.right; top: parent.top; margins: Tokens.padding.large }
+                    spacing: Tokens.spacing.extraSmall / 2
                     RowLayout {
                         Layout.fillWidth: true
-                        spacing: 6
-                        StyledText {
+                        spacing: Tokens.spacing.small
+                        MaterialIcon {
                             text: r && r.label === "CPU" ? "memory" : "developer_board"
                             color: Colours.primary
-                            font { family: Colours.iconFont; pixelSize: 16 }
+                            size: Tokens.font.icon.small
                         }
-                        StyledText { text: r ? r.label : ""; color: Colours.fgDim; font { pixelSize: 11; bold: true; letterSpacing: 0.8 } }
+                        StyledText { text: r ? r.label : ""; color: Colours.fgDim; font: Tokens.font.label.medium }
                     }
                     StyledText {
                         Layout.fillWidth: true
                         text: known ? Math.round(r.value) + "°C" : (r && r.note !== "" ? r.note : "—")
                         color: known && r.value >= 85 ? Colours.error : (known && r.value >= 70 ? Colours.warning : Colours.fg)
-                        font { pixelSize: known ? 24 : 15; bold: true }
+                        font: known ? Tokens.font.title.large : Tokens.font.title.small
                     }
                     StyledText {
                         Layout.fillWidth: true
@@ -50,13 +51,13 @@ Card {
                         maximumLineCount: 2
                         elide: Text.ElideRight
                         color: Colours.fg
-                        font.pixelSize: 11
+                        font: Tokens.font.label.small
                     }
                     StyledText {
                         visible: r && r.extra !== ""
                         text: r ? r.extra : ""
                         color: Colours.fgDim
-                        font.pixelSize: 10
+                        font: Tokens.font.label.small
                     }
                 }
             }
@@ -66,6 +67,6 @@ Card {
         visible: Sensors.readings.length === 0
         text: I18n.t("Could not read the sensors")
         color: Colours.fgDim
-        font.pixelSize: 12
+        font: Tokens.font.body.small
     }
 }

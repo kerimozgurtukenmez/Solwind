@@ -7,6 +7,7 @@ import Caelestia.Config
 import qs.components
 import qs.modules.fan
 import qs.modules.keyboard
+import qs.modules.settings
 import qs.services
 
 ShellRoot {
@@ -21,56 +22,85 @@ ShellRoot {
         active: root.shown
         // FloatingWindow = a normal xdg window (Hyprland tiles it). PanelWindow is layer-shell and doesn't tile.
         FloatingWindow {
+            id: win
             title: "Solwind"
             visible: true
             // Closing the window doesn't quit the app; it keeps running in the background (reopen with `solwind`)
             onClosed: root.shown = false
-            implicitWidth: 600
+            implicitWidth: 900
             implicitHeight: 780
             color: Colours.surface
             // Caelestia's tokens are per screen (rounding, spacing etc.)
             contentItem.Tokens.screen: screen?.name ?? ""
 
+            // The layout of Caelestia's settings app (modules/nexus/Nexus.qml, GPL-3.0): navigation on the left,
+            // the page on a panel next to it. A narrow window shows the navigation as icons only.
+            readonly property bool compact: width < 720
+            readonly property var pages: [
+                { icon: "mode_fan", label: I18n.t("Fan control"), sub: I18n.t("NBFC · speed and curves") },
+                { icon: "keyboard", label: I18n.t("Keyboard"), sub: I18n.t("RGB · color and brightness") },
+                { icon: "settings", label: I18n.t("Settings"), sub: I18n.t("Language and notifications") }
+            ]
+
             ColumnLayout {
-                anchors { fill: parent; margins: Tokens.padding.largeIncreased }
+                id: nav
+                anchors { top: parent.top; bottom: parent.bottom; left: parent.left; margins: Tokens.padding.large }
+                width: win.compact ? 76 : Math.min(Tokens.sizes.nexus.maxNavWidth, 340, Math.round(win.width / 3))
                 spacing: Tokens.spacing.large
 
-                RowLayout {
+                // App name: one word in two colours (no gap between them)
+                Row {
+                    visible: !win.compact
+                    Layout.leftMargin: Tokens.padding.small
+                    Layout.topMargin: Tokens.padding.small
+                    StyledText { text: "Sol"; color: Colours.fg; font: Tokens.font.title.large }
+                    StyledText { text: "wind"; color: Colours.primary; font: Tokens.font.title.large }
+                }
+                ColumnLayout {
                     Layout.fillWidth: true
-                    Row {                                    // one word in two colours: no gap between them
-                        StyledText { text: "Sol"; color: Colours.fg; font { pixelSize: 26; bold: true } }
-                        StyledText { text: "wind"; color: Colours.primary; font { pixelSize: 26; bold: true } }
-                    }
-                    Item { Layout.fillWidth: true }
-                    // Language switch (saved in settings; default follows the system language)
-                    Segment {
-                        Layout.fillWidth: false
-                        implicitWidth: 120
-                        model: I18n.languages.map(l => l.id.toUpperCase())
-                        controlled: true
-                        current: I18n.languages.findIndex(l => l.id === I18n.lang)
-                        onPicked: i => I18n.setLang(I18n.languages[i].id)
+                    spacing: Tokens.spacing.extraSmall
+                    Repeater {
+                        model: win.pages
+                        NavItem {
+                            required property var modelData
+                            required property int index
+                            icon: modelData.icon; label: modelData.label; sub: modelData.sub
+                            compact: win.compact
+                            selected: root.tab === index
+                            first: index === 0
+                            last: index === win.pages.length - 1
+                            onClicked: root.tab = index
+                        }
                     }
                 }
+                Item { Layout.fillHeight: true }
+                // A glance at the state, whatever page is open
+                Flow {
+                    visible: !win.compact
+                    Layout.fillWidth: true
+                    spacing: Tokens.spacing.small
+                    Chip {
+                        dot: Nbfc.running ? Colours.success : Colours.outlineStrong
+                        text: Nbfc.running ? (Nbfc.readOnly ? I18n.t("Running (read-only)") : I18n.t("Running")) : I18n.t("Stopped")
+                    }
+                    Chip { visible: isFinite(Nbfc.temp); icon: "thermostat"; text: "CPU " + Math.round(Nbfc.temp) + "°C" }
+                    Chip { visible: Nbfc.boosting; strong: true; icon: "air"; text: I18n.t("Max fan") }
+                }
+            }
 
-                RowLayout {
-                    spacing: Tokens.spacing.medium
-                    NavButton {
-                        icon: "mode_fan"; label: I18n.t("Fan control"); sub: I18n.t("NBFC · speed and curves")
-                        active: root.tab === 0; onClicked: root.tab = 0
-                    }
-                    NavButton {
-                        icon: "keyboard"; label: I18n.t("Keyboard"); sub: I18n.t("RGB · color and brightness")
-                        active: root.tab === 1; onClicked: root.tab = 1
-                    }
-                }
+            Rectangle {
+                id: panel
+                anchors { top: parent.top; bottom: parent.bottom; right: parent.right; left: nav.right
+                          margins: Tokens.padding.medium; leftMargin: Tokens.padding.large }
+                radius: Tokens.rounding.large
+                color: Colours.surfaceLow
 
                 StackLayout {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
+                    anchors { fill: parent; margins: Tokens.padding.extraLarge; bottomMargin: 0 }
                     currentIndex: root.tab
                     FanPage {}
                     KeyboardPage {}
+                    SettingsPage {}
                 }
             }
         }
@@ -127,6 +157,8 @@ ShellRoot {
     IpcHandler {
         target: "cc"
         function toggle(): void { root.shown = !root.shown }
+        // Open the window on a page (0 fan control, 1 keyboard, 2 settings); used by the UI preview
+        function tab(i: int): void { root.tab = Math.max(0, Math.min(2, i)); root.shown = true }
         function open(): void { root.shown = true }
         function hide(): void { root.shown = false }
         // Quit completely: fans driven by Solwind go back to NBFC's automatic control

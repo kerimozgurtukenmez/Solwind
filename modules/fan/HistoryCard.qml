@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import Caelestia.Config
 import QtQuick.Shapes
 import qs.components
 import qs.services
@@ -84,22 +85,22 @@ Card {
                 required property var modelData
                 spacing: 6
                 Rectangle { width: 14; height: 3; radius: 1.5; color: modelData.color }
-                StyledText { text: modelData.label; color: Colours.fgDim; font.pixelSize: 11 }
+                StyledText { text: modelData.label; color: Colours.fgDim; font: Tokens.font.label.small }
                 StyledText {
                     text: card.last ? card.deg(card.last[modelData.key]) : "—"
                     color: Colours.fg
-                    font { pixelSize: 12; bold: true }
+                    font: Tokens.font.label.medium
                 }
             }
         }
         RowLayout {
             spacing: 6
             Rectangle { width: 14; height: 3; radius: 1.5; color: Colours.fgDim }
-            StyledText { text: I18n.t("Fan speed"); color: Colours.fgDim; font.pixelSize: 11 }
+            StyledText { text: I18n.t("Fan speed"); color: Colours.fgDim; font: Tokens.font.label.small }
             StyledText {
                 text: card.last ? card.pct(card.last.fan) : "—"
                 color: Colours.fg
-                font { pixelSize: 12; bold: true }
+                font: Tokens.font.label.medium
             }
         }
         Item { Layout.fillWidth: true }
@@ -107,7 +108,7 @@ Card {
             visible: card.h.length < 2
             text: I18n.t("Collecting data…")
             color: Colours.fgDim
-            font.pixelSize: 11
+            font: Tokens.font.label.small
         }
     }
 
@@ -245,7 +246,7 @@ Card {
                     .concat(card.temps.map(s => s.label + " " + card.deg(card.hovered[s.key])))
                     .concat([I18n.t("Fan speed") + " " + card.pct(card.hovered.fan)]).join("\n")
                 color: Colours.fg
-                font.pixelSize: 11
+                font: Tokens.font.label.small
             }
         }
         MouseArea {

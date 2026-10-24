@@ -1,8 +1,8 @@
 import QtQuick
 import Caelestia.Config
 
-// Colour transition: duration and easing from Caelestia's tokens
+// Colour transition, as Caelestia's (components/CAnim.qml, GPL-3.0)
 ColorAnimation {
-    duration: Tokens.anim.durations.expressiveDefaultEffects
-    easing: Tokens.anim.expressiveDefaultEffects
+    duration: Tokens.anim.durations.expressiveSlowEffects
+    easing: Tokens.anim.expressiveSlowEffects
 }

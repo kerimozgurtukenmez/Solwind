@@ -18,6 +18,9 @@ Singleton {
         property color surface: "#141218"
         property color surfaceContainer: "#211f26"
         property color surfaceContainerHigh: "#2b2930"
+        property color surfaceContainerHighest: "#36343b"
+        property color surfaceContainerLow: "#1d1b20"
+        property color surfaceContainerLowest: "#0f0d13"
     }
     property color primary: "#d0bcff"
     property color fgOnPrimary: "#381e72"
@@ -30,18 +33,25 @@ Singleton {
     property color tertiary: "#efb8c8"
     property color secondary: "#ccc2dc"
     property color sky: "#89dceb"
+    // Material 3 roles Caelestia's settings app uses (selected navigation, tonal buttons, slider track, switch)
+    property color secondaryContainer: "#4a4458"
+    property color fgOnSecondaryContainer: "#e8def8"
+    property color fgOnSecondary: "#332d41"
+    property color outlineStrong: "#938f99"     // M3 "outline" (`outline` here is M3 "outlineVariant")
     // The theme's accent colours (tinted to the wallpaper); colour pool for keyboard effects
     property var accents: []
     readonly property var accentKeys: ["mauve", "pink", "red", "maroon", "peach", "yellow", "green", "teal",
                                        "sky", "sapphire", "blue", "lavender", "flamingo", "rosewater"]
     property bool light: false
-    readonly property string iconFont: "Material Symbols Rounded"
     readonly property string fontFamily: Tokens.font.body.small.family
 
     // Backgrounds go through the transparency layers: window (0) < card (1) < inside a card (2)
     readonly property color surface: layer(raw.surface, 0)
     readonly property color surfaceContainer: layer(raw.surfaceContainer, 1)
     readonly property color surfaceHigh: layer(raw.surfaceContainerHigh, 2)
+    readonly property color surfaceHighest: layer(raw.surfaceContainerHighest, 2)   // switch track (off), inputs
+    readonly property color surfaceLow: layer(raw.surfaceContainerLow, 1)           // the content panel behind the rows
+    readonly property color surfaceLowest: layer(raw.surfaceContainerLowest, 1)
 
     // ---------- Caelestia transparency (same maths as Caelestia's services/Colours.qml, adapted; GPL-3.0) ----------
     readonly property bool trEnabled: Tokens.transparency.enabled
@@ -69,10 +79,14 @@ Singleton {
     // property name -> key in scheme.json (missing keys are skipped and keep the default)
     readonly property var keys: ({
         primary: "primary", fgOnPrimary: "onPrimary", fg: "onSurface", fgDim: "onSurfaceVariant",
-        outline: "outlineVariant", error: "error", success: "success", warning: "yellow", tertiary: "tertiary", secondary: "secondary", sky: "sky"
+        outline: "outlineVariant", error: "error", success: "success", warning: "yellow", tertiary: "tertiary", secondary: "secondary", sky: "sky",
+        secondaryContainer: "secondaryContainer", fgOnSecondaryContainer: "onSecondaryContainer", fgOnSecondary: "onSecondary",
+        outlineStrong: "outline"
     })
     readonly property var rawKeys: ({
-        surface: "surface", surfaceContainer: "surfaceContainer", surfaceContainerHigh: "surfaceContainerHigh"
+        surface: "surface", surfaceContainer: "surfaceContainer", surfaceContainerHigh: "surfaceContainerHigh",
+        surfaceContainerHighest: "surfaceContainerHighest", surfaceContainerLow: "surfaceContainerLow",
+        surfaceContainerLowest: "surfaceContainerLowest"
     })
 
     readonly property string stateDir: Quickshell.env("HOME") + "/.local/state/caelestia"

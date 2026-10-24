@@ -176,7 +176,7 @@ Singleton {
         configs = all
         const from = cfgFromDir.length > 0 ? " (" + cfgDirs + ")" : cfgFromCli.length > 0 ? " (nbfc config -l)" : ""
         const onlyCurrent = cfgFromDir.length === 0 && cfgFromCli.length === 0
-        configNote = (all.length > 0 ? all.length + " config" + from : I18n.t("Could not get the list"))
+        configNote = (all.length > 0 ? I18n.t("%1 configs").arg(all.length) + from : I18n.t("Could not get the list"))
                    + (onlyCurrent ? " · " + I18n.t("only the selected config is known, no config folder found") : "")
                    + (cfgNoteCli !== "" && cfgFromDir.length === 0 ? " · " + cfgNoteCli : "")
     }

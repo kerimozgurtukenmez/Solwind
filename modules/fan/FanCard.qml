@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import Caelestia.Config
 import qs.components
 import qs.services
 
@@ -52,12 +53,12 @@ Card {
     RowLayout {
         Layout.fillWidth: true
         spacing: 10
-        StyledText { text: "mode_fan"; color: Colours.primary; font { family: Colours.iconFont; pixelSize: 24 } }
+        MaterialIcon { text: "mode_fan"; color: Colours.primary; size: Tokens.font.icon.medium }
         ColumnLayout {
             Layout.fillWidth: true
             spacing: 0
-            StyledText { text: fan.name; color: Colours.fg; font { pixelSize: 15; bold: true } }
-            StyledText { Layout.fillWidth: true; text: fan.subtitle; elide: Text.ElideRight; color: Colours.fgDim; font.pixelSize: 11 }
+            StyledText { text: fan.name; color: Colours.fg; font: Tokens.font.title.small }
+            StyledText { Layout.fillWidth: true; text: fan.subtitle; elide: Text.ElideRight; color: Colours.fgDim; font: Tokens.font.label.small }
         }
         ColumnLayout {
             visible: !fan.isGlobal
@@ -66,7 +67,7 @@ Card {
                 Layout.alignment: Qt.AlignRight
                 text: fan.info ? Math.round(fan.info.current) + "%" : "—"
                 color: Colours.primary
-                font { pixelSize: 13; bold: true }
+                font: Tokens.font.label.large
             }
             // Real RPM: only if the driver reports trustworthy values (always 0 on some models)
             StyledText {
@@ -75,7 +76,7 @@ Card {
                 Layout.alignment: Qt.AlignRight
                 text: Math.round(rpm) + " RPM"
                 color: Colours.fgDim
-                font.pixelSize: 10
+                font: Tokens.font.label.small
             }
         }
         Toggle {
@@ -110,7 +111,7 @@ Card {
                 ? I18n.t("Uses the NBFC config's curve") + (fan.isGlobal ? " " + I18n.t("(showing Fan 1's)") : "") + " · " + I18n.t("slow-down ~%1°C").arg(parent.cfgCurve.hyst)
                 : (Nbfc.configCurves.length > 0 ? I18n.t("The config defines no threshold table; NBFC uses its own default.") : I18n.t("Uses the curve from the config."))
             color: Colours.fgDim
-            font.pixelSize: 11
+            font: Tokens.font.label.small
         }
         CurveEditor {
             visible: fan.mode === 0 && parent.cfgCurve !== null
@@ -139,6 +140,7 @@ Card {
         SliderRow {
             id: fixedRow
             visible: fan.mode === 1
+            flat: true
             label: I18n.t("Fixed speed")
             value: 0.5
             readout: Math.round(value * 100) + "%"
@@ -150,7 +152,7 @@ Card {
             visible: fan.mode === 2 && Sensors.hasGpu
             Layout.fillWidth: true
             spacing: 10
-            StyledText { text: I18n.t("Temperature"); color: Colours.fgDim; font.pixelSize: 12 }
+            StyledText { text: I18n.t("Temperature"); color: Colours.fgDim; font: Tokens.font.body.small }
             Segment {
                 controlled: true
                 model: ["CPU", "GPU", I18n.t("Hottest")]

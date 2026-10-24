@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import Caelestia.Config
 import qs.components
 import qs.services
 
@@ -7,12 +8,10 @@ import qs.services
 // The page adapts to what was detected: a detection summary on top, then (if the light has colour) the settings of
 // the selected effect on the left and the effect list on the right (effects only on tested drivers), brightness below
 // (a slider, or level buttons when the light has only a few levels).
-Flickable {
+PageBase {
     id: page
-    clip: true
-    contentWidth: width
-    contentHeight: col.implicitHeight
-    boundsBehavior: Flickable.StopAtBounds
+    title: I18n.t("Keyboard")
+    sub: Keyboard.available ? Keyboard.name : ""
 
     readonly property bool canWrite: Keyboard.available && Keyboard.writable
     readonly property bool breathing: Keyboard.effect === "breathing"
@@ -54,8 +53,8 @@ Flickable {
 
     ColumnLayout {
         id: col
-        width: page.width
-        spacing: 12
+        Layout.fillWidth: true
+        spacing: Tokens.spacing.largeIncreased
 
         // ---------- status ----------
         Card {
@@ -68,12 +67,12 @@ Flickable {
                     color: Keyboard.rgb ? Keyboard.color : Colours.surfaceHigh
                     opacity: Keyboard.maxBrightness > 0 ? 0.35 + 0.65 * Keyboard.brightness / Keyboard.maxBrightness : 1
                     border { width: 2; color: Colours.outline }
-                    StyledText {
+                    MaterialIcon {
                         anchors.centerIn: parent
                         visible: !Keyboard.rgb
                         text: "keyboard"
                         color: Colours.primary
-                        font { family: Colours.iconFont; pixelSize: 24 }
+                        size: Tokens.font.icon.medium
                     }
                 }
                 ColumnLayout {
@@ -82,7 +81,7 @@ Flickable {
                     StyledText {
                         text: !Keyboard.ready ? I18n.t("Reading…") : Keyboard.available ? Keyboard.name : I18n.t("No keyboard light found")
                         color: Colours.fg
-                        font { pixelSize: 15; bold: true }
+                        font: Tokens.font.title.small
                     }
                     StyledText {
                         Layout.fillWidth: true
@@ -90,7 +89,7 @@ Flickable {
                         text: !Keyboard.available ? I18n.t("This computer has no keyboard light the kernel recognizes.")
                             : Keyboard.kindText() + (Keyboard.effectsAllowed ? " · " + I18n.t("effect: %1").arg(page.current.name) : "")
                         color: Colours.fgDim
-                        font.pixelSize: 11
+                        font: Tokens.font.label.small
                     }
                 }
             }
@@ -114,18 +113,18 @@ Flickable {
                         required property var modelData
                         Layout.fillWidth: true
                         spacing: 8
-                        StyledText {
+                        MaterialIcon {
                             text: modelData.ok ? "check_circle" : "cancel"
                             color: modelData.ok ? Colours.success : Colours.fgDim
-                            font { family: Colours.iconFont; pixelSize: 16 }
+                            size: Tokens.font.icon.small
                         }
-                        StyledText { text: modelData.label; color: Colours.fgDim; font.pixelSize: 11; Layout.preferredWidth: 90 }
+                        StyledText { text: modelData.label; color: Colours.fgDim; font: Tokens.font.label.small; Layout.preferredWidth: 90 }
                         StyledText {
                             Layout.fillWidth: true
                             text: modelData.value
                             elide: Text.ElideRight
                             color: Colours.fg
-                            font.pixelSize: 11
+                            font: Tokens.font.label.small
                         }
                     }
                 }
@@ -138,7 +137,7 @@ Flickable {
                         wrapMode: Text.WordWrap
                         text: Keyboard.noteText(modelData)
                         color: Colours.warning
-                        font.pixelSize: 11
+                        font: Tokens.font.label.small
                     }
                 }
             }
@@ -152,7 +151,7 @@ Flickable {
                     wrapMode: Text.WordWrap
                     text: I18n.t("Permission is needed to change the keyboard light.")
                     color: Colours.warning
-                    font { pixelSize: 13; bold: true }
+                    font: Tokens.font.label.large
                 }
                 StyledText {
                     Layout.fillWidth: true
@@ -165,7 +164,7 @@ Flickable {
                         + (Keyboard.ruleOld ? I18n.t("The old rule of Ccenter (Solwind's old name), 90-ccenter.rules, is removed.") + "\n" : "")
                         + I18n.t("Undo: 'Remove permission' here. Your password is asked in the system's own window; Solwind never sees it.")
                     color: Colours.fgDim
-                    font.pixelSize: 11
+                    font: Tokens.font.label.small
                 }
                 Btn {
                     icon: "key"
@@ -186,7 +185,7 @@ Flickable {
                     text: Keyboard.ruleLegacy ? I18n.t("The installed permission is from an older, less strict version. The new version allows only your user.")
                                               : I18n.t("The installed permission was added by Ccenter, Solwind's old name (/etc/udev/rules.d/90-ccenter.rules). Updating it moves it to 90-solwind.rules.")
                     color: Colours.warning
-                    font.pixelSize: 11
+                    font: Tokens.font.label.small
                 }
                 Btn {
                     icon: "shield"
@@ -206,7 +205,7 @@ Flickable {
                     wrapMode: Text.WordWrap
                     text: I18n.t("Keyboard light permission is on (/etc/udev/rules.d/90-solwind.rules).")
                     color: Colours.fgDim
-                    font.pixelSize: 11
+                    font: Tokens.font.label.small
                 }
                 Btn {
                     icon: "key_off"
@@ -221,17 +220,37 @@ Flickable {
                 wrapMode: Text.WordWrap
                 text: Keyboard.error
                 color: Colours.error
-                font.pixelSize: 12
+                font: Tokens.font.body.small
             }
         }
 
-        // ---------- effect: settings on the left, list on the right ----------
-        RowLayout {
+        // ---------- effect: the list, then the settings of the selected one ----------
+        ColumnLayout {
             visible: Keyboard.rgb
             Layout.fillWidth: true
-            spacing: 12
+            spacing: Tokens.spacing.largeIncreased
             enabled: page.canWrite
             opacity: enabled ? 1 : 0.4
+
+            // Effect list: clicking an effect activates it
+            Group {
+                title: I18n.t("Effects")
+                visible: Keyboard.effectsAllowed
+                Repeater {
+                    model: page.effects
+                    NavItem {
+                        required property var modelData
+                        required property int index
+                        icon: modelData.icon
+                        label: modelData.name
+                        sub: modelData.sub
+                        selected: Keyboard.effect === modelData.id
+                        first: index === 0
+                        last: index === page.effects.length - 1
+                        onClicked: Keyboard.setEffect(modelData.id)
+                    }
+                }
+            }
 
             // Settings of the selected effect
             Card {
@@ -244,7 +263,7 @@ Flickable {
                     Layout.fillWidth: true
                     spacing: 10
 
-                    StyledText { text: I18n.t("Colors"); color: Colours.fg; font.pixelSize: 13 }
+                    StyledText { text: I18n.t("Colors"); color: Colours.fg; font: Tokens.font.body.small }
                     Segment {
                         model: page.sources.map(x => x.t)
                         controlled: true
@@ -312,11 +331,12 @@ Flickable {
                               + " " + I18n.t("Click a color and change it with the wheel below. + adds one, − removes the selected one (max 6).")
                             : I18n.t("Your chosen color fades in and out. Pick the color from the wheel below.")
                         color: Colours.fgDim
-                        font.pixelSize: 11
+                        font: Tokens.font.label.small
                     }
 
                     SliderRow {
                         id: speedRow
+                        flat: true
                         label: I18n.t("Speed")
                         value: Keyboard.speed
                         readout: I18n.t(page.breathing ? "%1 s per breath" : "%1 s per color").arg(I18n.num(Keyboard.period, 1))
@@ -324,6 +344,7 @@ Flickable {
                     }
                     SliderRow {
                         id: lowRow
+                        flat: true
                         visible: page.breathing
                         label: I18n.t("Lowest")
                         value: Keyboard.minLevel
@@ -332,6 +353,7 @@ Flickable {
                     }
                     SliderRow {
                         id: highRow
+                        flat: true
                         visible: page.breathing
                         label: I18n.t("Highest")
                         value: Keyboard.maxLevel
@@ -351,7 +373,7 @@ Flickable {
                         wrapMode: Text.WordWrap
                         text: I18n.t("Levels are relative to the overall brightness below. Unless the lowest is 0%, the light never goes fully off.")
                         color: Colours.fgDim
-                        font.pixelSize: 11
+                        font: Tokens.font.label.small
                     }
 
                     Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Colours.outline; opacity: 0.5 }
@@ -365,7 +387,7 @@ Flickable {
                     text: I18n.t("The keyboard stays lit in your chosen color.")
                           + (Keyboard.rgb && !Keyboard.effectsAllowed ? " " + I18n.t("Effects are only enabled on keyboards they have been tested with.") : "")
                     color: Colours.fgDim
-                    font.pixelSize: 11
+                    font: Tokens.font.label.small
                 }
 
                 // Colour picking (all effects; locked when the source is Caelestia)
@@ -374,7 +396,7 @@ Flickable {
                     text: page.themeLocked ? I18n.t("The colors come from the Caelestia theme")
                         : page.editingList ? I18n.t("Color · color %1").arg(page.editAt + 1) : I18n.t("Color")
                     color: Colours.fg
-                    font.pixelSize: 13
+                    font: Tokens.font.body.small
                 }
                 ColumnLayout {
                     Layout.fillWidth: true
@@ -398,12 +420,12 @@ Flickable {
                                 width: 34; height: 34; radius: 17
                                 color: modelData.c
                                 border { width: 2; color: Colours.outline }
-                                StyledText {
+                                MaterialIcon {
                                     visible: parent.modelData.name === "Caelestia"
                                     anchors.centerIn: parent
                                     text: "palette"
                                     color: Colours.fgOnPrimary
-                                    font { family: Colours.iconFont; pixelSize: 18 }
+                                    size: Tokens.font.icon.small
                                 }
                                 MouseArea {
                                     anchors.fill: parent
@@ -416,66 +438,10 @@ Flickable {
                 }
             }
 
-            // Effect list: clicking an effect activates it
-            Card {
-                Layout.alignment: Qt.AlignTop
-                Layout.fillWidth: false
-                Layout.preferredWidth: 210
-                title: I18n.t("Effects")
-                visible: Keyboard.effectsAllowed
-                gap: 6
-
-                Repeater {
-                    model: page.effects
-                    Rectangle {
-                        id: item
-                        required property var modelData
-                        readonly property bool on: Keyboard.effect === modelData.id
-                        Layout.fillWidth: true
-                        implicitHeight: 56
-                        radius: 14
-                        color: on ? Colours.primary : (ma.containsMouse ? Colours.surfaceHigh : "transparent")
-                        Behavior on color { CAnim {} }
-                        RowLayout {
-                            anchors { fill: parent; leftMargin: 12; rightMargin: 12 }
-                            spacing: 10
-                            StyledText {
-                                text: item.modelData.icon
-                                color: item.on ? Colours.fgOnPrimary : Colours.primary
-                                font { family: Colours.iconFont; pixelSize: 22 }
-                            }
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                spacing: 0
-                                StyledText {
-                                    text: item.modelData.name
-                                    color: item.on ? Colours.fgOnPrimary : Colours.fg
-                                    font { pixelSize: 14; bold: true }
-                                }
-                                StyledText {
-                                    Layout.fillWidth: true
-                                    elide: Text.ElideRight
-                                    text: item.modelData.sub
-                                    color: item.on ? Colours.fgOnPrimary : Colours.fgDim
-                                    opacity: 0.8
-                                    font.pixelSize: 11
-                                }
-                            }
-                        }
-                        MouseArea {
-                            id: ma
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: Keyboard.setEffect(item.modelData.id)
-                        }
-                    }
-                }
-            }
         }
 
         // ---------- overall brightness ----------
-        Card {
+        Group {
             id: brightCard
             visible: Keyboard.hasBrightness
             title: I18n.t("Brightness")
@@ -487,8 +453,9 @@ Flickable {
             SliderRow {
                 id: bright
                 visible: !brightCard.stepped
-                label: I18n.t("Brightness")
+                label: I18n.t("Level")
                 value: Keyboard.maxBrightness > 0 ? Keyboard.brightness / Keyboard.maxBrightness : 0
+                icon: "brightness_6"
                 readout: page.pct(value)
                 onMoved: v => Keyboard.setBrightness(v * Keyboard.maxBrightness)
             }
@@ -499,41 +466,43 @@ Flickable {
                     if (Keyboard.maxBrightness > 0) bright.value = Keyboard.brightness / Keyboard.maxBrightness
                 }
             }
-            RowLayout {
-                visible: !brightCard.stepped
-                Layout.fillWidth: true
-                spacing: 8
-                Repeater {
-                    model: [{ t: I18n.t("Off"), v: 0 }, { t: page.pct(0.25), v: 0.25 }, { t: page.pct(0.5), v: 0.5 }, { t: page.pct(1), v: 1 }]
-                    Btn {
-                        required property var modelData
-                        Layout.fillWidth: true
-                        text: modelData.t
-                        onClicked: Keyboard.setBrightness(modelData.v * Keyboard.maxBrightness)
+            GroupItem {
+                RowLayout {
+                    visible: !brightCard.stepped
+                    Layout.fillWidth: true
+                    spacing: Tokens.spacing.small
+                    Repeater {
+                        model: [{ t: I18n.t("Off"), v: 0 }, { t: page.pct(0.25), v: 0.25 }, { t: page.pct(0.5), v: 0.5 }, { t: page.pct(1), v: 1 }]
+                        Btn {
+                            required property var modelData
+                            Layout.fillWidth: true
+                            Layout.preferredWidth: 1      // equal widths
+                            text: modelData.t
+                            onClicked: Keyboard.setBrightness(modelData.v * Keyboard.maxBrightness)
+                        }
                     }
                 }
-            }
-            RowLayout {
-                visible: brightCard.stepped
-                Layout.fillWidth: true
-                spacing: 8
-                Repeater {
-                    // 1 level: Off/On; 2: Off/Low/High; 3: Off/Low/Medium/High
-                    model: Keyboard.maxBrightness === 1 ? [I18n.t("Off"), I18n.t("On")]
-                         : Keyboard.maxBrightness === 2 ? [I18n.t("Off"), I18n.t("Low"), I18n.t("High")]
-                         : [I18n.t("Off"), I18n.t("Low"), I18n.t("Medium"), I18n.t("High")]
-                    Btn {
-                        required property string modelData
-                        required property int index
-                        Layout.fillWidth: true
-                        text: modelData
-                        filled: Keyboard.brightness === index
-                        onClicked: Keyboard.setBrightness(index)
+                RowLayout {
+                    visible: brightCard.stepped
+                    Layout.fillWidth: true
+                    spacing: Tokens.spacing.small
+                    Repeater {
+                        // 1 level: Off/On; 2: Off/Low/High; 3: Off/Low/Medium/High
+                        model: Keyboard.maxBrightness === 1 ? [I18n.t("Off"), I18n.t("On")]
+                             : Keyboard.maxBrightness === 2 ? [I18n.t("Off"), I18n.t("Low"), I18n.t("High")]
+                             : [I18n.t("Off"), I18n.t("Low"), I18n.t("Medium"), I18n.t("High")]
+                        Btn {
+                            required property string modelData
+                            required property int index
+                            Layout.fillWidth: true
+                            Layout.preferredWidth: 1      // equal widths
+                            text: modelData
+                            filled: Keyboard.brightness === index
+                            onClicked: Keyboard.setBrightness(index)
+                        }
                     }
                 }
             }
         }
-
-        ReportCard {}
     }
 }

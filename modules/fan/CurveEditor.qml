@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import Caelestia.Config
 import qs.components
 import qs.services
 
@@ -186,7 +187,7 @@ ColumnLayout {
         visible: !ed.readOnly
         text: I18n.t("Point %1 / %2 · drag it or set it below").arg(ed.selIndex + 1).arg(ed.points.length)
         color: Colours.fgDim
-        font.pixelSize: 11
+        font: Tokens.font.label.small
     }
     Stepper {
         visible: !ed.readOnly

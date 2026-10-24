@@ -269,6 +269,15 @@ var dict = {
         "Create report": "Rapor oluştur",
         "Open report": "Raporu aç",
         "Report a problem": "Sorun bildir",
-        "Saved: %1": "Kaydedildi: %1"
+        "Saved: %1": "Kaydedildi: %1",
+        "%1 configs": "%1 config",
+        "Settings": "Ayarlar",
+        "Language and notifications": "Dil ve bildirimler",
+        "Language": "Dil",
+        "Interface language": "Arayüz dili",
+        "Also used by the terminal commands, the tray and notifications": "Terminal komutları, tepsi ve bildirimler de bu dili kullanır",
+        "About": "Hakkında",
+        "App folder": "Uygulama klasörü",
+        "Level": "Seviye"
     }
 }

@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import Caelestia.Config
 import qs.components
 import qs.services
 
@@ -32,7 +33,7 @@ Card {
             id: headRow
             anchors.fill: parent
             spacing: 12
-            StyledText { text: "tune"; color: Colours.primary; font { family: Colours.iconFont; pixelSize: 24 } }
+            MaterialIcon { text: "tune"; color: Colours.primary; size: Tokens.font.icon.medium }
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: 0
@@ -41,12 +42,12 @@ Card {
                     text: Nbfc.configId !== "" ? Nbfc.configId : I18n.t("No config selected")
                     elide: Text.ElideRight
                     color: Colours.fg
-                    font { pixelSize: 15; bold: true }
+                    font: Tokens.font.title.small
                 }
                 StyledText {
                     text: Nbfc.fans.length > 0 ? I18n.t("%1 fans found").arg(Nbfc.fans.length) : I18n.t("No fan information")
                     color: Colours.fgDim
-                    font.pixelSize: 11
+                    font: Tokens.font.label.small
                 }
                 // `nbfc config -s` without a restart: NBFC still runs the old one
                 StyledText {
@@ -55,15 +56,15 @@ Card {
                     text: I18n.t("Selected: %1, used after NBFC restarts").arg(Nbfc.fileConfigId)
                     elide: Text.ElideRight
                     color: Colours.warning
-                    font.pixelSize: 11
+                    font: Tokens.font.label.small
                 }
             }
-            StyledText {
+            MaterialIcon {
                 text: "expand_more"
                 color: Colours.fgDim
                 rotation: cfg.open ? 180 : 0
                 Behavior on rotation { Anim {} }
-                font { family: Colours.iconFont; pixelSize: 24 }
+                size: Tokens.font.icon.medium
             }
         }
         MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: cfg.open = !cfg.open }
@@ -79,12 +80,12 @@ Card {
             implicitHeight: 40
             radius: 20
             color: Colours.surfaceHigh
-            StyledText {
+            MaterialIcon {
                 x: 14
                 anchors.verticalCenter: parent.verticalCenter
                 text: "search"
                 color: Colours.fgDim
-                font { family: Colours.iconFont; pixelSize: 20 }
+                size: Tokens.font.icon.medium
             }
             StyledText {
                 visible: search.text === ""
@@ -92,7 +93,7 @@ Card {
                 anchors.verticalCenter: parent.verticalCenter
                 text: I18n.t("Search configs…")
                 color: Colours.fgDim
-                font.pixelSize: 13
+                font: Tokens.font.body.small
             }
             TextInput {
                 id: search
@@ -101,7 +102,7 @@ Card {
                 color: Colours.fg
                 selectByMouse: true
                 clip: true
-                font.pixelSize: 13
+                font: Tokens.font.body.small
             }
         }
 
@@ -110,7 +111,7 @@ Card {
             text: Nbfc.configNote
             wrapMode: Text.WordWrap
             color: Colours.fgDim
-            font.pixelSize: 11
+            font: Tokens.font.label.small
         }
 
         ListView {
@@ -131,7 +132,7 @@ Card {
                     text: modelData
                     elide: Text.ElideRight
                     color: chosen ? Colours.fgOnPrimary : Colours.fg
-                    font.pixelSize: 13
+                    font: Tokens.font.body.small
                 }
                 Row {
                     id: tag
@@ -141,13 +142,13 @@ Card {
                         visible: Nbfc.recommended.indexOf(modelData) >= 0
                         text: I18n.t("recommended")
                         color: chosen ? Colours.fgOnPrimary : Colours.fgDim
-                        font.pixelSize: 11
+                        font: Tokens.font.label.small
                     }
-                    StyledText {
+                    MaterialIcon {
                         visible: modelData === Nbfc.configId
                         text: "check"
                         color: chosen ? Colours.fgOnPrimary : Colours.primary
-                        font { family: Colours.iconFont; pixelSize: 18 }
+                        size: Tokens.font.icon.small
                     }
                 }
                 MouseArea { id: ma; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: cfg.picked = modelData }
@@ -175,7 +176,7 @@ Card {
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
             color: Colours.fgDim
-            font.pixelSize: 11
+            font: Tokens.font.label.small
             text: I18n.t("Applying restarts the service and asks for admin permission. An incompatible config can drive the fans wrongly; try it in read-only mode first.")
         }
     }

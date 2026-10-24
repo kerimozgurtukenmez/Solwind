@@ -1,58 +1,49 @@
 import QtQuick
 import QtQuick.Layouts
+import Caelestia.Config
 import qs.components
 import qs.services
 
-Card {
+// The NBFC service: state with start/stop/restart, start on boot, read-only mode, the safety limit
+Group {
     id: svc
     title: I18n.t("NBFC service")
 
-    RowLayout {
-        Layout.fillWidth: true
-        spacing: 10
-        Rectangle { implicitWidth: 10; implicitHeight: 10; radius: 5; color: Nbfc.running ? Colours.success : Colours.outline }
+    GroupItem {
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: Tokens.spacing.medium
+            Rectangle {
+                implicitWidth: 10; implicitHeight: 10; radius: 5
+                color: Nbfc.running ? Colours.success : Colours.outlineStrong
+                Behavior on color { CAnim {} }
+            }
+            StyledText {
+                Layout.fillWidth: true
+                text: Nbfc.running ? (Nbfc.readOnly ? I18n.t("Running (read-only)") : I18n.t("Running")) : I18n.t("Stopped")
+                color: Colours.fg
+                font: Tokens.font.title.small
+                elide: Text.ElideRight
+            }
+            Btn {
+                filled: !Nbfc.running
+                icon: Nbfc.running ? "stop" : "play_arrow"
+                text: Nbfc.running ? I18n.t("Stop") : I18n.t("Start")
+                onClicked: Nbfc.running ? Nbfc.stopService() : Nbfc.startService()
+            }
+            Btn {
+                icon: "restart_alt"; text: I18n.t("Restart")
+                enabled: Nbfc.running
+                onClicked: Nbfc.restartService(Nbfc.readOnly)
+            }
+        }
         StyledText {
-            text: Nbfc.running ? (Nbfc.readOnly ? I18n.t("Running (read-only)") : I18n.t("Running")) : I18n.t("Stopped")
-            color: Colours.fg
-            font { pixelSize: 15; bold: true }
-        }
-        Item { Layout.fillWidth: true }
-        StyledText { visible: Nbfc.running && isFinite(Nbfc.temp); text: "thermostat"; color: Colours.primary; font { family: Colours.iconFont; pixelSize: 20 } }
-        StyledText { visible: Nbfc.running && isFinite(Nbfc.temp); text: Math.round(Nbfc.temp) + "°C"; color: Colours.fg; font { pixelSize: 15; bold: true } }
-    }
-    // A fresh NBFC has no config: say why it can't start and where to pick one
-    StyledText {
-        Layout.fillWidth: true
-        visible: Nbfc.noConfig && !Nbfc.running
-        text: I18n.t("No NBFC config is selected yet, so NBFC can't start. Pick one below in \"NBFC config\" (the recommend button finds configs that may fit this laptop).")
-        wrapMode: Text.WordWrap
-        color: Colours.warning
-        font.pixelSize: 12
-    }
-    StyledText {
-        Layout.fillWidth: true
-        visible: Nbfc.message !== ""
-        text: Nbfc.message
-        wrapMode: Text.WordWrap
-        color: Nbfc.messageError ? Colours.error : Colours.fgDim
-        font.pixelSize: 12
-    }
-    RowLayout {
-        Layout.fillWidth: true
-        spacing: 8
-        Btn {
-            Layout.fillWidth: true; Layout.preferredWidth: 1
-            filled: !Nbfc.running
-            icon: Nbfc.running ? "stop" : "play_arrow"
-            text: Nbfc.running ? I18n.t("Stop") : I18n.t("Start")
-            onClicked: Nbfc.running ? Nbfc.stopService() : Nbfc.startService()
-        }
-        Btn {
-            Layout.fillWidth: true; Layout.preferredWidth: 1
-            icon: "restart_alt"; text: I18n.t("Restart")
-            enabled: Nbfc.running
-            opacity: enabled ? 1 : 0.4
-            onClicked: Nbfc.restartService(Nbfc.readOnly)
+            Layout.fillWidth: true
+            visible: Nbfc.message !== ""
+            text: Nbfc.message
+            wrapMode: Text.WordWrap
+            color: Nbfc.messageError ? Colours.error : Colours.fgDim
+            font: Tokens.font.label.medium
         }
     }
     ToggleRow {
@@ -68,6 +59,7 @@ Card {
         onToggled: v => Nbfc.setReadOnly(v)
     }
     SliderRow {
+        icon: "local_fire_department"
         label: I18n.t("Safety limit (Fixed/Curve fans go to 100% above it)")
         value: (Nbfc.safety - 70) / 30
         readout: Math.round(Nbfc.safety) + "°C"
