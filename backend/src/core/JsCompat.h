@@ -39,8 +39,9 @@ double parseFloat(const QString &s);
 // String(v) of a JSON value as JS writes it (numbers in their shortest form; objects "[object Object]")
 QString toString(const QJsonValue &v);
 
-// Math.max(a, b): NaN if either is NaN (std::max isn't)
+// Math.max(a, b) / Math.min(a, b): NaN if either is NaN (std::max / std::min aren't)
 inline double max(double a, double b) { return a != a || b != b ? a + b : (a > b ? a : b); }
+inline double min(double a, double b) { return a != a || b != b ? a + b : (a < b ? a : b); }
 
 // JS RegExp pieces whose meaning differs in PCRE: \s (JS: Unicode white space and line terminators), "." (JS: not a
 // line terminator) and "$" without the m flag (JS: the very end only)

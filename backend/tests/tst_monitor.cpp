@@ -44,10 +44,7 @@ class TstMonitor : public QObject
     }
     void nbfc(const QStringList &args)
     {
-        QProcess p;
-        p.setProcessEnvironment(w->env());
-        p.start(u"nbfc"_s, args);
-        QVERIFY(p.waitForFinished(5000));
+        QVERIFY(w->run(u"nbfc"_s, args) >= 0);
     }
 
 private slots:

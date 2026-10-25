@@ -57,7 +57,7 @@ class TstDaemon : public QObject
     int m_sampled = 0;
 
     // A daemon in the fake world, with its own settings folder; `extra` overrides variables
-    std::unique_ptr<QProcess> start(const QProcessEnvironment &extra = {})
+    std::unique_ptr<QProcess> start(const QProcessEnvironment &extra = {}, const QStringList &args = {})
     {
         QProcessEnvironment env = m_world.env();
         env.insert(u"XDG_CONFIG_HOME"_s, m_home.path());
@@ -65,12 +65,13 @@ class TstDaemon : public QObject
         auto p = std::make_unique<QProcess>();
         p->setProcessEnvironment(env);
         p->setProgram(QStringLiteral(SOLWINDD_PATH));
+        p->setArguments(args);
         p->start();
         return p;
     }
-    void startAndWait(std::unique_ptr<QProcess> &p)
+    void startAndWait(std::unique_ptr<QProcess> &p, const QStringList &args = {})
     {
-        p = start();
+        p = start({}, args);
         QVERIFY(p->waitForStarted(3000));
         QTRY_VERIFY_WITH_TIMEOUT(nameOwned(), 5000);
     }
@@ -144,7 +145,7 @@ private slots:
         QCOMPARE(second->exitCode(), 3);
         QVERIFY(QString::fromUtf8(second->readAllStandardError()).contains(u"already running"_s));
         QVERIFY(nameOwned());                                  // the first one is untouched
-        ::kill(pid_t(first->processId()), SIGTERM);
+        QVERIFY(signalProcess(*first, SIGTERM));
         expectCleanExit(*first);
     }
 
@@ -160,7 +161,7 @@ private slots:
         QFETCH(int, signo);
         std::unique_ptr<QProcess> p;
         startAndWait(p);
-        ::kill(pid_t(p->processId()), signo);
+        QVERIFY(signalProcess(*p, signo));
         expectCleanExit(*p);
         QVERIFY(QString::fromUtf8(p->readAllStandardError()).contains(u"quitting"_s));
     }
@@ -175,7 +176,7 @@ private slots:
         startAndWait(p);
         QDBusInterface api(service, path, service);
         QCOMPARE(QDBusReply<QVariantMap>(api.call(u"Status"_s)).value().value(u"settingsLoaded"_s).toBool(), true);
-        ::kill(pid_t(p->processId()), SIGTERM);
+        QVERIFY(signalProcess(*p, SIGTERM));
         expectCleanExit(*p);
         QFile f(file);
         QVERIFY(f.open(QIODevice::ReadOnly));
@@ -236,7 +237,7 @@ private slots:
         QCOMPARE(sig, u"ad"_s);
         // RPM next to NBFC's fans (the driver has as many fans as NBFC)
         QTRY_COMPARE_WITH_TIMEOUT(getProperty(fans, u"solwind.Fans"_s, u"Fans"_s).value<VariantMapList>()[1].value(u"rpm"_s).toDouble(), 3400.0, 8000);
-        ::kill(pid_t(p->processId()), SIGTERM);
+        QVERIFY(signalProcess(*p, SIGTERM));
         expectCleanExit(*p);
     }
 
@@ -259,7 +260,7 @@ private slots:
         QVERIFY2(h.isValid(), qPrintable(h.error().message()));
         QVERIFY(h.value().size() >= 1);
         QCOMPARE(h.value().last().value(u"cpu"_s).toDouble(), 50.0);
-        ::kill(pid_t(p->processId()), SIGTERM);
+        QVERIFY(signalProcess(*p, SIGTERM));
         expectCleanExit(*p);
         bus.disconnect(service, u"/solwind/Fans"_s, u"org.freedesktop.DBus.Properties"_s, u"PropertiesChanged"_s,
                        this, SLOT(onFansChanged(QString,QVariantMap,QStringList)));
@@ -269,7 +270,7 @@ private slots:
     void watchTopics()
     {
         std::unique_ptr<QProcess> p;
-        startAndWait(p);
+        startAndWait(p, { u"--observe"_s });
         QDBusInterface api(service, path, service);
         auto status = [&] { return QDBusReply<QVariantMap>(api.call(u"Status"_s)).value(); };
         QCOMPARE(status().value(u"mode"_s).toString(), u"observe"_s);
@@ -292,7 +293,7 @@ private slots:
         QCOMPARE(status().value(u"nbfcPollMs"_s).toInt(), 2000);
         QCOMPARE(api.call(u"Unwatch"_s, u"window"_s).type(), QDBusMessage::ReplyMessage);
         QCOMPARE(status().value(u"nbfcPollMs"_s).toInt(), 5000);
-        ::kill(pid_t(p->processId()), SIGTERM);
+        QVERIFY(signalProcess(*p, SIGTERM));
         expectCleanExit(*p);
     }
 
@@ -308,7 +309,7 @@ private slots:
         QCOMPARE(r.type(), QDBusMessage::ReplyMessage);
         QCOMPARE(r.arguments().value(0).toBool(), true);
         QCOMPARE(r.arguments().value(1).toStringList(), QStringList{ u"TestB"_s });
-        ::kill(pid_t(p->processId()), SIGTERM);
+        QVERIFY(signalProcess(*p, SIGTERM));
         expectCleanExit(*p);
     }
 

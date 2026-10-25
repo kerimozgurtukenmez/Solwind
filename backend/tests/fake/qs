@@ -1,0 +1,10 @@
+#!/bin/sh
+# Fake qs for Solwind's tests: only `qs list --all --json`, answered from $CCT/qs-list.json (default: no instance);
+# $CCT/qs-fail: fails (exit 1)
+echo "$(date +%s.%N) qs $*" >> "$CCT/calls.log"
+case "$*" in
+  "list --all --json")
+    [ -e "$CCT/qs-fail" ] && { echo "fake qs: failing on purpose" >&2; exit 1; }
+    if [ -e "$CCT/qs-list.json" ]; then cat "$CCT/qs-list.json"; else echo "[]"; fi ;;
+  *) echo "fake qs: not supported: $*" >&2; exit 2 ;;
+esac

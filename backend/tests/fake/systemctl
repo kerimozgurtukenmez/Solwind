@@ -1,7 +1,9 @@
 #!/bin/sh
-# Fake systemctl for Solwind's tests: only `is-enabled nbfc_service`, answered from $CCT/boot (enabled|disabled)
+# Fake systemctl for Solwind's tests: is-enabled / enable / disable nbfc_service, answered from / written to $CCT/boot
 echo "$(date +%s.%N) systemctl $*" >> "$CCT/calls.log"
 case "$*" in
   "is-enabled nbfc_service") b=$(cat "$CCT/boot" 2>/dev/null || echo disabled); echo "$b"; [ "$b" = enabled ] ;;
+  "enable nbfc_service") echo enabled > "$CCT/boot" ;;
+  "disable nbfc_service") echo disabled > "$CCT/boot" ;;
   *) echo "fake systemctl: not supported: $*" >&2; exit 2 ;;
 esac

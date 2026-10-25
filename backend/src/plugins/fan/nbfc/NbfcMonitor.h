@@ -11,10 +11,10 @@
 
 #include <functional>
 
-// NBFC-Linux, read side only (phase 2 of ARCH-PLAN.md): the service's status every 2 s / 5 s, which config is in use,
-// the config list and the selected config's curves, start-on-boot, recommendations. Ports services/Nbfc.qml's
-// reading rules (SPEC.md N-9..N-14, A-8, A-10..A-12, L-1..L-3). Nothing here can change a fan speed, the service or
-// a file: phase 3 adds writing, behind the safety rules.
+// NBFC-Linux, the read side: the service's status every 2 s / 5 s, which config is in use, the config list and the
+// selected config's curves, start-on-boot, recommendations. Ports services/Nbfc.qml's reading rules (SPEC.md
+// N-9..N-14, A-8, A-10..A-12, L-1..L-3). Nothing here changes a fan speed, the service or a file; NbfcPlugin adds
+// that on top (its commands share this one queue, as in the QML app).
 class NbfcMonitor : public QObject
 {
     Q_OBJECT
@@ -28,6 +28,15 @@ public:
 
     // `nbfc config -r` (A-11): ok = it ran; found = the known configs it names (also kept in recommended())
     void recommend(std::function<void(bool ok, const QStringList &found)> done);
+    void refreshBoot();                   // systemctl is-enabled nbfc_service (A-8)
+
+    // The one queue for nbfc commands (Q-1, Q-2); NbfcPlugin's speed commands go into it too
+    CommandQueue &queue() { return m_queue; }
+    // L-2: while this says so (an admin action, quitting), a lost service is not reported yet
+    std::function<bool()> lostHeld;
+    void setUserStopped() { m_userStopped = true; }             // after a successful `nbfc stop` (A-5)
+    void clearLost() { m_userStopped = false; m_lostPending = false; }   // startService (A-4)
+    void setReadOnlyWanted(bool on);                            // A-7: until the next status read says otherwise
 
     // ---------- state ----------
     bool running() const { return m_running; }
@@ -74,7 +83,6 @@ private:
     void listConfigDirs();
     void mergeConfigs();
     void loadConfigCurves();
-    void refreshBoot();
 
     Paths m_paths;
     QString m_nbfcJson;

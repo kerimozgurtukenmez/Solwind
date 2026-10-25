@@ -78,10 +78,11 @@ void NbfcMonitor::onStatus(quint64 seq, int code, const QByteArray &out, const Q
     m_statusSeq = seq;
     const bool was = m_running;
     m_running = code == 0;
-    // A running service went away: reported once (no admin actions exist yet that could explain it)
+    // A running service went away: not reported while an admin action (restart, config) explains it or while
+    // quitting, but afterwards if it didn't come back and the user didn't stop it
     if (was && !m_running) m_lostPending = true;
     if (m_running) m_lostPending = false;
-    if (m_lostPending && !m_userStopped) {
+    if (m_lostPending && !m_userStopped && !(lostHeld && lostHeld())) {
         m_lostPending = false;
         emit serviceLost();
     }
@@ -114,6 +115,13 @@ void NbfcMonitor::onStatus(quint64 seq, int code, const QByteArray &out, const Q
     if (m_running != wasRunning || m_readOnly != wasReadOnly || !same(m_temp, wasTemp) || !sameFans(m_fans, wasFans))
         emit changed();
     emit statusRead(code == 0);
+}
+
+void NbfcMonitor::setReadOnlyWanted(bool on)
+{
+    if (m_readOnly == on) return;
+    m_readOnly = on;
+    emit changed();
 }
 
 void NbfcMonitor::updateConfigId()

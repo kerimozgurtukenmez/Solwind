@@ -24,9 +24,15 @@ include(GNUInstallDirs)
 
 # Everything but main(): the tests link the same code the daemon runs
 add_library(solwind_core STATIC
+    src/core/Alerts.cpp
     src/core/Cmd.cpp
     src/core/CommandQueue.cpp
+    src/core/FanController.cpp
+    src/core/FanState.cpp
+    src/core/I18n.cpp
     src/core/JsCompat.cpp
+    src/core/Notifier.cpp
+    src/core/OldAppGuard.cpp
     src/core/Paths.cpp
     src/core/SensorReader.cpp
     src/core/Sensors.cpp
@@ -38,9 +44,14 @@ add_library(solwind_core STATIC
     src/dbus/DaemonApi.cpp
     src/dbus/FansApi.cpp
     src/dbus/SensorsApi.cpp
+    src/plugins/FanPlugin.h
     src/plugins/fan/nbfc/NbfcMonitor.cpp
     src/plugins/fan/nbfc/NbfcParse.cpp
+    src/plugins/fan/nbfc/NbfcPlugin.cpp
 )
+# The UI's translations, built in (one file for the QML app and the daemon): services/translations.js -> :/translations.js
+set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/../services/translations.js" PROPERTIES QT_RESOURCE_ALIAS translations.js)
+qt_add_resources(solwind_core translations PREFIX "/" FILES "${CMAKE_CURRENT_SOURCE_DIR}/../services/translations.js")
 target_include_directories(solwind_core PUBLIC src)
 target_link_libraries(solwind_core PUBLIC Qt6::Core Qt6::DBus)
 target_compile_definitions(solwind_core PUBLIC SOLWIND_VERSION="${SOLWIND_VERSION}"

@@ -278,6 +278,12 @@ var dict = {
         "Also used by the terminal commands, the tray and notifications": "Terminal komutları, tepsi ve bildirimler de bu dili kullanır",
         "About": "Hakkında",
         "App folder": "Uygulama klasörü",
-        "Level": "Seviye"
+        "Level": "Seviye",
+        "This fan driver isn't trusted to write fan speeds yet": "Bu fan sürücüsünün fan hızı yazmasına henüz güvenilmiyor",
+        "A profile needs a name": "Profilin bir adı olmalı",
+        "A profile name can have at most 32 characters": "Profil adı en fazla 32 karakter olabilir",
+        "Solwind only watches the fans now": "Solwind şu an fanları sadece izliyor",
+        "Solwind is quitting": "Solwind kapanıyor",
+        "Solwind could not hand the fans back to NBFC's automatic control (%1). Run `nbfc set -a` or open Solwind.": "Solwind fanları NBFC'nin otomatik kontrolüne geri veremedi (%1). `nbfc set -a` çalıştırın ya da Solwind'i açın."
     }
 }

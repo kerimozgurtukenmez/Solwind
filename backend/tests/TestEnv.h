@@ -9,11 +9,21 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QProcess>
 #include <QProcessEnvironment>
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <csignal>
 #include <sys/stat.h>
+
+// A signal to that one process. Never kill(0, ...): a process that has gone has no id (0), and 0 means the whole
+// process group - the test itself included
+inline bool signalProcess(const QProcess &p, int signo)
+{
+    const qint64 pid = p.processId();
+    return pid > 0 && ::kill(pid_t(pid), signo) == 0;
+}
 
 struct FakeFan {
     QString name;
@@ -37,6 +47,9 @@ public:
         write(QStringLiteral("nbfc.json"), "{\"SelectedConfigId\": \"TestA\"}");
         QFile::link(cct() + QStringLiteral("/nbfc.json"), nbfcRoot() + QStringLiteral("/etc/nbfc/nbfc.json"));
         write(QStringLiteral("saved.json"), "{\"TargetFanSpeeds\": []}");
+        // What the fake nbfc saves when it stops is what the daemon reads as /var/lib/nbfc/state.json
+        QDir().mkpath(nbfcRoot() + QStringLiteral("/var/lib/nbfc"));
+        QFile::link(cct() + QStringLiteral("/saved.json"), nbfcRoot() + QStringLiteral("/var/lib/nbfc/state.json"));
         write(QStringLiteral("calls.log"), "");
         state(true, false, QStringLiteral("TestA"), 50, { { QStringLiteral("CPU Fan") }, { QStringLiteral("GPU Fan") } });
     }
@@ -107,6 +120,19 @@ public:
         e.insert(QStringLiteral("SOLWIND_NBFC_ROOT"), nbfcRoot());
         e.insert(QStringLiteral("XDG_CONFIG_HOME"), settingsHome());
         return e;
+    }
+    // Runs one of the fakes by its full path, never a real tool of the same name found on PATH
+    int run(const QString &tool, const QStringList &args) const
+    {
+        QProcess p;
+        p.setProcessEnvironment(env());
+        p.start(QStringLiteral(FAKE_DIR) + u'/' + tool, args);
+        if (!p.waitForFinished(5000)) {
+            p.kill();
+            p.waitForFinished();
+            return -1;
+        }
+        return p.exitStatus() == QProcess::NormalExit ? p.exitCode() : -1;
     }
     // The same for code running inside the test process
     void applyToThisProcess() const
