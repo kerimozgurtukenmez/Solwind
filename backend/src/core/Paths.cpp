@@ -10,5 +10,6 @@ Paths Paths::fromEnvironment()
     p.settingsDir = (xdg.isEmpty() ? QDir::homePath() + QStringLiteral("/.config") : xdg) + QStringLiteral("/solwind");
     const QString fake = qEnvironmentVariable("SOLWIND_SYS");
     p.sysRoot = fake.isEmpty() ? QString() : fake;
+    p.nbfcRoot = qEnvironmentVariable("SOLWIND_NBFC_ROOT");
     return p;
 }

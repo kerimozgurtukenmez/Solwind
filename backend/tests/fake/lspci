@@ -1,0 +1,5 @@
+#!/bin/sh
+# Fake lspci for Solwind's tests: `lspci -s <addr> -vmm` prints $CCT/lspci/<addr> (if it exists)
+echo "$(date +%s.%N) lspci $*" >> "$CCT/calls.log"
+[ "$1" = -s ] && [ -e "$CCT/lspci/$2" ] && cat "$CCT/lspci/$2"
+exit 0

@@ -50,79 +50,6 @@ QJsonObject objectOrIndexed(const QJsonValue &v)
     return o;
 }
 
-// JSON.parse refuses a raw control character (below 0x20) inside a string; QJsonDocument accepts it
-bool rawControlInString(const QByteArray &text)
-{
-    bool in = false, esc = false;
-    for (const char ch : text) {
-        const auto c = static_cast<unsigned char>(ch);
-        if (!in) { if (c == '"') in = true; continue; }
-        if (esc) { esc = false; continue; }
-        if (c == '\\') esc = true;
-        else if (c == '"') in = false;
-        else if (c < 0x20) return true;
-    }
-    return false;
-}
-
-// Array.prototype.sort as the QML engine does it: Qt's quicksort from qv4arraydata_p.h (sortHelper, Qt 6.12,
-// GPL-2.0/GPL-3.0), copied unchanged. It isn't stable, and points with equal temperatures must come out in the same
-// order as in 0.5.x (checked with .dev/settingsdiff.sh).
-template <typename RandomAccessIterator, typename LessThan>
-void qv4Sort(RandomAccessIterator start, RandomAccessIterator end, LessThan lessThan)
-{
-top:
-    using std::swap;
-
-    int span = int(end - start);
-    if (span < 2)
-        return;
-
-    --end;
-    RandomAccessIterator low = start, high = end - 1;
-    RandomAccessIterator pivot = start + span / 2;
-
-    if (lessThan(*end, *start))
-        swap(*end, *start);
-    if (span == 2)
-        return;
-
-    if (lessThan(*pivot, *start))
-        swap(*pivot, *start);
-    if (lessThan(*end, *pivot))
-        swap(*end, *pivot);
-    if (span == 3)
-        return;
-
-    swap(*pivot, *end);
-
-    while (low < high) {
-        while (low < high && lessThan(*low, *end))
-            ++low;
-
-        while (high > low && lessThan(*end, *high))
-            --high;
-
-        if (low < high) {
-            swap(*low, *high);
-            ++low;
-            --high;
-        } else {
-            break;
-        }
-    }
-
-    if (lessThan(*low, *end))
-        ++low;
-
-    swap(*end, *low);
-    qv4Sort(start, low, lessThan);
-
-    start = low + 1;
-    ++end;
-    goto top;
-}
-
 void writeValue(QByteArray &out, const QJsonValue &v, int level)
 {
     const QByteArray pad((level + 1) * 2, ' '), end(level * 2, ' ');
@@ -203,19 +130,14 @@ bool Settings::load()
         qWarning("solwindd: could not read %s: %s", qPrintable(m_path), qPrintable(f.errorString()));
         return false;
     }
-    // Read the way the QML app did (FileView text() + JSON.parse, measured with .dev/settingsdiff.sh): invalid
-    // UTF-8 becomes U+FFFD instead of failing, and a raw control character inside a string fails
-    const QByteArray text = QString::fromUtf8(f.readAll()).toUtf8();
-    QJsonParseError err;
-    const QJsonDocument doc = QJsonDocument::fromJson(text, &err);
-    const QString why = err.error != QJsonParseError::NoError ? err.errorString()
-                      : rawControlInString(text) ? u"control character in a string"_s
-                      : !doc.isObject() ? u"not a JSON object"_s : QString();
+    QString why;
+    const auto doc = js::parseJson(f.readAll(), &why);
+    if (doc && !doc->isObject()) why = u"not a JSON object"_s;   // (an array too: the QML took it, then broke on it)
     if (!why.isEmpty()) {
         qWarning("solwindd: could not read settings.json, using defaults: %s", qPrintable(why));
         return false;
     }
-    m_data = doc.object();
+    m_data = doc->toObject();
     m_unreadable = false;
     return true;
 }
@@ -307,7 +229,7 @@ std::optional<FanSt> Settings::cleanSt(const QJsonValue &v)
             const double s = js::round(js::num(js::andGet(p, u"s"_s), 0, 100));
             if (std::isfinite(t) && std::isfinite(s)) curve.append({ int(t), int(s) });
         }
-        qv4Sort(curve.begin(), curve.end(), [](const CurvePoint &a, const CurvePoint &b) { return a.t - b.t < 0; });
+        js::qv4Sort(curve.begin(), curve.end(), [](const CurvePoint &a, const CurvePoint &b) { return a.t - b.t < 0; });
     }
     if (mode == 1 && !std::isfinite(fixed)) return std::nullopt;
     if (mode == 2 && curve.size() < 2) return std::nullopt;

@@ -1,0 +1,6 @@
+#!/bin/sh
+# Fake nvidia-smi for Solwind's tests: prints $CCT/smi-temp (if it exists), hangs if $CCT/smi-hang exists, else fails
+echo "$(date +%s.%N) nvidia-smi $*" >> "$CCT/calls.log"
+[ -e "$CCT/smi-hang" ] && exec sleep 30
+[ -e "$CCT/smi-temp" ] && exec cat "$CCT/smi-temp"
+exit 1

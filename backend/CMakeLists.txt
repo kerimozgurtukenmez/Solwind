@@ -1,4 +1,4 @@
-# solwindd, Solwind's background service (C++/Qt). Phase 1 of the move from QML to a C++ core.
+# solwindd, Solwind's background service (C++/Qt): the C++ core that takes over from the QML services.
 #   cmake -S backend -B backend/build && cmake --build backend/build && ctest --test-dir backend/build
 # The daemon tests run on a private D-Bus session of their own (dbus-run-session), never on the user's.
 cmake_minimum_required(VERSION 3.21)
@@ -24,12 +24,22 @@ include(GNUInstallDirs)
 
 # Everything but main(): the tests link the same code the daemon runs
 add_library(solwind_core STATIC
+    src/core/Cmd.cpp
+    src/core/CommandQueue.cpp
     src/core/JsCompat.cpp
     src/core/Paths.cpp
+    src/core/SensorReader.cpp
+    src/core/Sensors.cpp
     src/core/Settings.cpp
     src/core/UnixSignals.cpp
     src/dbus/BusGuard.cpp
+    src/dbus/ClientHints.cpp
+    src/dbus/DBusUtil.cpp
     src/dbus/DaemonApi.cpp
+    src/dbus/FansApi.cpp
+    src/dbus/SensorsApi.cpp
+    src/plugins/fan/nbfc/NbfcMonitor.cpp
+    src/plugins/fan/nbfc/NbfcParse.cpp
 )
 target_include_directories(solwind_core PUBLIC src)
 target_link_libraries(solwind_core PUBLIC Qt6::Core Qt6::DBus)

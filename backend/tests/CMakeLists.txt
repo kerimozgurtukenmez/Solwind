@@ -1,15 +1,16 @@
 find_package(Qt6 REQUIRED COMPONENTS Test)
 
+# Every test gets the fake programs (tests/fake: nbfc, systemctl, nvidia-smi, lspci) through TestEnv.h
 function(solwind_test name)
-    add_executable(${name} ${name}.cpp)
+    add_executable(${name} ${name}.cpp TestEnv.h)
     target_link_libraries(${name} PRIVATE solwind_core Qt6::Test)
+    target_compile_definitions(${name} PRIVATE FAKE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fake")
 endfunction()
 
-solwind_test(tst_jscompat)
-add_test(NAME jscompat COMMAND tst_jscompat)
-
-solwind_test(tst_settings)
-add_test(NAME settings COMMAND tst_settings)
+foreach(t jscompat settings cmd parse reader sensors monitor)
+    solwind_test(tst_${t})
+    add_test(NAME ${t} COMMAND tst_${t})
+endforeach()
 
 # Daemon tests start solwindd: always on a private session bus of their own (dbus-run-session), never the user's
 solwind_test(tst_daemon)
@@ -22,3 +23,7 @@ add_test(NAME daemon COMMAND ${DBUS_RUN_SESSION} -- env SOLWIND_TEST_PRIVATE_BUS
 # Settings.qml (the differential check in .dev, see SPEC.md ST-4)
 add_executable(settings_probe settings_probe.cpp)
 target_link_libraries(settings_probe PRIVATE solwind_core)
+
+# The same for the phase 2 functions (nbfc status, config curves, sensors) and the sensor reader (.dev/phase2diff.sh)
+add_executable(phase2_probe phase2_probe.cpp)
+target_link_libraries(phase2_probe PRIVATE solwind_core)

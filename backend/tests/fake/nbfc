@@ -1,0 +1,67 @@
+#!/usr/bin/python3 -I
+# Fake nbfc for Solwind's tests: state in $CCT/state.json, every call logged to $CCT/calls.log. Prints what nbfc-linux
+# 0.4.1 prints (status -a format checked against the real one). Optional: $CCT/configs.txt (config -l),
+# $CCT/recommend.txt (config -r).
+import sys, json, fcntl, time, os
+T = os.environ["CCT"]
+ST, SAVED, CFG, LOG = T + "/state.json", T + "/saved.json", T + "/nbfc.json", T + "/calls.log"
+a = sys.argv[1:]
+def log(msg):
+    with open(LOG, "a") as f: f.write("%.3f nbfc %s %s\n" % (time.time(), " ".join(a), msg))
+lk = open(T + "/lock", "w"); fcntl.flock(lk, fcntl.LOCK_EX)
+s = json.load(open(ST))
+def save(): json.dump(s, open(ST, "w"), indent=1)
+def stop():
+    json.dump({"TargetFanSpeeds": [-1 if f["auto"] else f["target"] for f in s["fans"]]}, open(SAVED, "w"))
+    s["running"] = False
+def start(ro):
+    s["running"] = True; s["readOnly"] = ro
+    s["config"] = json.load(open(CFG))["SelectedConfigId"]
+    sv = json.load(open(SAVED)).get("TargetFanSpeeds", [])
+    for i, f in enumerate(s["fans"]):
+        v = sv[i] if i < len(sv) else -1
+        if v >= 0: f["auto"] = False; f["target"] = v
+        else: f["auto"] = True; f["target"] = 30
+cmd = a[0] if a else ""
+if cmd == "status":
+    if not s["running"]:
+        log("-> not running"); print("Error: nbfc_service is not running", file=sys.stderr); sys.exit(1)
+    print("Read-only                : %s" % ("true" if s["readOnly"] else "false"))
+    print("Selected Config Name     : %s" % s["config"])
+    for f in s["fans"]:
+        print("\nFan Display Name         : %s" % f["name"])
+        print("Temperature              : %.2f" % s["temp"])
+        print("Auto Control Enabled     : %s" % ("true" if f["auto"] else "false"))
+        print("Critical Mode Enabled    : %s" % ("true" if f["critical"] else "false"))
+        print("Current Fan Speed        : %.2f" % (100 if f["critical"] else f["target"]))
+        print("Target Fan Speed         : %.2f" % (100 if f["critical"] else f["target"]))
+        print("Fan Speed Steps          : 100")
+    sys.exit(0)
+if cmd == "set":
+    if os.path.exists(T + "/slow"): fcntl.flock(lk, fcntl.LOCK_UN); time.sleep(6); fcntl.flock(lk, fcntl.LOCK_EX); s = json.load(open(ST))
+    if not s["running"]: log("-> FAIL not running"); print("Error: not running", file=sys.stderr); sys.exit(1)
+    fan = int(a[a.index("-f") + 1]) if "-f" in a else None
+    for i in ([fan] if fan is not None else range(len(s["fans"]))):
+        f = s["fans"][i]
+        if "-a" in a:
+            if i in s.get("ignoreAuto", []): continue
+            f["auto"] = True; f["target"] = 30
+        else:
+            f["auto"] = False; f["target"] = float(a[a.index("-s") + 1])
+    save(); log("ok"); sys.exit(0)
+if cmd == "stop": stop(); save(); log("ok"); sys.exit(0)
+if cmd == "start": start("-r" in a); save(); log("ok"); sys.exit(0)
+if cmd == "restart":
+    stop(); save(); fcntl.flock(lk, fcntl.LOCK_UN); time.sleep(1.2)
+    fcntl.flock(lk, fcntl.LOCK_EX); s = json.load(open(ST)); start("-r" in a); save(); log("ok"); sys.exit(0)
+if cmd == "config":
+    if "-l" in a:
+        log("ok")
+        print(open(T + "/configs.txt").read() if os.path.exists(T + "/configs.txt") else "TestA\nTestB", end="" if os.path.exists(T + "/configs.txt") else "\n")
+        sys.exit(0)
+    if "-s" in a: json.dump({"SelectedConfigId": a[a.index("-s") + 1]}, open(CFG, "w")); log("ok"); sys.exit(0)
+    if "-r" in a:
+        log("ok")
+        if os.path.exists(T + "/recommend.txt"): print(open(T + "/recommend.txt").read(), end="")
+        sys.exit(0)
+log("-> unknown"); sys.exit(2)

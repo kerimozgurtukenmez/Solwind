@@ -1,9 +1,12 @@
 #include "JsCompat.h"
 
 #include <QJsonArray>
+#include <QJsonDocument>
 #include <QJsonObject>
+#include <QLocale>
 #include <QRegularExpression>
 
+#include <cctype>
 #include <charconv>
 #include <cmath>
 #include <limits>
@@ -147,5 +150,95 @@ QJsonValue andGet(const QJsonValue &p, const QString &key)
 }
 
 QString trim(const QString &s) { return trimWith(s, trimSpace); }
+
+double parseFloat(const QString &raw)
+{
+    QStringView s(raw);
+    qsizetype i = 0;
+    while (i < s.size() && numberSpace(s[i])) ++i;
+    static const QRegularExpression lit(QStringLiteral("^[+-]?(Infinity|(\\d+\\.?\\d*|\\.\\d+)([eE][+-]?\\d+)?)"));
+    const QRegularExpressionMatch m = lit.matchView(s.mid(i));
+    return m.hasMatch() ? stringToNumber(m.captured(0)) : NaN;
+}
+
+QString toString(const QJsonValue &v)
+{
+    switch (v.type()) {
+    case QJsonValue::Undefined: return QStringLiteral("undefined");
+    case QJsonValue::Null: return QStringLiteral("null");
+    case QJsonValue::Object: return QStringLiteral("[object Object]");
+    case QJsonValue::Double: {
+        // Integers and plain decimals as JS writes them; very large/small numbers may differ in the exponent's
+        // form (1e-07 vs JS 1e-7), which none of the values this is used for can be
+        const double d = v.toDouble();
+        if (std::isnan(d)) return QStringLiteral("NaN");
+        if (std::isinf(d)) return d > 0 ? QStringLiteral("Infinity") : QStringLiteral("-Infinity");
+        if (d == std::floor(d) && std::fabs(d) < 1e15) return QString::number(qint64(d));
+        return QString::number(d, 'g', QLocale::FloatingPointShortest);
+    }
+    default: return elementToString(v);
+    }
+}
+
+double parseInt(const QString &raw)
+{
+    // Leading white space as Number() skips it, then an optional sign, then digits (hex after 0x)
+    QStringView s(raw);
+    qsizetype i = 0;
+    while (i < s.size() && numberSpace(s[i])) ++i;
+    double sign = 1;
+    if (i < s.size() && (s[i] == u'+' || s[i] == u'-')) { if (s[i] == u'-') sign = -1; ++i; }
+    int base = 10;
+    if (i + 1 < s.size() && s[i] == u'0' && (s[i + 1] == u'x' || s[i + 1] == u'X')) { base = 16; i += 2; }
+    double v = 0;
+    bool any = false;
+    for (; i < s.size(); ++i) {
+        const int d = s[i].isDigit() && s[i].unicode() < 128 ? s[i].unicode() - '0'
+                    : base == 16 && s[i].unicode() < 128 && std::isxdigit(s[i].unicode()) ? (s[i].toLower().unicode() - 'a' + 10) : -1;
+        if (d < 0 || d >= base) break;
+        v = v * base + d;
+        any = true;
+    }
+    return any ? sign * v : NaN;
+}
+
+// JSON.parse refuses a raw control character (below 0x20) inside a string; QJsonDocument accepts it
+static bool rawControlInString(const QByteArray &text)
+{
+    bool in = false, esc = false;
+    for (const char ch : text) {
+        const auto c = static_cast<unsigned char>(ch);
+        if (!in) { if (c == '"') in = true; continue; }
+        if (esc) { esc = false; continue; }
+        if (c == '\\') esc = true;
+        else if (c == '"') in = false;
+        else if (c < 0x20) return true;
+    }
+    return false;
+}
+
+std::optional<QJsonValue> parseJson(const QByteArray &bytes, QString *why)
+{
+    QByteArray text = QString::fromUtf8(bytes).toUtf8();
+    if (text.startsWith("\xEF\xBB\xBF")) text.remove(0, 3);    // a file starting with a BOM was read (measured)
+    QJsonParseError err;
+    QJsonDocument doc = QJsonDocument::fromJson(text, &err);
+    QJsonValue value;
+    QString w;
+    if (err.error == QJsonParseError::NoError) {
+        value = doc.isObject() ? QJsonValue(doc.object()) : QJsonValue(doc.array());
+    } else {
+        // A top-level scalar: read as the only element of an array (exactly one, so "1, 2" stays an error)
+        QJsonParseError e2;
+        const QJsonDocument wrapped = QJsonDocument::fromJson("[" + text + "]", &e2);
+        const QJsonArray a = wrapped.array();
+        if (e2.error == QJsonParseError::NoError && a.size() == 1 && !a[0].isArray() && !a[0].isObject()) value = a[0];
+        else w = err.errorString();
+    }
+    if (w.isEmpty() && rawControlInString(text)) w = QStringLiteral("control character in a string");
+    if (why) *why = w;
+    if (!w.isEmpty()) return std::nullopt;
+    return value;
+}
 
 } // namespace js
