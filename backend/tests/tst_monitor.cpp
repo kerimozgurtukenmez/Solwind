@@ -183,6 +183,19 @@ private slots:
         FakeWorld::writeAt(f, "{\"SelectedConfigId\": \"TestC\"}");
         QTRY_COMPARE(m->fileConfigId(), u"TestC"_s);
     }
+    void fileDeletedAndCreatedAgain()
+    {
+        // As Quickshell's FileView did (measured): a deleted file keeps the id, a new file and later edits are read
+        startMonitor();
+        const QString f = w->nbfcRoot() + u"/etc/nbfc/nbfc.json"_s;
+        QFile::remove(f);
+        QTest::qWait(300);
+        QCOMPARE(m->fileConfigId(), u"TestA"_s);
+        FakeWorld::writeAt(f, "{\"SelectedConfigId\": \"TestE\"}");
+        QTRY_COMPARE(m->fileConfigId(), u"TestE"_s);
+        FakeWorld::writeAt(f, "{\"SelectedConfigId\": \"TestF\"}");
+        QTRY_COMPARE(m->fileConfigId(), u"TestF"_s);
+    }
     void noConfigYet()
     {
         QFile::remove(w->nbfcRoot() + u"/etc/nbfc/nbfc.json"_s);
