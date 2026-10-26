@@ -7,6 +7,7 @@
 #include "core/FanState.h"
 #include "core/History.h"
 #include "core/I18n.h"
+#include "core/KeyboardController.h"
 #include "core/Notifier.h"
 #include "core/OldAppGuard.h"
 #include "core/Paths.h"
@@ -18,6 +19,7 @@
 #include "dbus/DBusUtil.h"
 #include "dbus/DaemonApi.h"
 #include "dbus/FansApi.h"
+#include "dbus/KeyboardApi.h"
 #include "dbus/SensorsApi.h"
 #include "plugins/fan/nbfc/NbfcPlugin.h"
 
@@ -31,6 +33,8 @@
 
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
+#include <memory>
 #include <optional>
 
 using namespace Qt::StringLiterals;
@@ -102,13 +106,16 @@ int main(int argc, char **argv)
         alerts->sensorGpu = [&] { return sensors.state().gpu(); };
     }
     SampleHistory history;
+    KeyboardController keyboard(paths, settings, i18n, control);
+    KeyboardApi keyboardApi(keyboard, i18n);
     DaemonApi api(paths, settings, loaded, &hints);
     api.controlMode = control;
     SensorsApi sensorsApi(sensors);
     FansApi fansApi(nbfc, sensors, history, fans, fanState, i18n, settings, control);
     // The objects first, then the name: a client that sees the name can call them right away
     const struct { const char *path; QObject *obj; } objects[] = {
-        { DaemonApi::objectPath, &api }, { SensorsApi::path, &sensorsApi }, { FansApi::path, &fansApi } };
+        { DaemonApi::objectPath, &api }, { SensorsApi::path, &sensorsApi }, { FansApi::path, &fansApi },
+        { KeyboardApi::path, &keyboardApi } };
     for (const auto &o : objects) {
         if (!bus.registerObject(QString::fromLatin1(o.path), o.obj,
                                 QDBusConnection::ExportScriptableSlots | QDBusConnection::ExportScriptableSignals
@@ -138,8 +145,11 @@ int main(int argc, char **argv)
     watchdog.setSingleShot(true);
     watchdog.setInterval(20000);
     QObject::connect(&watchdog, &QTimer::timeout, &app, [&] {
-        std::fprintf(stderr, "solwindd: the fans could not be handed back within 20 s, quitting anyway\n");
-        QCoreApplication::exit(exitCode == Ok ? Error : exitCode);
+        // At once, without the destructors: one of them may be waiting for a driver call that hangs (the keyboard's
+        // I/O thread). Settings were written when quitting began; the bus name goes with the process.
+        std::fprintf(stderr, "solwindd: quitting took more than 20 s (a fan command or a keyboard light that hangs), quitting anyway\n");
+        std::fflush(stderr);
+        std::_Exit(exitCode == Ok ? Error : exitCode);
     });
     auto quit = [&](int code) {
         if (quitting) return;
@@ -148,7 +158,14 @@ int main(int argc, char **argv)
         nbfc.setQuitting(true);
         settings.flush();
         watchdog.start();
-        fans.quit([&](const FanController::QuitResult &r) {
+        // The keyboard back to its static colour and the fans back to automatic, side by side (deliberate: the QML
+        // did the keyboard first, and a light that hangs must not keep the fans from being handed back); exit once both
+        // are done
+        auto left = std::make_shared<int>(2);
+        auto oneDone = [&, left] { if (--*left == 0) QCoreApplication::exit(exitCode); };
+        // (stepping aside for the QML app: the light is its now, nothing is written into its start)
+        keyboard.restoreForQuit(oneDone, code != AlreadyRunning);
+        fans.quit([&, oneDone](const FanController::QuitResult &r) {
             if (r.handBackFailed) {
                 // Nothing watches the temperature after this but the config's critical limit: said even with
                 // notifications off, and in the log
@@ -168,7 +185,7 @@ int main(int argc, char **argv)
                               i18n.t(u"NBFC is stopped and has saved fixed fan speeds; it sets them again when it starts. After starting it, run `nbfc set -a` or open Solwind."_s),
                               Notifier::Normal, u"dialog-warning"_s, true, true);
             }
-            QCoreApplication::exit(exitCode);
+            oneDone();
         });
     };
     QObject::connect(&signals_, &UnixSignals::received, &app, [&](int signo) {
@@ -199,6 +216,8 @@ int main(int argc, char **argv)
     // ---------- reading, and (control mode) driving ----------
     PropertyPublisher sensorsProps(bus, QString::fromLatin1(SensorsApi::path), u"solwind.Sensors"_s, &sensorsApi);
     PropertyPublisher fansProps(bus, QString::fromLatin1(FansApi::path), u"solwind.Fans"_s, &fansApi);
+    PropertyPublisher keyboardProps(bus, QString::fromLatin1(KeyboardApi::path), u"solwind.Keyboard"_s, &keyboardApi);
+    QObject::connect(&keyboard, &KeyboardController::changed, &app, [&] { keyboardProps.publish(); });
     // How often (SPEC.md P-1, P-2): fast while a window is open or Solwind drives fans; the sensors are read while
     // the fan page is open, Solwind drives fans in Fixed/Curve mode (the safety limit watches the GPU too), or
     // notifications are on (the critical temperature warning needs them)
@@ -246,6 +265,7 @@ int main(int argc, char **argv)
     pace();
     sensors.start();                              // only now: a second copy that exits with 3 reads nothing
     nbfc.start();
+    keyboard.start();
 
     std::fprintf(stderr, "solwindd %s started, %s mode (settings: %s%s)\n", SOLWIND_VERSION, control ? "control" : "observe",
                  qPrintable(settings.path()), loaded ? "" : ", not read: defaults");

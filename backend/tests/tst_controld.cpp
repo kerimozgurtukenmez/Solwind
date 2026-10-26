@@ -94,6 +94,39 @@ class TstControlD : public QObject
         const QDBusMessage r = QDBusConnection::sessionBus().call(m);
         return r.arguments().value(0).value<QDBusVariant>().variant();
     }
+    QDBusMessage kcall(const QString &method, const QVariantList &args = {})
+    {
+        QDBusMessage m = QDBusMessage::createMethodCall(service, u"/solwind/Keyboard"_s, u"solwind.Keyboard"_s, method);
+        m.setArguments(args);
+        return QDBusConnection::sessionBus().call(m, QDBus::Block, 10000);
+    }
+    QVariant kprop(const QString &name)
+    {
+        QDBusMessage m = QDBusMessage::createMethodCall(service, u"/solwind/Keyboard"_s, u"org.freedesktop.DBus.Properties"_s, u"Get"_s);
+        m << u"solwind.Keyboard"_s << name;
+        return QDBusConnection::sessionBus().call(m).arguments().value(0).value<QDBusVariant>().variant();
+    }
+    // A fake RGB keyboard light of the hp-wmi driver (writable, or not)
+    QString kbdLight(bool writable = true)
+    {
+        const QString d = w->sysRoot() + u"/sys/class/leds/hp::kbd_backlight"_s;
+        const QList<std::pair<const char *, const char *>> files{ { "brightness", "200" }, { "max_brightness", "255" },
+            { "multi_index", "red green blue" }, { "multi_intensity", "10 20 30" }, { "multi_max_intensity", "255 255 255" } };
+        for (const auto &[f, v] : files) {
+            FakeWorld::writeAt(d + u'/' + QString::fromLatin1(f), QByteArray(v) + '\n');
+            const bool rw = writable && (QByteArray(f) == "brightness" || QByteArray(f) == "multi_intensity");
+            QFile(d + u'/' + QString::fromLatin1(f)).setPermissions(rw ? QFile::ReadOwner | QFile::WriteOwner : QFile::ReadOwner);
+        }
+        QDir().mkpath(w->sysRoot() + u"/sys/bus/platform/drivers/hp-wmi"_s);
+        QDir().mkpath(d + u"/device"_s);
+        QFile::link(w->sysRoot() + u"/sys/bus/platform/drivers/hp-wmi"_s, d + u"/device/driver"_s);
+        return d;
+    }
+    static QString content(const QString &path)
+    {
+        QFile f(path);
+        return f.open(QIODevice::ReadOnly) ? QString::fromUtf8(f.readAll()).trimmed() : QString();
+    }
     void expectExit(QProcess &p, int code)
     {
         QVERIFY(p.waitForFinished(10000));
@@ -291,6 +324,7 @@ private slots:
         QCOMPARE(r.errorMessage(), u"Solwind is quitting"_s);
         QCOMPARE(call(u"SetBoost"_s, { qlonglong(-1) }).errorMessage(), u"Solwind is quitting"_s);
         QCOMPARE(call(u"ApplyProfile"_s, { u"quiet"_s, false }).errorMessage(), u"Solwind is quitting"_s);
+        QCOMPARE(kcall(u"SetColor"_s, { u"#00ff00"_s }).errorMessage(), u"Solwind is quitting"_s);   // the keyboard too
         expectExit(*p, 0);
         QVERIFY2(fanIs(0, true) && fanIs(1, true), fanState().constData());
     }
@@ -365,6 +399,63 @@ private slots:
         FakeWorld::writeAt(runtime + u"/quickshell/"_s + entry, "");
         expectExit(*p, 3);
         QVERIFY(fanIs(0, true));                                // handed back to it
+    }
+    // ---------- the keyboard over D-Bus (KeyboardApi: the terminal commands' checks and texts) ----------
+    void keyboardOverDBus()
+    {
+        const QString d = kbdLight();
+        settings("{\"kbd\": {\"effect\": \"static\", \"color\": \"#ff0000\", \"speed\": 1}}");
+        std::unique_ptr<QProcess> p;
+        startAndWait(p);
+        QTRY_VERIFY_WITH_TIMEOUT(kprop(u"Ready"_s).toBool(), 5000);
+        QCOMPARE(kprop(u"Backend"_s).toString(), u"led-rgb"_s);
+        QTRY_COMPARE(content(d + u"/multi_intensity"_s), u"255 0 0"_s);     // the saved colour, at start (K-15)
+        QDBusMessage r = kcall(u"SetColor"_s, { u"zz"_s });
+        QCOMPARE(r.errorName(), u"solwind.Error.Usage"_s);
+        QCOMPARE(r.errorMessage(), u"The color must look like #rrggbb (e.g. #ff0000)"_s);
+        r = kcall(u"SetColor"_s, { u"00ff00"_s });
+        QCOMPARE(r.arguments().value(0).toString(), u"Color: #00FF00"_s);
+        QTRY_COMPARE(content(d + u"/multi_intensity"_s), u"0 255 0"_s);
+        r = kcall(u"SetBrightness"_s, { 50 });
+        QCOMPARE(r.arguments().value(0).toString(), u"Brightness: 50%"_s);
+        QTRY_COMPARE(content(d + u"/brightness"_s), u"128"_s);
+        QCOMPARE(kcall(u"SetEffect"_s, { u"x"_s }).errorMessage(), u"Effect: static | breathing | cycle"_s);
+        QCOMPARE(kcall(u"SetSource"_s, { u"single"_s }).arguments().value(0).toString(), u"Color source: single"_s);
+        QCOMPARE(kcall(u"SetEffect"_s, { u"breathing"_s }).arguments().value(0).toString(), u"Effect: breathing"_s);
+        QTRY_VERIFY(kprop(u"EffectActive"_s).toBool());
+        QTRY_VERIFY(content(d + u"/multi_intensity"_s) != u"0 255 0"_s);   // frames
+        QCOMPARE(kcall(u"SetColors"_s, { QStringList{ u"#12345"_s } }).errorName(), u"solwind.Error.Usage"_s);
+        QVERIFY(kcall(u"StatusText"_s).arguments().value(0).toString().startsWith(u"Keyboard light: hp::kbd_backlight (RGB, single zone)"_s));
+        // Quitting: back to the chosen static colour
+        QDBusInterface(service, u"/solwind"_s, service).call(u"Quit"_s);
+        expectExit(*p, 0);
+        QCOMPARE(content(d + u"/multi_intensity"_s), u"0 255 0"_s);
+        QCOMPARE(content(d + u"/brightness"_s), u"128"_s);
+    }
+    void keyboardRefusals()
+    {
+        const QString d = kbdLight(false);                       // no write permission
+        std::unique_ptr<QProcess> p;
+        startAndWait(p);
+        QTRY_VERIFY_WITH_TIMEOUT(kprop(u"Ready"_s).toBool(), 5000);
+        QVERIFY(!kprop(u"Writable"_s).toBool());
+        QDBusMessage r = kcall(u"SetColor"_s, { u"#00ff00"_s });
+        QCOMPARE(r.errorName(), u"solwind.Error.Failed"_s);
+        QCOMPARE(r.errorMessage(), u"No write permission: Keyboard tab > 'Grant permission' (or: sudo make udev)"_s);
+        QDBusInterface(service, u"/solwind"_s, service).call(u"Quit"_s);
+        expectExit(*p, 0);
+        // Observe mode: nothing changes, nothing is written
+        QVERIFY(QDir(d).removeRecursively());
+        const QString d2 = kbdLight();
+        settings("{\"kbd\": {\"color\": \"#0000ff\"}}");
+        startAndWait(p, { u"--observe"_s });
+        QTRY_VERIFY_WITH_TIMEOUT(kprop(u"Ready"_s).toBool(), 5000);
+        QCOMPARE(kcall(u"SetColor"_s, { u"#00ff00"_s }).errorName(), u"solwind.Error.Observe"_s);
+        QTest::qWait(300);
+        QCOMPARE(content(d2 + u"/multi_intensity"_s), u"10 20 30"_s);
+        QVERIFY(signalProcess(*p, SIGTERM));
+        expectExit(*p, 0);
+        QCOMPARE(content(d2 + u"/multi_intensity"_s), u"10 20 30"_s);
     }
     void notificationsFromTheDaemon()
     {

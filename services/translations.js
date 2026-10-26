@@ -284,6 +284,7 @@ var dict = {
         "A profile name can have at most 32 characters": "Profil adı en fazla 32 karakter olabilir",
         "Solwind only watches the fans now": "Solwind şu an fanları sadece izliyor",
         "Solwind is quitting": "Solwind kapanıyor",
+        "Solwind only watches the keyboard light now": "Solwind şu an klavye ışığını sadece izliyor",
         "Solwind could not hand the fans back to NBFC's automatic control (%1). Run `nbfc set -a` or open Solwind.": "Solwind fanları NBFC'nin otomatik kontrolüne geri veremedi (%1). `nbfc set -a` çalıştırın ya da Solwind'i açın."
     }
 }

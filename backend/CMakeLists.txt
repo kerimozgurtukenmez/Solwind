@@ -18,7 +18,8 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE RelWithDebInfo)
 endif()
 
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core DBus)
+# Gui only for QColor: the keyboard's colour maths must be the QML app's to the bit (no window, no QGuiApplication)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core DBus Gui)
 qt_standard_project_setup()
 include(GNUInstallDirs)
 
@@ -30,6 +31,11 @@ add_library(solwind_core STATIC
     src/core/FanController.cpp
     src/core/FanState.cpp
     src/core/I18n.cpp
+    src/core/CaelestiaScheme.cpp
+    src/core/KbdIo.cpp
+    src/core/KeyboardController.cpp
+    src/core/KeyboardParse.cpp
+    src/core/KeyboardScan.cpp
     src/core/JsCompat.cpp
     src/core/Notifier.cpp
     src/core/OldAppGuard.cpp
@@ -43,8 +49,11 @@ add_library(solwind_core STATIC
     src/dbus/DBusUtil.cpp
     src/dbus/DaemonApi.cpp
     src/dbus/FansApi.cpp
+    src/dbus/KeyboardApi.cpp
     src/dbus/SensorsApi.cpp
     src/plugins/FanPlugin.h
+    src/plugins/KeyboardPlugin.h
+    src/plugins/keyboard/KeyboardPlugins.cpp
     src/plugins/fan/nbfc/NbfcMonitor.cpp
     src/plugins/fan/nbfc/NbfcParse.cpp
     src/plugins/fan/nbfc/NbfcPlugin.cpp
@@ -53,8 +62,9 @@ add_library(solwind_core STATIC
 set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/../services/translations.js" PROPERTIES QT_RESOURCE_ALIAS translations.js)
 qt_add_resources(solwind_core translations PREFIX "/" FILES "${CMAKE_CURRENT_SOURCE_DIR}/../services/translations.js")
 target_include_directories(solwind_core PUBLIC src)
-target_link_libraries(solwind_core PUBLIC Qt6::Core Qt6::DBus)
+target_link_libraries(solwind_core PUBLIC Qt6::Core Qt6::DBus Qt6::Gui)
 target_compile_definitions(solwind_core PUBLIC SOLWIND_VERSION="${SOLWIND_VERSION}"
+                                               SOLWIND_SOURCE_APP_DIR="${CMAKE_CURRENT_SOURCE_DIR}/.."
                                                QT_NO_CAST_FROM_ASCII QT_NO_CAST_TO_ASCII)
 target_compile_options(solwind_core PUBLIC -Wall -Wextra)
 

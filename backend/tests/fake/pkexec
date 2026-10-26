@@ -2,6 +2,9 @@
 # Fake pkexec for Solwind's tests: logs the call, then runs the command (as the user). $CCT/pkexec-cancel: answers like
 # a dismissed password dialog (126); $CCT/pkexec-wait: waits until that file is gone (a dialog left open)
 echo "$(date +%s.%N) pkexec $*" >> "$CCT/calls.log"
+# $CCT/pkexec-noexec: only logged, never run (the keyboard permission scripts touch the real /etc and /sys); its
+# content is the exit code (empty: 0)
+if [ -e "$CCT/pkexec-noexec" ]; then c=$(cat "$CCT/pkexec-noexec"); exit "${c:-0}"; fi
 [ -e "$CCT/pkexec-cancel" ] && { echo "Error executing command as another user: Not authorized" >&2; exit 126; }
 while [ -e "$CCT/pkexec-wait" ]; do sleep 0.05; done
 exec "$@"
