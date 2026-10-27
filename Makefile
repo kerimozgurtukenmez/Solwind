@@ -90,7 +90,8 @@ all: build
 build:
 	@command -v cmake >/dev/null 2>&1 || { echo "cmake is needed to build Solwind (and Qt 6: base, declarative)" >&2; exit 1; }
 	@[ "$$(id -u)" != 0 ] || { echo "Build without sudo: make   (then: sudo make install)" >&2; exit 1; }
-	cmake -S backend -B $(BUILD) -DCMAKE_BUILD_TYPE=Release -DSOLWIND_BUILD_TESTS=OFF \
+	@# (CMAKE_SKIP_RPATH=OFF: a build folder of Solwind 1.0 has ON in its cache, and solwindd wouldn't find its SDK)
+	cmake -S backend -B $(BUILD) -DCMAKE_BUILD_TYPE=Release -DSOLWIND_BUILD_TESTS=OFF -DCMAKE_SKIP_RPATH=OFF \
 		$(if $(wildcard $(BUILD)/CMakeCache.txt),,$(if $(shell command -v ninja),-G Ninja,))
 	cmake --build $(BUILD)
 	@# (what make install compares the sources with: a build that had nothing to do still counts as up to date)
