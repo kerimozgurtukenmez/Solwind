@@ -7,6 +7,7 @@
 #include "core/CoreHost.h"
 #include "core/FanController.h"
 #include "core/FanState.h"
+#include "core/HandBack.h"
 #include "core/History.h"
 #include "core/I18n.h"
 #include "core/KeyboardController.h"
@@ -53,6 +54,11 @@ int main(int argc, char **argv)
         QCoreApplication client(argc, argv);
         const QStringList a = QCoreApplication::arguments().mid(2);
         return std::strcmp(argv[1], "--call") == 0 ? CallClient::call(a) : CallClient::get(a);
+    }
+    // The systemd unit's ExecStopPost, after solwindd has gone: the fan plugin's hand-back, if one was recorded
+    if (argc == 2 && std::strcmp(argv[1], "--hand-back") == 0) {
+        QCoreApplication once(argc, argv);
+        return HandBack::run();
     }
     QCoreApplication app(argc, argv);
     QCoreApplication::setApplicationName(u"solwindd"_s);
@@ -161,6 +167,11 @@ int main(int argc, char **argv)
                      qPrintable(bus.lastError().message()));
         return Error;
     }
+    // The only solwindd from here on: what the unit runs after it has gone (only what this fan plugin needs; in observe
+    // mode nothing, the app next to it drives the fans)
+    QString handBackError;
+    if (!HandBack::record(control ? fan.handBackCommand() : QStringList(), &handBackError))
+        std::fprintf(stderr, "solwindd: the fans' hand-back after a crash couldn't be recorded (%s)\n", qPrintable(handBackError));
 
     // ---------- quitting (QT-1..QT-3) ----------
     // However it is asked for: pending settings written, nothing written to the fans any more, the fans Solwind drives

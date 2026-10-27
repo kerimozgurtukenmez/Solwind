@@ -64,6 +64,7 @@ add_library(solwind_core STATIC
     src/core/Alerts.cpp
     src/core/FanController.cpp
     src/core/FanState.cpp
+    src/core/HandBack.cpp
     src/core/I18n.cpp
     src/core/CaelestiaScheme.cpp
     src/core/CoreHost.h

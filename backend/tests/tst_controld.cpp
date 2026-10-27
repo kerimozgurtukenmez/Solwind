@@ -204,6 +204,65 @@ private slots:
         expectExit(*p, 0);
         QVERIFY(fanIs(0, true) && fanIs(1, true));
     }
+    // A crash: the fans stay where solwindd left them until the systemd unit runs `solwindd --hand-back`, which runs
+    // what the fan plugin recorded at start (NBFC: nbfc set -a). Not after exit 3, not from a file others could change;
+    // without a fan plugin, or in observe mode, nothing is recorded and nothing is run.
+    void handBackAfterACrash()
+    {
+        const QString file = runtime + u"/solwind/fan-hand-back"_s;
+        auto handBack = [&](const QString &exitStatus = QString()) {
+            QProcessEnvironment env = w->env();
+            env.insert(u"XDG_RUNTIME_DIR"_s, runtime);
+            if (!exitStatus.isEmpty()) env.insert(u"EXIT_STATUS"_s, exitStatus);
+            QProcess h;
+            h.setProcessEnvironment(env);
+            h.start(QStringLiteral(SOLWINDD_PATH), { u"--hand-back"_s });
+            return h.waitForFinished(20000) && h.exitStatus() == QProcess::NormalExit ? h.exitCode() : -1;
+        };
+        settings("{\"configs\":{\"TestA\":{\"fans\":{\"0\":{\"mode\":1,\"fixed\":0.4}}}}}");
+        std::unique_ptr<QProcess> p;
+        startAndWait(p);
+        QTRY_VERIFY_WITH_TIMEOUT(fanIs(0, false, 40), 8000);
+        QFile f(file);
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        QCOMPARE(f.readAll(), QByteArray("nbfc\nset\n-a\n"));
+        f.close();
+        QCOMPARE(int(QFileInfo(file).permissions() & (QFile::WriteGroup | QFile::WriteOther | QFile::ReadOther)), 0);
+        QVERIFY(signalProcess(*p, SIGKILL));                    // a crash: nothing handed back by it
+        QVERIFY(p->waitForFinished(5000));
+        QTRY_VERIFY_WITH_TIMEOUT(!nameOwned(), 3000);
+        QVERIFY(fanIs(0, false, 40));
+        QCOMPARE(handBack(u"3"_s), 0);                           // exit 3: it didn't start, nothing is run
+        QVERIFY(fanIs(0, false, 40));
+        QVERIFY(QFile::setPermissions(file, QFile::ReadOwner | QFile::WriteOwner | QFile::ReadOther | QFile::WriteOther));
+        QCOMPARE(handBack(), 1);                                 // others could have changed it
+        QVERIFY(fanIs(0, false, 40));
+        QVERIFY(QFile::setPermissions(file, QFile::ReadOwner | QFile::WriteOwner));
+        QCOMPARE(handBack(), 0);
+        QVERIFY2(fanIs(0, true) && fanIs(1, true), fanState().constData());
+
+        // Without a fan plugin: the file goes, nothing is run
+        QTemporaryDir none;
+        w->pluginPath = none.path();
+        startAndWait(p);
+        QVERIFY(!QFile::exists(file));
+        QVERIFY(signalProcess(*p, SIGKILL));
+        QVERIFY(p->waitForFinished(5000));
+        QTRY_VERIFY_WITH_TIMEOUT(!nameOwned(), 3000);
+        const qsizetype calls = w->calls().count("nbfc set");
+        QCOMPARE(handBack(), 0);
+        QCOMPARE(w->calls().count("nbfc set"), calls);
+        // Observe mode records nothing either (the app next to it drives the fans)
+        w->pluginPath = QStringLiteral(PLUGINS_DIR);
+        startAndWait(p);
+        QVERIFY(QFile::exists(file));
+        QVERIFY(signalProcess(*p, SIGTERM));
+        expectExit(*p, 0);
+        startAndWait(p, { u"--observe"_s });
+        QVERIFY(!QFile::exists(file));
+        QVERIFY(signalProcess(*p, SIGTERM));
+        expectExit(*p, 0);
+    }
     void controlMethods()
     {
         std::unique_ptr<QProcess> p;

@@ -9,7 +9,7 @@ Description=Solwind - fan and keyboard light control (solwindd)
 PartOf=graphical-session.target
 After=graphical-session.target
 # A failure that doesn't go away (e.g. no session bus) stops after 5 starts in a minute: with RestartSec=3 systemd's
-# default limit (5 in 10 s) is never reached, and every round would run ExecStopPost (nbfc set -a) again
+# default limit (5 in 10 s) is never reached, and every round would run ExecStopPost (the fans' hand-back) again
 StartLimitIntervalSec=60
 StartLimitBurst=5
 
@@ -22,11 +22,11 @@ ExecStartPre=-@BINDIR@/solwind --migrate
 ExecStart=@LIBDIR@/solwindd
 # The keyboard permission's rule template and checker (the app's "Grant permission")
 Environment=SOLWIND_APP_DIR=@APPDIR@
-# A stop (systemctl stop, solwind quit, logging out) is a SIGTERM: it hands the fans back to NBFC and leaves the
-# keyboard light on its static colour itself, within 20 s. In any case (a crash, a timeout) the fans go back to NBFC's
-# automatic control afterwards, unless it didn't start (exit 3) because a Solwind app of 0.5.x or older drives them
-# ($$ is a literal $ for the shell)
-ExecStopPost=-/bin/sh -c '[ "$${EXIT_STATUS:-}" = 3 ] || PATH="$${PATH:-}:/usr/local/bin:/usr/bin" exec nbfc set -a'
+# A stop (systemctl stop, solwind quit, logging out) is a SIGTERM: it hands the fans back and leaves the keyboard
+# light on its static colour itself, within 20 s. In any case (a crash, a timeout) the fans are handed back afterwards
+# the way the fan plugin in use recorded at start (the NBFC plugin: nbfc set -a; no fan plugin: nothing, the firmware
+# keeps them), unless it didn't start (exit 3) because something else drives them
+ExecStopPost=-@LIBDIR@/solwindd --hand-back
 TimeoutStopSec=30
 Restart=on-failure
 RestartSec=3

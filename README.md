@@ -12,7 +12,7 @@ It has two parts: **solwindd**, a small background service (C++/Qt) that drives 
 >
 > - I've only tested it on my own **HP Victus 16-r0xxx** (Arch Linux, Hyprland). Other models and brands may not work.
 > - The fan part **writes fan speeds to your hardware** through NBFC. A bad setting can make your laptop run hot, so keep an eye on the temperatures.
-> - If solwindd crashes, its systemd service hands the fans back to NBFC and starts it again. `nbfc set -a` gives the fans back by hand.
+> - If solwindd crashes, its systemd service hands the fans back (with the NBFC plugin: to NBFC) and starts it again. `nbfc set -a` gives the fans back by hand.
 
 ## Screenshots
 
@@ -142,7 +142,7 @@ They go to `~/.local/share/solwind/plugins`; `make remove-plugin P=<name>` remov
 
 - A plugin runs inside solwindd, as your user. For now the only plugins are the ones in this repository; downloading them from the app comes later.
 - solwindd loads a plugin only if it was built with the same Solwind (the same version and plugin interface), and only if no one but you (or root) can change the file or the plugin folders it is in (a link is refused too). After an update, install your plugins again (`make plugin P=...`): until then solwindd skips them and says why.
-- Without a fan plugin the fan page only shows the temperatures; without a keyboard plugin the Keyboard page says which light it found.
+- Without a fan plugin the fan page only shows the temperatures and nothing is ever sent to NBFC; without a keyboard plugin the Keyboard page says which light it found.
 
 ### Permissions
 
@@ -153,7 +153,7 @@ They go to `~/.local/share/solwind/plugins`; `make remove-plugin P=<name>` remov
 
 - `solwind` (or the menu entry) starts solwindd if it isn't running and opens the window.
 - Closing the window doesn't stop solwindd, it keeps controlling the fans. Quit everything with **Quit** in Settings, the tray menu or `solwind quit`; the fans go back to NBFC and the keyboard stays on its chosen color.
-- **Start in the background on login** is a switch in the app (it turns the systemd user service `solwind.service` on). If solwindd crashes, the fans go back to NBFC and systemd starts it again. The tray icon comes with it (it ends by itself if you turn the tray off).
+- **Start in the background on login** is a switch in the app (it turns the systemd user service `solwind.service` on). If solwindd crashes, systemd hands the fans back the way the fan plugin in use said when it started (NBFC: `nbfc set -a`; without a fan plugin nothing is done, the firmware keeps the fans) and starts solwindd again. The tray icon comes with it (it ends by itself if you turn the tray off).
 - The terminal commands work without the window.
 
 ```sh

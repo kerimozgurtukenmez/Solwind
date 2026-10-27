@@ -46,6 +46,9 @@ public:
         QDir().mkpath(sysRoot() + QStringLiteral("/sys/bus/pci/devices"));
         QDir().mkpath(nbfcRoot() + QStringLiteral("/etc/nbfc"));
         QDir().mkpath(cct() + QStringLiteral("/cfg"));
+        // (a runtime folder of its own: solwindd records the fans' hand-back there, never in the real one)
+        QDir().mkpath(runtime());
+        QFile::setPermissions(runtime(), QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
         // The daemon reads <nbfcRoot>/etc/nbfc/nbfc.json, the fake nbfc writes $CCT/nbfc.json: one file
         write(QStringLiteral("nbfc.json"), "{\"SelectedConfigId\": \"TestA\"}");
         QFile::link(cct() + QStringLiteral("/nbfc.json"), nbfcRoot() + QStringLiteral("/etc/nbfc/nbfc.json"));
@@ -61,6 +64,7 @@ public:
     QString sysRoot() const { return dir.path() + QStringLiteral("/root"); }
     QString nbfcRoot() const { return dir.path() + QStringLiteral("/nbfcroot"); }
     QString settingsHome() const { return dir.path() + QStringLiteral("/cfg"); }
+    QString runtime() const { return dir.path() + QStringLiteral("/run"); }
 
     // $CCT/<name> (folders made as needed)
     void write(const QString &name, const QByteArray &text) const { writeAt(cct() + u'/' + name, text); }
@@ -123,6 +127,7 @@ public:
         e.insert(QStringLiteral("SOLWIND_NBFC_ROOT"), nbfcRoot());
         e.insert(QStringLiteral("XDG_CONFIG_HOME"), settingsHome());
         e.insert(QStringLiteral("SOLWIND_PLUGIN_PATH"), pluginPath);
+        e.insert(QStringLiteral("XDG_RUNTIME_DIR"), runtime());
         return e;
     }
     // Runs one of the fakes by its full path, never a real tool of the same name found on PATH

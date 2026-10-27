@@ -204,11 +204,14 @@ start_daemon() {
             || { not_started solwind.service "$(systemctl --user show -p ExecMainStatus --value solwind.service 2>/dev/null)"; return 1; }
         wait_up || not_started solwind.service
     elif [ -z "${SOLWIND_NO_SYSTEMD:-}" ] && command -v systemd-run >/dev/null 2>&1; then
-        # (a failed run of an earlier start is cleared first; $$ is a literal $ for the shell systemd starts)
+        # (a failed run of an earlier start is cleared first; the fans' hand-back after it has gone as the installed
+        # service's: solwindd --hand-back. The paths go in as environment variables, whole: --setenv isn't split on
+        # spaces; $$ is a literal $ for the shell systemd starts)
         systemctl --user reset-failed solwind-dev.service >/dev/null 2>&1
         systemd-run --user --unit=solwind-dev --collect --quiet -p Type=dbus -p BusName=solwind.Daemon \
-            -p "Environment=SOLWIND_APP_DIR=$dir" -p TimeoutStopSec=30 -p "Description=Solwind (solwindd of $dir)" \
-            -p "ExecStopPost=-/bin/sh -c '[ \"\$\${EXIT_STATUS:-}\" = 3 ] || PATH=\"\$\${PATH:-}:/usr/local/bin:/usr/bin\" exec nbfc set -a'" \
+            --setenv="SOLWIND_APP_DIR=$dir" --setenv="SOLWIND_DAEMON=$daemon" -p TimeoutStopSec=30 \
+            -p "Description=Solwind (solwindd of $dir)" \
+            -p "ExecStopPost=-/bin/sh -c 'exec \"\$\$SOLWIND_DAEMON\" --hand-back'" \
             "$daemon" >/dev/null 2>&1 \
             || { not_started solwind-dev.service "$(systemctl --user show -p ExecMainStatus --value solwind-dev.service 2>/dev/null)"; return 1; }
         wait_up || not_started solwind-dev.service

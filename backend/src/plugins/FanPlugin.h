@@ -4,6 +4,7 @@
 #include <QList>
 #include <QObject>
 #include <QString>
+#include <QStringList>
 
 #include <functional>
 #include <limits>
@@ -68,6 +69,9 @@ public:
     virtual void setAuto(int fan, Done done) = 0;            // fan -1: all of them
     // Every fan back to automatic; never replaced, runs after the commands already waiting (quit, hand-back)
     virtual void releaseAll(Done done) = 0;
+    // The command that gives every fan back without solwindd (no shell): run by the systemd unit after solwindd
+    // stopped or crashed (HandBack). Empty: nothing holds the fans once solwindd is gone (the firmware has them).
+    virtual QStringList handBackCommand() const { return {}; }
     // After quitting without being able to hand the fans back (the driver doesn't run): true if the driver will set
     // fixed speeds again by itself when it starts (NBFC: /var/lib/nbfc/state.json, SPEC.md QT-3)
     virtual void willRestoreFixedSpeeds(std::function<void(bool)> done) = 0;

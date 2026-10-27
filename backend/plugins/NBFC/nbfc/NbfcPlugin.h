@@ -46,6 +46,8 @@ public:
     void setPercent(int fan, int pct, Done done) override;
     void setAuto(int fan, Done done) override;
     void releaseAll(Done done) override;
+    // (NBFC keeps a fixed speed it was given until it is told otherwise, also when solwindd is gone)
+    QStringList handBackCommand() const override { return { QStringLiteral("nbfc"), QStringLiteral("set"), QStringLiteral("-a") }; }
     void willRestoreFixedSpeeds(std::function<void(bool)> done) override;
 
     QString blockedReason(bool withHolding = true) const override;
