@@ -79,6 +79,11 @@ Kullanım: solwind [komut]
   kbd range <% %>    Nefesin en düşük ve en yüksek seviyesi (ör. kbd range 10 90)
   kbd themecount <n> Caelestia kaynağında renk sayısı (3-6)
   lang [tr|en]       Arayüz dili; boşsa: şu anki dili göster
+  plugins            Eklentiler: katalogdakiler, kurulu olanlar ve bu bilgisayara uyanlar
+  plugin install <ad>
+                     Eklentiyi indir, derle, kur (ev klasörüne, sudo'suz); --source <klasör> <ad>: yerel kopyadan
+  plugin update [ad] Kurulu eklentileri katalogdaki commit'e ve bu Solwind'e göre yeniden kur
+  plugin remove <ad> Eklentiyi kaldır
   report             Hata bildirmek için tanı raporu oluştur (ev klasörüne bir metin dosyası)
   quit               Tamamen kapat: pencere ve arka plan servisi (Solwind'in kontrol ettiği fanlar NBFC'ye döner,
                      klavye ışığı seçilen renginde kalır); çalışmıyorsa bir şey yapmaz
@@ -110,6 +115,14 @@ Usage: solwind [command]
   kbd range <% %>    Lowest and highest breathing level (e.g. kbd range 10 90)
   kbd themecount <n> Number of colors with the Caelestia source (3-6)
   lang [tr|en]       UI language; without one: show the current language
+  plugins            Plugins: the catalog's, the installed ones and the ones that fit this computer
+  plugin install <name>
+                     Download, build and install a plugin (into your home folder, no sudo); --source <folder> <name>:
+                     from a local copy
+  plugin update [name]
+                     Install the installed plugins again for the catalog's commit and this Solwind
+  plugin remove <name>
+                     Remove a plugin
   report             Create a diagnostic report for bug reports (a text file in your home folder)
   quit               Quit completely: the window and the background service (fans driven by Solwind go back to
                      NBFC, the keyboard light stays on its chosen color); does nothing if it isn't running
@@ -387,6 +400,11 @@ case "${1:-}" in
     report)
         # Diagnostic report (works without Solwind running): one text file in your home folder
         exec sh "$dir/scripts/report.sh" "$dir" ;;
+    plugins|plugin)
+        # The plugin catalog, downloading and building plugins: solwind-plugin, as you (solwindd never does it)
+        [ -x "$lib/solwind-plugin" ] || { err "solwind: solwind-plugin not found ($lib)" "solwind: solwind-plugin bulunamadı ($lib)"; exit 1; }
+        if [ "$1" = plugins ]; then [ $# = 1 ] || usage_error "solwind plugins" "solwind plugins"; set -- list; else shift; fi
+        SOLWIND_LANG=$lang exec "$lib/solwind-plugin" --catalog "$dir/plugin-catalog.json" "$@" ;;
     lang)
         case "${2:-}" in ""|tr|en) ;; *) usage_error "tr | en" "tr | en" ;; esac
         need_up

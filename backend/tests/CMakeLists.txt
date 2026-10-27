@@ -1,7 +1,16 @@
 find_package(Qt6 REQUIRED COMPONENTS Test)
 
+# Not tests by themselves: they answer calls as JSON lines, so the same inputs can be compared with the old QML app
+# (the differential checks in .dev, see SPEC.md ST-4): validators (settings_probe), fan control scenarios on a plugin
+# that follows the QML's NBFC queue and status read (phase3_probe, .dev/phase3diff.sh)
+add_executable(settings_probe settings_probe.cpp)
+target_link_libraries(settings_probe PRIVATE solwind_core)
+add_executable(phase3_probe phase3_probe.cpp)
+target_link_libraries(phase3_probe PRIVATE solwind_core)
+
 # Every test gets the fake programs (tests/fake: nbfc, systemctl, nvidia-smi, lspci) through TestEnv.h, and the
-# plugins' code (linked in; solwindd started by a test loads the plugin files of this build: SOLWIND_PLUGIN_PATH)
+# plugins' code (linked in; solwindd started by a test loads the plugin files of this build: SOLWIND_PLUGIN_PATH).
+# The tests of the plugins and of solwindd with them need a checkout of Solwind-plugins: -DSOLWIND_PLUGINS_DIR.
 get_property(SOLWIND_PLUGINS GLOBAL PROPERTY SOLWIND_PLUGINS)
 list(TRANSFORM SOLWIND_PLUGINS APPEND -code OUTPUT_VARIABLE SOLWIND_PLUGIN_CODE)
 function(solwind_test name)
@@ -11,7 +20,20 @@ function(solwind_test name)
                                                PLUGINS_DIR="${CMAKE_BINARY_DIR}/plugins")
 endfunction()
 
-foreach(t jscompat settings cmd parse reader sensors monitor control fanstate nbfcplugin alerts keyboard)
+foreach(t jscompat settings cmd reader sensors control fanstate alerts catalog)
+    solwind_test(tst_${t})
+    add_test(NAME ${t} COMMAND tst_${t})
+endforeach()
+target_sources(tst_catalog PRIVATE ../src/cli/PluginTool.cpp)
+
+set(_needed NBFC-nbfc HP-hp-wmi-keyboard HP-hp-wmi-keyboard-zones HP-hp-wmi-rgb-zones)
+foreach(t IN LISTS _needed)
+    if(NOT TARGET ${t})
+        message(STATUS "Tests of the plugins and of solwindd with them skipped: no ${t} (-DSOLWIND_PLUGINS_DIR=<a checkout of Solwind-plugins>)")
+        return()
+    endif()
+endforeach()
+foreach(t parse monitor nbfcplugin keyboard)
     solwind_test(tst_${t})
     add_test(NAME ${t} COMMAND tst_${t})
 endforeach()
@@ -37,20 +59,9 @@ target_compile_definitions(tst_controld PRIVATE SOLWINDD_PATH="$<TARGET_FILE:sol
 add_dependencies(tst_controld solwindd ${SOLWIND_PLUGINS})
 add_test(NAME controld COMMAND ${DBUS_RUN_SESSION} -- env SOLWIND_TEST_PRIVATE_BUS=1 $<TARGET_FILE:tst_controld>)
 
-# Not a test by itself: answers validator calls as JSON lines, so the same inputs can be compared with the old QML
-# Settings.qml (the differential check in .dev, see SPEC.md ST-4)
-add_executable(settings_probe settings_probe.cpp)
-target_link_libraries(settings_probe PRIVATE solwind_core)
-
-# The same for the phase 2 functions (nbfc status, config curves, sensors) and the sensor reader (.dev/phase2diff.sh)
+# Probes as above, with the plugins' code: the phase 2 functions (nbfc status, config curves, sensors) and the sensor
+# reader (.dev/phase2diff.sh); the keyboard: detection, parsing, colour maths, effects (.dev/phase4diff.sh)
 add_executable(phase2_probe phase2_probe.cpp)
 target_link_libraries(phase2_probe PRIVATE solwind_core NBFC-nbfc-code)
-
-# The same for fan control scenarios: FanController + FanState + Settings on a plugin that follows the QML's NBFC
-# queue and status read (.dev/phase3diff.sh)
-add_executable(phase3_probe phase3_probe.cpp)
-target_link_libraries(phase3_probe PRIVATE solwind_core)
-
-# The same for the keyboard: detection, parsing, colour maths, effects (.dev/phase4diff.sh)
 add_executable(phase4_probe phase4_probe.cpp)
 target_link_libraries(phase4_probe PRIVATE solwind_core ${SOLWIND_PLUGIN_CODE})

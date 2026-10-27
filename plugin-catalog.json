@@ -1,0 +1,36 @@
+{
+    "version": 1,
+    "repository": "https://github.com/kerimozgurtukenmez/Solwind-plugins.git",
+    "plugins": [
+        {
+            "id": "NBFC/nbfc",
+            "kind": "fan",
+            "description": "Fans through NBFC-Linux (nbfc set); its service and laptop configs",
+            "tested": "HP Victus 16-r0xxx",
+            "commit": "8615713a0bb762d3045b06768661e9e14a467560",
+            "fits": { "programs": ["nbfc"] }
+        },
+        {
+            "id": "HP/hp-wmi-keyboard",
+            "kind": "keyboard",
+            "description": "HP single-zone RGB keyboard light (hp::kbd_backlight of the hp-wmi-fan-and-backlight-control module), with effects",
+            "tested": "HP Victus 16-r0xxx",
+            "commit": "8615713a0bb762d3045b06768661e9e14a467560",
+            "fits": { "leds": [{ "name": "*::kbd_backlight", "driver": "hp-wmi" }] }
+        },
+        {
+            "id": "HP/hp-wmi-keyboard-zones",
+            "kind": "keyboard",
+            "description": "HP four-zone RGB keyboard light (one LED per zone, the same color on all)",
+            "commit": "8615713a0bb762d3045b06768661e9e14a467560",
+            "fits": { "leds": [{ "name": "*::kbd_zoned_backlight-*", "driver": "hp-wmi" }, { "name": "*::kbd_backlight_zone*", "driver": "hp-wmi" }] }
+        },
+        {
+            "id": "HP/hp-wmi-rgb-zones",
+            "kind": "keyboard",
+            "description": "HP four-zone keyboard color through rgb_zones (older copies of that module), color only",
+            "commit": "8615713a0bb762d3045b06768661e9e14a467560",
+            "fits": { "paths": ["/sys/devices/platform/hp-wmi/rgb_zones"] }
+        }
+    ]
+}

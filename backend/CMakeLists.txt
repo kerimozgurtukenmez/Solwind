@@ -58,6 +58,25 @@ target_link_libraries(solwind_sdk PUBLIC Qt6::Core Qt6::Gui)
 target_compile_definitions(solwind_sdk PUBLIC QT_NO_CAST_FROM_ASCII QT_NO_CAST_TO_ASCII SOLWIND_SDK_ID="${SOLWIND_SDK_ID}"
                                        PRIVATE SOLWIND_SOURCE_APP_DIR="${CMAKE_CURRENT_SOURCE_DIR}/..")
 target_compile_options(solwind_sdk PUBLIC -Wall -Wextra)
+add_library(Solwind::sdk ALIAS solwind_sdk)
+include(cmake/SolwindPlugin.cmake)
+
+# The SDK as a CMake package (find_package(SolwindSdk)), so a plugin's source builds without Solwind's tree:
+# <build>/sdk for this build folder (solwind-plugin run from a source checkout), <build>/sdk-install for make install
+# (into <prefix>/lib/cmake/SolwindSdk, with the headers in <prefix>/include/solwind)
+set(SOLWIND_SDK_PREFIX_NOTE "This build folder's SDK.")
+set(SOLWIND_SDK_ROOT "set(_solwind_lib \"${CMAKE_BINARY_DIR}\")\nset(_solwind_include \"${CMAKE_CURRENT_SOURCE_DIR}/src\")")
+configure_file(cmake/SolwindSdkConfig.cmake.in "${CMAKE_BINARY_DIR}/sdk/SolwindSdkConfig.cmake" @ONLY)
+configure_file(cmake/SolwindPlugin.cmake "${CMAKE_BINARY_DIR}/sdk/SolwindPlugin.cmake" COPYONLY)
+set(SOLWIND_SDK_PREFIX_NOTE "Installed: <prefix>/lib/cmake/SolwindSdk; the library in <prefix>/lib/solwind, the headers in <prefix>/include/solwind.")
+set(SOLWIND_SDK_ROOT "get_filename_component(_solwind_prefix \"\${CMAKE_CURRENT_LIST_DIR}/../../..\" ABSOLUTE)\nset(_solwind_lib \"\${_solwind_prefix}/lib/solwind\")\nset(_solwind_include \"\${_solwind_prefix}/include/solwind\")")
+configure_file(cmake/SolwindSdkConfig.cmake.in "${CMAKE_BINARY_DIR}/sdk-install/SolwindSdkConfig.cmake" @ONLY)
+configure_file(cmake/SolwindPlugin.cmake "${CMAKE_BINARY_DIR}/sdk-install/SolwindPlugin.cmake" COPYONLY)
+# (the headers make install puts into <prefix>/include/solwind, by their path under src/)
+file(WRITE "${CMAKE_BINARY_DIR}/sdk-install/headers.txt" "")
+foreach(h IN LISTS SOLWIND_SDK_HEADERS)
+    file(APPEND "${CMAKE_BINARY_DIR}/sdk-install/headers.txt" "${h}\n")
+endforeach()
 
 # Everything but main(): the tests link the same code the daemon runs
 add_library(solwind_core STATIC
@@ -104,10 +123,29 @@ target_link_libraries(solwindd PRIVATE solwind_core)
 set_target_properties(solwindd PROPERTIES BUILD_WITH_INSTALL_RPATH ON INSTALL_RPATH "\$ORIGIN")
 install(TARGETS solwindd RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
+# The plugin tool (solwind plugins / solwind plugin ...): the catalog, downloading and building plugins, as the user.
+# A program of its own: solwindd never downloads or builds anything.
+add_executable(solwind-plugin src/cli/plugin_main.cpp src/cli/PluginTool.cpp src/cli/PluginTool.h)
+target_link_libraries(solwind-plugin PRIVATE solwind_core)
+set_target_properties(solwind-plugin PROPERTIES BUILD_WITH_INSTALL_RPATH ON INSTALL_RPATH "\$ORIGIN")
+
 add_subdirectory(qml)
-# The plugins (none built in: NBFC, HP ...), each its own file solwindd loads: <build>/plugins/<Brand>/<name>.so (their
-# CMake files in <build>/plugin-build, so that folder holds only the plugin files)
-add_subdirectory(plugins plugin-build)
+
+# No plugin is part of Solwind (they are in the Solwind-plugins repository). For development and the tests a checkout
+# of it can be built here: -DSOLWIND_PLUGINS_DIR=<checkout> builds every <Brand>/<name> in it into <build>/plugins
+# (their CMake files in <build>/plugin-build, so that folder holds only the plugin files)
+set(SOLWIND_PLUGINS_DIR "" CACHE PATH "A checkout of Solwind-plugins, built here too (development, tests)")
+if(SOLWIND_PLUGINS_DIR)
+    file(GLOB _plugin_lists RELATIVE "${SOLWIND_PLUGINS_DIR}" "${SOLWIND_PLUGINS_DIR}/*/*/CMakeLists.txt")
+    list(SORT _plugin_lists)
+    foreach(f IN LISTS _plugin_lists)
+        get_filename_component(d "${f}" DIRECTORY)
+        add_subdirectory("${SOLWIND_PLUGINS_DIR}/${d}" "plugin-build/${d}")
+    endforeach()
+    if(NOT _plugin_lists)
+        message(FATAL_ERROR "SOLWIND_PLUGINS_DIR: no <Brand>/<name>/CMakeLists.txt in ${SOLWIND_PLUGINS_DIR}")
+    endif()
+endif()
 
 option(SOLWIND_BUILD_TESTS "Build the tests" ON)
 if(SOLWIND_BUILD_TESTS)

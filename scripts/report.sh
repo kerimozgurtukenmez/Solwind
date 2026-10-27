@@ -108,7 +108,9 @@ fi
 section "Plugins installed in the home folder"
 pdir=${XDG_DATA_HOME:-$HOME/.local/share}/solwind/plugins
 if [ -d "$pdir" ]; then
-    run "$pdir (file, mode, owner)" find "$pdir" -name '*.so' -printf '%P %m %u\n'
+    run "$pdir (file, mode, owner)" find "$pdir" \( -name '*.so' -o -name '*.json' \) -printf '%P %m %u\n'
+    # (what solwind plugin recorded: commit, repository, SDK)
+    run "solwind plugin's records" find "$pdir" -name '*.json' -exec cat {} +
 else
     echo "none ($pdir doesn't exist)"
 fi

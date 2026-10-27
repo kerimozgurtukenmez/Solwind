@@ -80,7 +80,7 @@ Reboot, then `ls /sys/class/leds | grep hp::` should list the light. Remove olde
 | [NBFC-Linux](https://github.com/nbfc-linux/nbfc-linux) with a config for your laptop (fans) | `nbfc-linux` (AUR) |
 | A polkit agent (password dialogs) | e.g. `hyprpolkitagent` |
 | Optional: tray icon, NVIDIA temperature, GPU names | `python-gobject`, `nvidia-utils`, `pciutils` |
-| To build solwindd: CMake, Qt 6 (base and declarative, 6.5 or newer; I use 6.12), a C++20 compiler | `cmake`, `qt6-base`, `qt6-declarative`, `base-devel` |
+| To build solwindd and its plugins: CMake, Qt 6 (base and declarative, 6.5 or newer; I use 6.12), a C++20 compiler; git (plugins are downloaded with it) | `cmake`, `qt6-base`, `qt6-declarative`, `base-devel`, `git` |
 | systemd (the background service runs as a systemd user service) | `systemd` |
 
 ### NBFC
@@ -107,9 +107,9 @@ make                  # builds solwindd (without sudo)
 sudo make install
 ```
 
-It goes under `/usr/local` (command, solwindd, app, menu entry, icon, systemd user services). Then install the [plugins](#plugins) for your laptop, and open **Solwind** from the app launcher or run `solwind`. On a first install the launcher may only show it after you log in again or restart the shell.
+It goes under `/usr/local` (command, solwindd, app, menu entry, icon, systemd user services, and the headers plugins are built against). Then install the [plugins](#plugins) for your laptop, and open **Solwind** from the app launcher or run `solwind`. On a first install the launcher may only show it after you log in again or restart the shell.
 
-- **Update:** `git pull`, `make`, `solwind quit`, `sudo make install`, `make plugin P=...` again for each plugin you use, then `solwind` (`make install` prints the command if you use the background service).
+- **Update:** `git pull`, `make`, `solwind quit`, `sudo make install`, `solwind plugin update`, then `solwind` (`make install` prints the command if you use the background service).
 - **Uninstall:** `solwind quit`, then `sudo make uninstall`. Turn the background service off first; it tells you if you forgot. Your settings stay in `~/.config/solwind`, your plugins in `~/.local/share/solwind/plugins`.
 - **Packaging:** `make DESTDIR=/package/root PREFIX=/usr install`.
 
@@ -129,19 +129,19 @@ Keybinds or scripts that use `ccenter` need `solwind` now.
 
 ### Plugins
 
-Solwind itself only reads the temperatures. What it drives comes from plugins, and **none is installed with it**: you add the ones for your laptop. Each is built with Solwind (`make`) and installed into your home folder, without sudo:
+Solwind itself only reads the temperatures. What it drives comes from plugins, and **none comes with it**: you install the ones for your laptop. They live in their own repository, [Solwind-plugins](https://github.com/kerimozgurtukenmez/Solwind-plugins), and only the ones you install are downloaded.
 
 ```sh
-make plugins                       # the ones built, and the ones you have
-make plugin P=NBFC/nbfc            # fans through NBFC
-make plugin P=HP/hp-wmi-keyboard   # an HP single-zone RGB keyboard (see the table above for the others)
-solwind quit; solwind              # solwindd loads plugins when it starts
+solwind plugins                            # every plugin, which are installed, which fit this computer
+solwind plugin install NBFC/nbfc           # fans through NBFC
+solwind plugin install HP/hp-wmi-keyboard  # an HP single-zone RGB keyboard (see the table above for the others)
+solwind quit; solwind                      # solwindd loads plugins when it starts
 ```
 
-They go to `~/.local/share/solwind/plugins`; `make remove-plugin P=<name>` removes one. `solwind report` and `busctl --user get-property solwind.Daemon /solwind solwind.Daemon Plugins` show which ones solwindd loaded.
+`solwind plugin install` takes the plugin's commit from Solwind's catalog (`plugin-catalog.json` in this repository), downloads only that plugin's folder at exactly that commit with git (git checks the commit id, so it's exactly the code the catalog names), builds it against the installed Solwind and puts it into `~/.local/share/solwind/plugins`. No sudo; it needs `git` and `cmake`. `solwind plugin update` brings installed plugins to the catalog's commits and builds them again after a Solwind update; `solwind plugin remove <name>` removes one. `solwind report` and `busctl --user get-property solwind.Daemon /solwind solwind.Daemon Plugins` show which ones solwindd loaded.
 
-- A plugin runs inside solwindd, as your user. For now the only plugins are the ones in this repository; downloading them from the app comes later.
-- solwindd loads a plugin only if it was built with the same Solwind (the same version and plugin interface), and only if no one but you (or root) can change the file or the plugin folders it is in (a link is refused too). After an update, install your plugins again (`make plugin P=...`): until then solwindd skips them and says why.
+- A plugin runs inside solwindd, as your user. Only the plugins in the catalog of the Solwind you cloned are offered. The commit ids pin the code, but a catalog is only as trustworthy as my GitHub account (there's no signature).
+- solwindd loads a plugin only if it was built for this Solwind (the same version and plugin interface), and only if no one but you (or root) can change the file or the plugin folders it is in (a link is refused too). After an update, run `solwind plugin update`: until then solwindd skips them and says why.
 - Without a fan plugin the fan page only shows the temperatures and nothing is ever sent to NBFC; without a keyboard plugin the Keyboard page says which light it found.
 
 ### Permissions
@@ -198,7 +198,7 @@ Run `solwind report` (or **Create report** in Settings) and attach the file to a
 
 ## Development
 
-`backend/` is solwindd (C++/Qt, CMake; tests: `cmake -S backend -B <dir> && cmake --build <dir> && ctest --test-dir <dir>`), `backend/plugins/<Brand>/<name>/` its plugins (the interfaces they implement are in `backend/src/plugins/`), `backend/qml/` the QML module the window uses to talk to it. In the window, `services/` only passes solwindd's state to the pages in `modules/`. Run it from the cloned folder with `make` and `./bin/solwind` (quit the installed copy first): solwindd then runs as a temporary systemd service with the same hand-back, with every plugin of the build (and the ones in your home folder). UI text is English in the code, wrapped in `I18n.t(…)`, with the Turkish text in `services/translations.js` (solwindd uses the same file).
+`backend/` is solwindd (C++/Qt, CMake) and `solwind-plugin`; the interfaces plugins implement are in `backend/src/plugins/`, `backend/qml/` is the QML module the window uses to talk to it. The plugins are in [Solwind-plugins](https://github.com/kerimozgurtukenmez/Solwind-plugins): clone it next to this one and build both together for the tests (`cmake -S backend -B <dir> -DSOLWIND_PLUGINS_DIR=<Solwind-plugins> && cmake --build <dir> && ctest --test-dir <dir>`; without it only the tests that don't need a plugin are built). In the window, `services/` only passes solwindd's state to the pages in `modules/`. Run it from the cloned folder with `make` and `./bin/solwind` (quit the installed copy first): solwindd then runs as a temporary systemd service with the same hand-back, with the plugins of the build (if it has them) and the ones in your home folder. UI text is English in the code, wrapped in `I18n.t(…)`, with the Turkish text in `services/translations.js` (solwindd uses the same file).
 
 ## Thanks
 

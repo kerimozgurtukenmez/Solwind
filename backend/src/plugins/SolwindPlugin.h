@@ -18,9 +18,11 @@ class PluginHost;
 //         Q_INTERFACES(SolwindPlugin)
 //     ...
 //
-// plugin.json: { "id": "HP/hp-wmi-keyboard", "brand": "HP", "module": "<the kernel module / service it is for>",
+// plugin.json (made by solwind_plugin() from the plugin's plugin.json.in, SDK's SolwindPlugin.cmake):
+//              { "id": "HP/hp-wmi-keyboard", "brand": "HP", "module": "<the kernel module / service it is for>",
 //                "kind": "fan" | "keyboard", "version": "1.0.0", "priority": <lower = asked first>,
-//                "description": "<one line>" }
+//                "description": "<one line>", "sdk": "@SOLWIND_SDK_ID@" (solwindd loads only its own) }
+// The plugins are in the Solwind-plugins repository, one folder each (<Brand>/<name>); solwind-plugin builds them.
 // The IID carries the interface version: a plugin built for another one isn't loaded. Plugins run inside solwindd;
 // every safety rule (the safety limit, checking a speed took, handing fans back, trust levels) stays in the core.
 class SolwindPlugin
