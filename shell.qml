@@ -85,6 +85,12 @@ ShellRoot {
                         dot: Colours.error
                         text: I18n.t("No background service")
                     }
+                    // A daemon started with --observe (development) refuses every change
+                    Chip {
+                        visible: Daemon.observe
+                        dot: Colours.warning
+                        text: I18n.t("Observe mode (read only)")
+                    }
                     Chip {
                         visible: Daemon.connected
                         dot: Nbfc.running ? Colours.success : Colours.outlineStrong

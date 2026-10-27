@@ -276,6 +276,7 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(prop(u"Restored"_s).toBool(), 8000);
         QCOMPARE(dprop(u"Language"_s).toString(), u"en"_s);         // (LANG=en_US.UTF-8, nothing saved)
         QCOMPARE(dprop(u"SavedLanguage"_s).toString(), QString());
+        QCOMPARE(dprop(u"Mode"_s).toString(), u"control"_s);
         QVERIFY(dprop(u"NotifyEnabled"_s).toBool() && dprop(u"NotifyProfile"_s).toBool() && dprop(u"TrayEnabled"_s).toBool());
         QCOMPARE(dcall(u"SetUi"_s, { u"window"_s, false }).errorName(), u"solwind.Error.Usage"_s);
         QCOMPARE(dcall(u"SetUi"_s, { u"tray"_s, false }).type(), QDBusMessage::ReplyMessage);
@@ -329,6 +330,7 @@ private slots:
         std::unique_ptr<QProcess> p;
         startAndWait(p, { u"--observe"_s });
         QTRY_VERIFY_WITH_TIMEOUT(prop(u"Running"_s).toBool(), 6000);
+        QCOMPARE(dprop(u"Mode"_s).toString(), u"observe"_s);    // (the UI says so)
         QTest::qWait(1500);
         QCOMPARE(call(u"SetFan"_s, { 0, st(1, 0.3) }).errorName(), u"solwind.Error.Observe"_s);
         QCOMPARE(call(u"ApplyProfile"_s, { u"quiet"_s, false }).errorName(), u"solwind.Error.Observe"_s);
@@ -546,6 +548,8 @@ private slots:
         QCOMPARE(kprop(u"SupportText"_s).toString(), u"full (tested)"_s);
         QCOMPARE(kprop(u"NoPermissionText"_s).toString(), u"No write permission: Keyboard tab > 'Grant permission' (or: sudo make udev)"_s);
         QCOMPARE(kprop(u"NoteTexts"_s).toStringList(), QStringList());
+        const QString det = kcall(u"DetectionText"_s).arguments().value(0).toString();   // (for the report)
+        QVERIFY2(det.contains(u"led|hp::kbd_backlight|hp-wmi"_s), qPrintable(det));
         QCOMPARE(kcall(u"SetColor"_s, { u"#00ff00"_s }).type(), QDBusMessage::ReplyMessage);
         QCOMPARE(kcall(u"SetBrightness"_s, { 50 }).type(), QDBusMessage::ReplyMessage);
         // Quitting: back to the chosen static colour

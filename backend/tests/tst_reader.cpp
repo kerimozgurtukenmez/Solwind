@@ -1,4 +1,4 @@
-// SensorReader on a fake /sys: the same lines as scripts/sensors.sh and hwinfo.sh would print (SPEC.md S-1..S-3).
+// SensorReader on a fake /sys: the same lines as scripts/sensors.sh and hwinfo.sh (up to 0.5.x) printed (SPEC.md S-1..S-3).
 // .dev/phase2diff.sh also runs the shell scripts themselves on such trees and on the real machine and compares.
 #include "TestEnv.h"
 #include "core/SensorReader.h"

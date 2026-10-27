@@ -288,6 +288,7 @@ var dict = {
         "Solwind could not hand the fans back to NBFC's automatic control (%1). Run `nbfc set -a` or open Solwind.": "Solwind fanları NBFC'nin otomatik kontrolüne geri veremedi (%1). `nbfc set -a` çalıştırın ya da Solwind'i açın.",
         "Solwind's background service (solwindd) is not running": "Solwind'in arka plan servisi (solwindd) çalışmıyor",
         "No background service": "Arka plan servisi yok",
+        "Observe mode (read only)": "İzleme modu (salt okuma)",
         "It reads the sensors and drives the fans and the keyboard light; this window only shows and changes its settings. It shows up here as soon as it runs.": "Sensörleri o okur, fanları ve klavye ışığını o sürer; bu pencere yalnızca ayarlarını gösterir ve değiştirir. Çalışmaya başladığı anda burada görünür."
     }
 }

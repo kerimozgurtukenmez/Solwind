@@ -24,6 +24,7 @@ class DaemonApi : public QObject, protected QDBusContext
     Q_PROPERTY(bool NotifyEnabled READ notifyEnabled)        // notify.enabled
     Q_PROPERTY(bool NotifyProfile READ notifyProfile)        // notify.profile
     Q_PROPERTY(bool TrayEnabled READ trayEnabled)            // ui.tray (the UI's tray icon)
+    Q_PROPERTY(QString Mode READ mode)                       // "control" | "observe" (only reads: changes are refused)
 
 public:
     static constexpr const char *serviceName = "solwind.Daemon";
@@ -37,6 +38,7 @@ public:
     bool notifyEnabled() const;
     bool notifyProfile() const;
     bool trayEnabled() const;
+    QString mode() const { return controlMode ? QStringLiteral("control") : QStringLiteral("observe"); }
     // More fields for Status() (the reading pace), filled in by main
     std::function<QVariantMap()> extraStatus;
     bool controlMode = false;             // false: observe mode, nothing is written

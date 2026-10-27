@@ -4,7 +4,8 @@ import Caelestia.Config
 import qs.components
 import qs.services
 
-// Keyboard light. Logic and hardware detection live in services/Keyboard.qml; this is only the view.
+// Keyboard light. solwindd finds and drives the light; services/Keyboard.qml passes its state and the changes on;
+// this is only the view.
 // The page adapts to what was detected: a detection summary on top, then (if the light has colour) the settings of
 // the selected effect on the left and the effect list on the right (effects only on tested drivers), brightness below
 // (a slider, or level buttons when the light has only a few levels).

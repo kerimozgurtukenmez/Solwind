@@ -1,6 +1,7 @@
 #!/bin/sh
 # Diagnostic report for bug reports: collects everything useful into one text file in your home folder.
-# Works even when Solwind doesn't start (it doesn't need the app running; if it runs, its own status is added).
+# Works even when Solwind doesn't start (it doesn't need the app running; if solwindd, the background service that
+# drives the fans and the keyboard light, runs, its state is added; it is only asked, over D-Bus).
 # Read only: nothing on the system is changed, nothing is sent anywhere. You read the file and decide what to share.
 # Privacy: no serial numbers, MAC/IP addresses or passwords are collected; your home folder, user name and computer
 # name are replaced with ~, <user> and <host> at the end.
@@ -33,6 +34,33 @@ run() {
     return 0
 }
 section() { printf '\n\n===== %s =====\n' "$1"; }
+# solwindd over D-Bus, read only: dtext <title> <object> <interface> <method> (a text it makes or a method's answer),
+# dprop <title> <object> <interface> <property>. Strings are printed as text, other values as JSON (one item a line).
+dbus_up() { have busctl && busctl --user status solwind.Daemon >/dev/null 2>&1; }
+dbus_print() {
+    if have python3; then
+        python3 -I -c '
+import json, sys
+call = sys.argv[1] == "call"          # a method: data = its answers; a property: data = the value
+raw = sys.stdin.read()
+try: v = json.loads(raw)
+except ValueError: print(raw.rstrip()); sys.exit()
+def plain(x):
+    if isinstance(x, dict) and "type" in x and "data" in x: return plain(x["data"])
+    if isinstance(x, dict): return {k: plain(y) for k, y in x.items()}
+    if isinstance(x, list): return [plain(y) for y in x]
+    return x
+d = plain(v.get("data"))
+for x in (d if call and isinstance(d, list) else [d]):
+    if isinstance(x, str): print(x)
+    elif isinstance(x, list): print("\n".join(json.dumps(y, ensure_ascii=False) for y in x) or "[]")
+    else: print(json.dumps(x, ensure_ascii=False))' "$1"
+    else
+        cat
+    fi
+}
+dtext() { printf '\n----- %s -----\n' "$1"; shift; busctl --user call --json=short solwind.Daemon "$@" 2>&1 | dbus_print call; }
+dprop() { printf '\n----- %s -----\n' "$1"; shift; busctl --user get-property --json=short solwind.Daemon "$@" 2>&1 | dbus_print prop; }
 
 {
 printf 'Solwind diagnostic report\n'
@@ -59,21 +87,38 @@ for f in sys_vendor product_name product_version product_family product_sku boar
     printf '%s: %s\n' "$f" "$(cat /sys/class/dmi/id/$f 2>/dev/null)"
 done
 
-section "Solwind instances"
+section "solwindd (the background service)"
+if dbus_up; then
+    dtext "Status" /solwind solwind.Daemon Status
+    dtext "Fans" /solwind/Fans solwind.Fans StatusText
+    dtext "Profiles" /solwind/Fans solwind.Fans ProfileList
+    dprop "Fan settings" /solwind/Fans solwind.Fans FanSettings
+    dtext "Keyboard" /solwind/Keyboard solwind.Keyboard StatusText
+    dtext "Keyboard detection" /solwind/Keyboard solwind.Keyboard InfoText
+    dtext "Keyboard detection (raw)" /solwind/Keyboard solwind.Keyboard DetectionText
+    dprop "Temperatures" /solwind/Sensors solwind.Sensors Readings
+    dprop "Hardware names" /solwind/Sensors solwind.Sensors Hardware
+    dprop "Fan speeds of the first fan driver (RPM)" /solwind/Sensors solwind.Sensors Rpms
+else
+    echo 'solwindd is not running.'
+fi
+
+section "Solwind windows (Quickshell instances)"
 # (a copy under the old name, Ccenter, counts too)
 have qs && qs list --all 2>&1 | grep -iE 'instance|config path|launch time|solwind|ccenter' | grep -B1 -A1 -iE '(solwind|ccenter)/shell'
 running=""
 if have qs; then
     running=$(qs list --all 2>/dev/null | sed -n 's/.*Config path: \(.*\(solwind\|ccenter\)\/shell\.qml\)$/\1/Ip' | head -1)
 fi
-if [ -n "$running" ]; then
+# An app of 0.5.x and older does the work itself: ask it (the newer UI only passes these on to solwindd, asked above)
+if [ -n "$running" ] && ! dbus_up; then
     rdir=${running%/shell.qml}
     run "Solwind status" qs ipc --any-display -p "$rdir" call cc status
     run "Profiles" qs ipc --any-display -p "$rdir" call cc profiles
     run "Keyboard" qs ipc --any-display -p "$rdir" call cc kbd
     run "Keyboard detection" qs ipc --any-display -p "$rdir" call cc kbdInfo
-else
-    echo 'Solwind is not running.'
+elif [ -z "$running" ]; then
+    echo 'No Solwind window app is running.'
 fi
 
 section "NBFC"
@@ -87,18 +132,39 @@ else
     echo 'nbfc: NOT INSTALLED'
 fi
 
-section "Sensors"
-run "Temperatures (sensors.sh)" sh "$app/scripts/sensors.sh" gpu
-run "Hardware names (hwinfo.sh)" sh "$app/scripts/hwinfo.sh"
+section "Sensors (read from /sys here)"
+# The temperatures of the drivers Solwind uses (nothing else is woken up: NVMe, Wi-Fi, RAM sensors), every fan speed
+for h in /sys/class/hwmon/hwmon*; do
+    [ -r "$h/name" ] || continue
+    n=$(cat "$h/name" 2>/dev/null); line=""
+    case "$n" in
+        coretemp|k10temp|zenpower|acpitz|i915|xe|amdgpu|nouveau)
+            for f in "$h"/temp*_input; do
+                [ -r "$f" ] || continue
+                l=$(cat "${f%_input}_label" 2>/dev/null) || l=${f##*/}
+                line="$line ${l:-${f##*/}}=$(cat "$f" 2>/dev/null)"
+            done ;;
+    esac
+    for f in "$h"/fan*_input; do [ -r "$f" ] && line="$line ${f##*/}=$(cat "$f" 2>/dev/null)"; done
+    [ -n "$line" ] && printf '%s (%s):%s\n' "${h##*/}" "$n" "$line"
+done
+printf 'CPU: %s, %s threads\n' "$(sed -n 's/^model name[[:space:]]*: //p' /proc/cpuinfo | head -1)" "$(nproc 2>/dev/null)"
+have lspci && run "Display devices" sh -c 'lspci -nn | grep -iE "vga|3d|display"'
 for d in /sys/bus/pci/devices/*; do
     [ "$(cat "$d/vendor" 2>/dev/null)" = 0x10de ] || continue
     case "$(cat "$d/class" 2>/dev/null)" in 0x03*) printf 'NVIDIA %s runtime power: %s\n' "${d##*/}" "$(cat "$d/power/runtime_status" 2>/dev/null)" ;; esac
 done
 
-section "Keyboard light"
-run "Detection (kbdinfo.sh)" sh "$app/scripts/kbdinfo.sh"
+section "Keyboard light (read from /sys here)"
 for d in /sys/class/leds/*kbd*; do
-    [ -e "$d" ] && run "Files of ${d##*/}" ls -ln "$d/"
+    [ -e "$d" ] || continue
+    printf '\n%s: driver %s\n' "${d##*/}" "$(basename "$(readlink -f "$d/device/driver" 2>/dev/null)" 2>/dev/null)"
+    run "Files of ${d##*/}" ls -ln "$d/"
+done
+# USB keyboard controllers whose colours the kernel doesn't expose (ASUS Aura 0b05, ITE / Lenovo Legion 048d)
+for u in /sys/bus/usb/devices/*; do
+    case "$(cat "$u/idVendor" 2>/dev/null)" in 0b05|048d) ;; *) continue ;; esac
+    printf 'USB %s:%s %s\n' "$(cat "$u/idVendor")" "$(cat "$u/idProduct" 2>/dev/null)" "$(cat "$u/product" 2>/dev/null)"
 done
 [ -d /sys/devices/platform/hp-wmi/rgb_zones ] && run "HP four-zone files (rgb_zones)" ls -ln /sys/devices/platform/hp-wmi/rgb_zones/
 [ -r /sys/module/hp_wmi/taint ] && run "hp_wmi module taint (O = out-of-tree)" cat /sys/module/hp_wmi/taint

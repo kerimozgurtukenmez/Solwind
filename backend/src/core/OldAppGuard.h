@@ -6,8 +6,9 @@
 #include <QObject>
 #include <QTimer>
 
-// TRANSITION ONLY (phases 3-4 of ARCH-PLAN.md, removed when the QML app becomes a client in phase 5): the QML app
-// still drives the fans itself, and two programs must never drive them at once (ARCH-PLAN rule 6). In control mode
+// TRANSITION ONLY (ARCH-PLAN.md phases 3-6): Solwind 0.5.x and older is a QML app that drives the fans itself, and
+// two programs must never drive them at once (ARCH-PLAN rule 6). It stays while such an app can be installed next to a
+// solwindd (as on the dev machine until phase 6 installs solwindd in its place), and goes in phase 6. In control mode
 // the daemon doesn't start while a QML Solwind / Ccenter runs, and steps aside (fans back to automatic, quit) when one
 // starts. The running Quickshell instances come from `qs list --all --json` (as the solwind command, SPEC.md CLI-8);
 // one is the QML app if its folder is named solwind / ccenter (any case), or its shell.qml starts with

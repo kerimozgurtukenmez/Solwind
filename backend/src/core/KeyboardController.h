@@ -53,6 +53,7 @@ public:
     bool writable() const { return m_writable; }
     bool ruleLegacy() const { return m_ruleLegacy; }
     bool ruleOld() const { return m_ruleOld; }
+    QString detectionText() const { return m_lastScan; }  // the last detection's lines (KeyboardScan), for reports
     QString ruleAt() const { return m_ruleAt; }
     bool ready() const { return m_ready; }
     bool permBusy() const { return m_permBusy; }
@@ -159,6 +160,7 @@ private:
     QString m_name, m_driver, m_kernel, m_ruleAt, m_error;
     QStringList m_dmi{ QString(), QString(), QString(), QString() }, m_notes;
     bool m_writable = false, m_ruleLegacy = false, m_ruleOld = false, m_ready = false, m_permBusy = false;
+    QString m_lastScan;
     int m_maxBrightness = 255, m_brightness = 0;
     KbdFormat m_format;
     QColor m_color{ Qt::white };

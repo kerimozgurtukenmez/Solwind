@@ -99,6 +99,7 @@ void KeyboardController::refresh(std::function<void()> done)
 
 void KeyboardController::parse(const QString &text)
 {
+    m_lastScan = text;
     const KbdFound f = KeyboardParse::parse(text, m_dmi[0]);
     if (f.dmi) m_dmi = *f.dmi;
     if (f.kernel) m_kernel = *f.kernel;

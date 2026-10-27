@@ -4,7 +4,8 @@ import Caelestia.Config
 import qs.services
 import qs.components
 
-// View only: fan settings, profiles and restoring live in services/FanState.qml.
+// View only: solwindd keeps the fan settings and profiles and restores them; services/FanState.qml and Nbfc.qml pass
+// them on.
 // The temperatures stay pinned at the top; everything below them scrolls.
 PageBase {
     id: page

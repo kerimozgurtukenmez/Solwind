@@ -61,7 +61,7 @@ int main(int argc, char **argv)
     // The handler only queues it; it is acted on once the event loop runs.
     UnixSignals signals_;
 
-    // TRANSITION (until phase 5): never drive the fans while the QML app does
+    // TRANSITION (until phase 6 replaces the installed QML app): never drive the fans while a QML app of 0.5.x does
     if (control) {
         const OldAppGuard::Result old = OldAppGuard::findNow();
         if (!old.ok) {

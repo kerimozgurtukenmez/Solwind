@@ -10,6 +10,8 @@ Singleton {
     id: root
 
     readonly property bool connected: Solwind.connected === true
+    // Started with --observe (development): it only reads and refuses every change
+    readonly property bool observe: connected && Solwind.daemon.Mode === "observe"
     readonly property string downText: I18n.t("Solwind's background service (solwindd) is not running")
 
     // A call: { ok, value (the first answer), values, error, errorName }. Without the daemon it isn't even tried.

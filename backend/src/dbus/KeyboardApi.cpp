@@ -94,6 +94,7 @@ QString KeyboardApi::failed(const QString &msg) { if (calledFromDBus()) sendErro
 void KeyboardApi::Refresh() { m_kbd.refresh(); }
 QString KeyboardApi::StatusText() const { return m_kbd.statusText(); }
 QString KeyboardApi::InfoText() const { return m_kbd.infoText(); }
+QString KeyboardApi::DetectionText() const { return m_kbd.detectionText(); }
 
 QString KeyboardApi::SetColor(const QString &hex)
 {

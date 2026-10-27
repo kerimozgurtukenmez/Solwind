@@ -108,6 +108,7 @@ public slots:
     Q_SCRIPTABLE void Refresh();                             // detection again (the Keyboard page opened, ...)
     Q_SCRIPTABLE QString StatusText() const;                 // `solwind kbd`
     Q_SCRIPTABLE QString InfoText() const;                   // `solwind kbd info`
+    Q_SCRIPTABLE QString DetectionText() const;              // the last detection's lines (what kbdinfo.sh printed)
     Q_SCRIPTABLE QString SetColor(const QString &hex);       // "#rrggbb" or "rrggbb"
     Q_SCRIPTABLE QString SetBrightness(int percent);         // 0..100 (clamped)
     Q_SCRIPTABLE QString SetEffect(const QString &name);     // static | breathing | cycle

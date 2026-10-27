@@ -6,7 +6,8 @@
 
 #include <atomic>
 
-// Reads the sensors the way scripts/sensors.sh and scripts/hwinfo.sh did, and returns the same text, line for line
+// Reads the sensors the way scripts/sensors.sh and scripts/hwinfo.sh did (up to 0.5.x; now only in git history), and
+// returns the same text, line for line
 // (SPEC.md S-1..S-3), so the parser (Sensors::parse) works on exactly what the old app parsed. Blocking file reads:
 // meant for a worker thread (on some laptops a fan*_input read is an EC call of ~35 ms).
 // Only reads; the one program it may start per round is nvidia-smi, and only when the card is awake.
