@@ -199,7 +199,7 @@ class Runner
 public:
     Runner(const Options &o, const I18n &i18n, QTextStream &out, QTextStream &err) : o(o), i18n(i18n), out(out), err(err) {}
 
-    int list();
+    int list(bool json);
     int install(const QString &id, const QString &sourceDir);
     int update(const QStringList &ids);
     int remove(const QString &id);
@@ -397,7 +397,15 @@ void Runner::restartHint()
     out << t(u"solwindd loads plugins when it starts: solwind quit, then solwind"_s) << Qt::endl;
 }
 
-int Runner::list()
+// The state of a catalog plugin here: none | current | update (another commit in the catalog) | sdk (built for another
+// Solwind) | hand (no record) | local (from a local folder)
+static QString stateOf(const std::optional<Installed> &i, const Entry &e)
+{
+    return !i ? u"none"_s : i->source.isEmpty() ? u"hand"_s : i->source == u"local"_s ? u"local"_s
+         : i->sdk != QLatin1String(SOLWIND_SDK_ID) ? u"sdk"_s : i->commit != e.commit ? u"update"_s : u"current"_s;
+}
+
+int Runner::list(bool json)
 {
     if (!loadCatalog()) return 1;
     const QList<Installed> have = installed(o.pluginDir);
@@ -405,6 +413,20 @@ int Runner::list()
         for (const Installed &i : have) if (i.id == id) return i;
         return std::nullopt;
     };
+    if (json) {
+        // For the window's Plugins page: { plugins: [{ id, kind, description, tested, state, fits: yes|no|"" }],
+        // others: [ids installed but not in the catalog] }
+        QJsonArray list, others;
+        for (const Entry &e : catalog.plugins) {
+            const Fit f = fits(e.fits, o.sysRoot);
+            list.append(QJsonObject{ { u"id"_s, e.id }, { u"kind"_s, e.kind }, { u"description"_s, e.description },
+                                     { u"tested"_s, e.tested }, { u"state"_s, stateOf(mine(e.id), e) },
+                                     { u"fits"_s, f == Fit::Yes ? u"yes"_s : f == Fit::No ? u"no"_s : QString() } });
+        }
+        for (const Installed &i : have) if (!catalog.find(i.id)) others.append(i.id);
+        out << QJsonDocument(QJsonObject{ { u"plugins"_s, list }, { u"others"_s, others } }).toJson(QJsonDocument::Compact) << Qt::endl;
+        return 0;
+    }
     for (const Entry &e : catalog.plugins) {
         const auto i = mine(e.id);
         QString state = !i ? t(u"not installed"_s)
@@ -530,7 +552,8 @@ int run(const QStringList &args, const Options &options, const I18n &i18n, QText
             << Qt::endl;
         return 2;
     };
-    if (cmd == u"list"_s && rest.isEmpty()) return r.list();
+    if (cmd == u"list"_s && rest.isEmpty()) return r.list(false);
+    if (cmd == u"list"_s && rest == QStringList{ u"--json"_s }) return r.list(true);
     if (cmd == u"install"_s && rest.size() == 1) return r.install(rest[0], QString());
     if (cmd == u"install"_s && rest.size() == 3 && rest[0] == u"--source"_s && !rest[1].isEmpty()) return r.install(rest[2], rest[1]);
     if (cmd == u"update"_s) return r.update(rest);

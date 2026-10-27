@@ -8,6 +8,7 @@ import Caelestia.Config
 import qs.components
 import qs.modules.fan
 import qs.modules.keyboard
+import qs.modules.plugins
 import qs.modules.settings
 import qs.services
 
@@ -40,7 +41,8 @@ ShellRoot {
             readonly property var pages: [
                 { icon: "mode_fan", label: I18n.t("Fan control"), sub: I18n.t("NBFC · speed and curves") },
                 { icon: "keyboard", label: I18n.t("Keyboard"), sub: I18n.t("RGB · color and brightness") },
-                { icon: "settings", label: I18n.t("Settings"), sub: I18n.t("Language and notifications") }
+                { icon: "settings", label: I18n.t("Settings"), sub: I18n.t("Language and notifications") },
+                { icon: "extension", label: I18n.t("Plugins"), sub: I18n.t("Install and update") }
             ]
 
             ColumnLayout {
@@ -117,15 +119,17 @@ ShellRoot {
 
                 StackLayout {
                     anchors { fill: parent; margins: Tokens.padding.extraLarge; bottomMargin: 0 }
-                    // Without solwindd there is nothing to show or change (only the settings page's quit / report)
-                    visible: Daemon.connected || root.tab === 2
+                    // Without solwindd there is nothing to show or change (only the settings page's quit / report and
+                    // the plugins, which don't need it)
+                    visible: Daemon.connected || root.tab >= 2
                     currentIndex: root.tab
                     FanPage {}
                     KeyboardPage {}
                     SettingsPage {}
+                    PluginsPage {}
                 }
                 ColumnLayout {
-                    visible: !Daemon.connected && root.tab !== 2
+                    visible: !Daemon.connected && root.tab < 2
                     anchors.centerIn: parent
                     width: Math.min(parent.width - 2 * Tokens.padding.extraLarge, 520)
                     spacing: Tokens.spacing.medium
@@ -220,8 +224,8 @@ ShellRoot {
     IpcHandler {
         target: "cc"
         function toggle(): void { root.shown = !root.shown }
-        // Open the window on a page (0 fan control, 1 keyboard, 2 settings); used by the UI preview
-        function tab(i: int): void { root.tab = Math.max(0, Math.min(2, i)); root.shown = true }
+        // Open the window on a page (0 fan control, 1 keyboard, 2 settings, 3 plugins); used by the UI preview
+        function tab(i: int): void { root.tab = Math.max(0, Math.min(3, i)); root.shown = true }
         function open(): void { root.shown = true }
         function hide(): void { root.shown = false }
         // Quit completely: fans driven by Solwind go back to NBFC's automatic control

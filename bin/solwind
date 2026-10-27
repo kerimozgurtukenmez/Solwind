@@ -254,7 +254,7 @@ ui_ipc() { qs ipc --any-display -p "$dir" "$@"; }
 ui_running() { [ -z "${qs_missing:-}" ] && ui_ipc show >/dev/null 2>&1; }
 # The window app: the QML module Solwind from $lib/qml; SOLWIND_LIB tells it which solwindd it belongs to (the
 # autostart toggle)
-ui_env() { env QML_IMPORT_PATH="$lib/qml${QML_IMPORT_PATH:+:$QML_IMPORT_PATH}" SOLWIND_LIB="$lib" "$@"; }
+ui_env() { env QML_IMPORT_PATH="$lib/qml${QML_IMPORT_PATH:+:$QML_IMPORT_PATH}" SOLWIND_LIB="$lib" SOLWIND_SELF="$self" "$@"; }
 need_qs() {
     [ -z "${qs_missing:-}" ] || { err "solwind: quickshell (qs) is not installed" "solwind: quickshell (qs) kurulu değil"; exit 1; }
 }
@@ -328,7 +328,7 @@ case "${1:-}" in
             err "solwind: the window app is already running" "solwind: pencere uygulaması zaten çalışıyor"
             exit 3
         fi
-        exec env SOLWIND_BACKGROUND=1 QML_IMPORT_PATH="$lib/qml${QML_IMPORT_PATH:+:$QML_IMPORT_PATH}" SOLWIND_LIB="$lib" \
+        exec env SOLWIND_BACKGROUND=1 QML_IMPORT_PATH="$lib/qml${QML_IMPORT_PATH:+:$QML_IMPORT_PATH}" SOLWIND_LIB="$lib" SOLWIND_SELF="$self" \
             qs -p "$dir" -n ;;
     --migrate)
         # (the service, before solwindd starts: the Ccenter settings copy above)
