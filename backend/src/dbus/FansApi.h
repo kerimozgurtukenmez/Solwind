@@ -110,6 +110,8 @@ public slots:
     Q_SCRIPTABLE VariantMapList History() const;
     Q_SCRIPTABLE QString StatusText() const;                 // `solwind status`
     Q_SCRIPTABLE QString ProfileList() const;                // `solwind profiles` ("* " marks the active one)
+    Q_SCRIPTABLE QString CurrentProfile() const;             // `solwind profile`: its name, or "custom settings"
+    Q_SCRIPTABLE QString BoostStatus() const;                // `solwind boost`: off / on (until turned off / N min)
 
     Q_SCRIPTABLE void SetFan(int fan, const QVariantMap &st);
     Q_SCRIPTABLE void SetGlobal(const QVariantMap &st);

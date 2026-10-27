@@ -1,5 +1,6 @@
 pragma Singleton
 import Quickshell
+import Quickshell.Io
 import QtQuick
 import Solwind
 
@@ -12,6 +13,14 @@ Singleton {
     readonly property bool connected: Solwind.connected === true
     // Started with --observe (development): it only reads and refuses every change
     readonly property bool observe: connected && Solwind.daemon.Mode === "observe"
+    // This window app and solwindd come from one install; another version means one was updated while the other ran
+    // (the UI may then ask for what the daemon doesn't have): `solwind quit`, then start it again
+    FileView { id: versionFile; path: Quickshell.shellPath("VERSION"); blockLoading: true; printErrors: false }
+    readonly property string uiVersion: versionFile.text().trim()
+    readonly property bool versionMismatch: connected && uiVersion !== "" && typeof Solwind.daemon.Version === "string"
+                                            && Solwind.daemon.Version !== uiVersion
+    onVersionMismatchChanged: if (versionMismatch)
+        console.warn("[solwind] solwindd " + Solwind.daemon.Version + ", this window app " + uiVersion + ": restart Solwind (solwind quit; solwind)")
     readonly property string downText: I18n.t("Solwind's background service (solwindd) is not running")
 
     // A call: { ok, value (the first answer), values, error, errorName }. Without the daemon it isn't even tried.

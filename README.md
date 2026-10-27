@@ -1,6 +1,8 @@
 # Solwind
 
-A small control center for laptops: **fan control** and **keyboard lighting**, made with [Quickshell](https://quickshell.org) to fit right into [Caelestia dots](https://github.com/caelestia-dots).
+A small control center for laptops: **fan control** and **keyboard lighting**, with a window made with [Quickshell](https://quickshell.org) to fit right into [Caelestia dots](https://github.com/caelestia-dots).
+
+It has two parts: **solwindd**, a small background service (C++/Qt) that drives the fans and the keyboard light, and the **window**, which only shows and changes what solwindd does. The fans don't need the window; the terminal commands and [your own tools](docs/DBUS.md) talk to solwindd too.
 
 > [!NOTE]
 > I used AI assistance while building this project. I reviewed parts of the code myself and tested every feature on my own laptop before publishing it.
@@ -10,7 +12,7 @@ A small control center for laptops: **fan control** and **keyboard lighting**, m
 >
 > - I've only tested it on my own **HP Victus 16-r0xxx** (Arch Linux, Hyprland). Other models and brands may not work.
 > - The fan part **writes fan speeds to your hardware** through NBFC. A bad setting can make your laptop run hot, so keep an eye on the temperatures.
-> - If Solwind crashes, its launcher or service hands the fans back to NBFC. Only if both are killed (for example with `kill -9`) do the fans stay at the last speed; `nbfc set -a` gives them back.
+> - If solwindd crashes, its systemd service hands the fans back to NBFC and starts it again. `nbfc set -a` gives the fans back by hand.
 
 ## Screenshots
 
@@ -79,6 +81,8 @@ Reboot, then `ls /sys/class/leds | grep hp::` should list the light. Remove olde
 | [NBFC-Linux](https://github.com/nbfc-linux/nbfc-linux) with a config for your laptop (fans) | `nbfc-linux` (AUR) |
 | A polkit agent (password dialogs) | e.g. `hyprpolkitagent` |
 | Optional: tray icon, NVIDIA temperature, GPU names | `python-gobject`, `nvidia-utils`, `pciutils` |
+| To build solwindd: CMake, Qt 6 (base and declarative, 6.5 or newer; I use 6.12), a C++20 compiler | `cmake`, `qt6-base`, `qt6-declarative`, `base-devel` |
+| systemd (the background service runs as a systemd user service) | `systemd` |
 
 ### NBFC
 
@@ -100,16 +104,19 @@ If no config fits, don't force one. The keyboard part works without NBFC.
 ```sh
 git clone https://github.com/kerimozgurtukenmez/Solwind.git
 cd Solwind
+make                  # builds solwindd (without sudo)
 sudo make install
 ```
 
-It goes under `/usr/local` (command, app, menu entry, icon, background service). Then open **Solwind** from the app launcher or run `solwind`. On a first install the launcher may only show it after you log in again or restart the shell.
+It goes under `/usr/local` (command, solwindd, app, menu entry, icon, systemd user services). Then open **Solwind** from the app launcher or run `solwind`. On a first install the launcher may only show it after you log in again or restart the shell.
 
-- **Update:** `git pull`, `solwind quit`, `sudo make install`, then `solwind` (`make install` prints the command if you use the background service).
+- **Update:** `git pull`, `make`, `solwind quit`, `sudo make install`, then `solwind` (`make install` prints the command if you use the background service).
 - **Uninstall:** `solwind quit`, then `sudo make uninstall`. Turn the background service off first; it tells you if you forgot. Your settings stay in `~/.config/solwind`.
 - **Packaging:** `make DESTDIR=/package/root PREFIX=/usr install`.
 
 `make install` stops without changing anything while Solwind runs or when it finds an older install in your home folder.
+
+**Coming from Solwind 0.5 or older:** `solwind quit`, then `make` and `sudo make install` as above. Your settings stay as they are. If you had "Start in the background on login" on, it now starts solwindd; run `systemctl --user daemon-reload` once (`make install` reminds you).
 
 **Coming from Ccenter** (Solwind's old name) or an older Solwind installed with `install.sh`: remove that copy first, without sudo, then install. Your settings are copied over on the first start.
 
@@ -128,24 +135,36 @@ Keybinds or scripts that use `ccenter` need `solwind` now.
 
 ## Usage
 
-- Closing the window doesn't quit Solwind, it keeps controlling the fans. Quit with **Quit** in Settings, the tray menu or `solwind quit`; the fans go back to NBFC first.
-- **Start in the background on login** is a switch in the app (a systemd user service). If Solwind crashes there, the fans go back to NBFC and it starts again.
-- Started from a terminal, it stays there and shows its log; Ctrl+C quits it cleanly. `solwind -d` starts it detached. If it's already running, `solwind` just opens the window.
+- `solwind` (or the menu entry) starts solwindd if it isn't running and opens the window.
+- Closing the window doesn't stop solwindd, it keeps controlling the fans. Quit everything with **Quit** in Settings, the tray menu or `solwind quit`; the fans go back to NBFC and the keyboard stays on its chosen color.
+- **Start in the background on login** is a switch in the app (it turns the systemd user service `solwind.service` on). If solwindd crashes, the fans go back to NBFC and systemd starts it again. The tray icon comes with it (it ends by itself if you turn the tray off).
+- The terminal commands work without the window.
 
 ```sh
 solwind status              # fans, temperatures, active profile
 solwind profile quiet       # apply a profile (no name: show the active one)
 solwind boost 15            # max fan for 15 minutes (on / off)
 solwind kbd color "#ff0000" # also: brightness, effect, source, speed, range, info
-solwind log -f              # follow the log
+solwind log -f              # follow solwindd's log
 solwind --help              # everything; solwind help kbd for one command
 ```
 
-Exit codes: 0 done, 1 error, 2 wrong usage, 3 already running, 4 not running. For a Hyprland keybind: `hl.bind("SUPER + F9", hl.dsp.exec_cmd("solwind profile performance"))` (`/usr/local/bin` is on Hyprland's `PATH`, at least on mine). The window class is `solwind`.
+Exit codes: 0 done, 1 error, 2 wrong usage, 3 not started (already running, or an old Solwind app drives the fans), 4 not running. For a Hyprland keybind: `hl.bind("SUPER + F9", hl.dsp.exec_cmd("solwind profile performance"))` (`/usr/local/bin` is on Hyprland's `PATH`, at least on mine). The window class is `solwind`.
+
+## Your own UI or scripts
+
+solwindd's whole interface is on D-Bus (the session bus, `solwind.Daemon`): its state as properties with change signals, and methods to change it. The window uses nothing else, so a widget, a bar module or a script can do what it does. See [docs/DBUS.md](docs/DBUS.md). For example:
+
+```sh
+busctl --user get-property solwind.Daemon /solwind/Fans solwind.Fans Temp
+busctl --user call solwind.Daemon /solwind/Fans solwind.Fans ApplyProfile sb quiet false
+```
+
+solwindd checks everything it's sent; the safety limit and handing the fans back are its own, whatever a client does.
 
 ## Reporting a problem
 
-Run `solwind report` (or **Create report** in Settings) and attach the file to a [GitHub issue](https://github.com/kerimozgurtukenmez/Solwind/issues). It's one text file in your home folder with versions, your laptop model (no serial numbers), NBFC status, what Solwind detected, your settings and recent logs. Your user name and computer name are replaced, nothing is sent anywhere. Logs are cleared on reboot, so make it before rebooting.
+Run `solwind report` (or **Create report** in Settings) and attach the file to a [GitHub issue](https://github.com/kerimozgurtukenmez/Solwind/issues). It's one text file in your home folder with versions, your laptop model (no serial numbers), NBFC status, what solwindd detected and reads, your settings and recent logs. Your user name and computer name are replaced, nothing is sent anywhere. Logs are cleared on reboot, so make it before rebooting.
 
 ## Undoing things
 
@@ -155,18 +174,18 @@ Run `solwind report` (or **Create report** in Settings) and attach the file to a
 
 ## Security
 
-- Day-to-day use needs no admin rights; fan speeds go through `nbfc set`.
+- Day-to-day use needs no admin rights: solwindd runs as your user, fan speeds go through `nbfc set`.
 - Admin actions only happen when you click them, through your system's password dialog. Solwind never sees your password.
 - The keyboard is only touched through the kernel. The keyboard permission is for your user only, and the rule is checked line by line before it's installed.
 - NBFC config files and Caelestia's files are never changed.
 
 ## Development
 
-Run it from the cloned folder with `./bin/solwind` (quit the installed copy first, only one runs at a time). The logic is in `services/`, `modules/` is only the UI. UI text is English in the code, wrapped in `I18n.t(…)`, with the Turkish text in `services/translations.js`.
+`backend/` is solwindd (C++/Qt, CMake; tests: `cmake -S backend -B <dir> && cmake --build <dir> && ctest --test-dir <dir>`), `backend/qml/` the QML module the window uses to talk to it. In the window, `services/` only passes solwindd's state to the pages in `modules/`. Run it from the cloned folder with `make` and `./bin/solwind` (quit the installed copy first): solwindd then runs as a temporary systemd service with the same hand-back. UI text is English in the code, wrapped in `I18n.t(…)`, with the Turkish text in `services/translations.js` (solwindd uses the same file).
 
 ## Thanks
 
-[Caelestia](https://github.com/caelestia-dots), [Quickshell](https://quickshell.org), [NBFC-Linux](https://github.com/nbfc-linux/nbfc-linux) and everyone who made laptop configs for it, and [Material Symbols](https://fonts.google.com/icons).
+[Caelestia](https://github.com/caelestia-dots), [Quickshell](https://quickshell.org), [Qt](https://www.qt.io), [NBFC-Linux](https://github.com/nbfc-linux/nbfc-linux) and everyone who made laptop configs for it, and [Material Symbols](https://fonts.google.com/icons).
 
 ## License
 
@@ -174,6 +193,6 @@ Copyright (C) 2026 Kerim Özgür Tükenmez
 
 Solwind is free software under the **GNU General Public License version 3**, without any warranty; see [`LICENSE`](LICENSE).
 
-The transparency math in `services/Colours.qml` is adapted from [Caelestia shell](https://github.com/caelestia-dots/shell) (GPL-3.0), whose QML plugin Solwind uses at runtime (not included). Quickshell (LGPL-3.0), NBFC-Linux (GPL-3.0) and Material Symbols (Apache-2.0) are separate and not included.
+The transparency math in `services/Colours.qml` is adapted from [Caelestia shell](https://github.com/caelestia-dots/shell) (GPL-3.0), whose QML plugin Solwind uses at runtime (not included). Quickshell (LGPL-3.0), Qt (LGPL-3.0), NBFC-Linux (GPL-3.0) and Material Symbols (Apache-2.0) are separate and not included.
 
 Solwind is an independent project, not made or supported by the Caelestia, Quickshell or NBFC developers or any laptop maker. Please report Solwind problems here.

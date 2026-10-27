@@ -2,6 +2,7 @@
 // Control mode (default): restores the saved fan settings and drives the fans through the NBFC plugin, with the
 // safety limit, max fan, profiles and the NBFC service actions; quitting hands the fans back. Observe mode
 // (--observe): reads only - no fan command, no settings write, no notification - so it can run next to the QML app.
+#include "cli/CallClient.h"
 #include "core/Alerts.h"
 #include "core/FanController.h"
 #include "core/FanState.h"
@@ -33,6 +34,7 @@
 
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <cstdlib>
 #include <memory>
 #include <optional>
@@ -44,6 +46,12 @@ enum Exit { Ok = 0, Error = 1, AlreadyRunning = 3 };
 
 int main(int argc, char **argv)
 {
+    // The terminal commands' client (bin/solwind): talks to the running solwindd and ends; nothing of the daemon starts
+    if (argc >= 2 && (std::strcmp(argv[1], "--call") == 0 || std::strcmp(argv[1], "--get") == 0)) {
+        QCoreApplication client(argc, argv);
+        const QStringList a = QCoreApplication::arguments().mid(2);
+        return std::strcmp(argv[1], "--call") == 0 ? CallClient::call(a) : CallClient::get(a);
+    }
     QCoreApplication app(argc, argv);
     QCoreApplication::setApplicationName(u"solwindd"_s);
     QCoreApplication::setApplicationVersion(QStringLiteral(SOLWIND_VERSION));
@@ -61,7 +69,8 @@ int main(int argc, char **argv)
     // The handler only queues it; it is acted on once the event loop runs.
     UnixSignals signals_;
 
-    // TRANSITION (until phase 6 replaces the installed QML app): never drive the fans while a QML app of 0.5.x does
+    // Never drive the fans while a Solwind QML app of 0.5.x or older does (an upgrade while it runs, an old copy);
+    // checked again whenever a Quickshell instance starts (below)
     if (control) {
         const OldAppGuard::Result old = OldAppGuard::findNow();
         if (!old.ok) {
@@ -149,7 +158,9 @@ int main(int argc, char **argv)
         // I/O thread). Settings were written when quitting began; the bus name goes with the process.
         std::fprintf(stderr, "solwindd: quitting took more than 20 s (a fan command or a keyboard light that hangs), quitting anyway\n");
         std::fflush(stderr);
-        std::_Exit(exitCode == Ok ? Error : exitCode);
+        // (the code that was asked for: a quit the user asked for ends with 0, so systemd doesn't start it again;
+        // ExecStopPost hands the fans back either way)
+        std::_Exit(exitCode);
     });
     auto quit = [&](int code) {
         if (quitting) return;
@@ -174,7 +185,6 @@ int main(int argc, char **argv)
                 notifier.send(i18n.t(u"Fans may stay at a fixed speed"_s),
                               i18n.t(u"Solwind could not hand the fans back to NBFC's automatic control (%1). Run `nbfc set -a` or open Solwind."_s).arg(r.error),
                               Notifier::Critical, u"dialog-warning"_s, true, true);
-                if (exitCode == Ok) exitCode = Error;
             }
             if (r.fixedSpeedsSaved) {
                 // NBFC sets these again when it starts, with nothing watching the temperature but the config's
@@ -201,14 +211,13 @@ int main(int argc, char **argv)
     OldAppGuard oldApp;
     if (control) {
         QObject::connect(&oldApp, &OldAppGuard::found, &app, [&](const QString &p) {
-            std::fprintf(stderr, "solwindd: the QML Solwind app started (%s): handing the fans back to it and quitting\n",
-                         qPrintable(p));
+            std::fprintf(stderr, "solwindd: a Solwind app of 0.5.x or older started (%s) and drives the fans: handing "
+                                 "them back to it and quitting\n", qPrintable(p));
             quit(AlreadyRunning);
         });
         QObject::connect(&oldApp, &OldAppGuard::checkFailed, &app, [&](const QString &why) {
-            std::fprintf(stderr, "solwindd: a Quickshell instance started and it could not be checked whether it is the "
-                                 "QML Solwind app (%s): handing the fans back and quitting, to be safe\n", qPrintable(why));
-            quit(Error);
+            std::fprintf(stderr, "solwindd: a Quickshell instance started and it could not be checked whether it is an "
+                                 "old Solwind app (%s); carrying on\n", qPrintable(why));
         });
         oldApp.start();
     }

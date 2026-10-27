@@ -68,7 +68,7 @@ target_compile_definitions(solwind_core PUBLIC SOLWIND_VERSION="${SOLWIND_VERSIO
                                                QT_NO_CAST_FROM_ASCII QT_NO_CAST_TO_ASCII)
 target_compile_options(solwind_core PUBLIC -Wall -Wextra)
 
-add_executable(solwindd src/main.cpp)
+add_executable(solwindd src/main.cpp src/cli/CallClient.cpp)
 target_link_libraries(solwindd PRIVATE solwind_core)
 install(TARGETS solwindd RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 

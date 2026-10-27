@@ -86,6 +86,12 @@ ShellRoot {
                         text: I18n.t("No background service")
                     }
                     // A daemon started with --observe (development) refuses every change
+                    // The window app and solwindd of different versions (updated while solwindd ran)
+                    Chip {
+                        visible: Daemon.versionMismatch
+                        dot: Colours.warning
+                        text: I18n.t("Updated: restart Solwind")
+                    }
                     Chip {
                         visible: Daemon.observe
                         dot: Colours.warning
@@ -153,11 +159,26 @@ ShellRoot {
     onShownChanged: {
         if (shown) return
         gcTimer.restart()
-        console.info("[solwind] Window closed; Solwind keeps running in the background. "
-                     + "To quit: the tray menu, `solwind quit`, or Ctrl+C in the terminal that started it.")
+        console.info("[solwind] Window closed; Solwind's background service (solwindd) keeps running. To quit it: the "
+                     + "settings page, the tray menu or `solwind quit`.")
     }
 
     Timer { id: gcTimer; interval: 1000; onTriggered: gc() }
+
+    // This process only lives while there is something to show: the window, or the tray icon. The fans and the
+    // keyboard light don't need it (solwindd drives them), so without either it ends and frees its memory. Without
+    // the daemon it waits a minute before giving up the tray: systemd starts a crashed solwindd again within 3 s (up to
+    // 5 times a minute), and an automatic restart may not start the tray unit again (not checked), so this one waits.
+    readonly property bool needed: root.shown || (Daemon.connected && Tray.enabled)
+    Timer {
+        id: idleQuit
+        interval: Daemon.connected ? 1000 : 60000
+        running: !root.needed
+        onTriggered: if (!root.needed) {
+            console.info("[solwind] No window and no tray icon: the window app ends (solwindd keeps running)")
+            Qt.quit()
+        }
+    }
 
     // What this UI shows, so solwindd reads as often as it needs (it also reads the sensors while it drives fans or
     // notifications are on, and fast while it drives fans): the fan page, and a window at all
@@ -209,7 +230,7 @@ ShellRoot {
             const r = FanState.applyByNameResult(name, true)
             return r.ok ? r.text : r.usage ? root.badArg(r.text) : root.fail(r.text)
         }
-        function currentProfile(): string { return FanState.activeName() || I18n.t("custom settings") }
+        function currentProfile(): string { return root.daemonText("fans", "CurrentProfile") }
         // Max fan: minutes (0 = off, -1 = until turned off)
         function boost(minutes: int): string {
             const r = Daemon.call("fans", "SetBoost", "x", [minutes])
@@ -217,11 +238,7 @@ ShellRoot {
             return minutes === 0 ? I18n.t("Max fan off")
                  : minutes > 0 ? I18n.t("Max fan on (%1 min)").arg(minutes) : I18n.t("Max fan on (until turned off)")
         }
-        function boostStatus(): string {
-            if (!Nbfc.boosting) return I18n.t("Max fan off")
-            if (Nbfc.boostUntil < 0) return I18n.t("Max fan on (until turned off)")
-            return I18n.t("Max fan on (%1 min)").arg(Math.max(1, Math.ceil((Nbfc.boostUntil - Date.now()) / 60000)))
-        }
+        function boostStatus(): string { return root.daemonText("fans", "BoostStatus") }
         function profiles(): string { return root.daemonText("fans", "ProfileList") }
         // UI language: tr | en (the answer in the new language: the daemon's comes back a moment later)
         function lang(id: string): string {

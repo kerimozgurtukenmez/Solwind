@@ -7,3 +7,6 @@ __pycache__/
 
 # C++ backend builds made inside the tree
 backend/build*/
+
+# make (the release build of solwindd and the QML module)
+/build/

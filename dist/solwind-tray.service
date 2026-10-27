@@ -1,0 +1,18 @@
+# Solwind's tray icon: the window app (Quickshell) in the background, without a window, while solwind.service runs.
+# make install links it into solwind.service.wants, so it starts with the service; it ends by itself when the tray is
+# turned off in the app (and with the service). Opening the window (solwind, the menu entry) uses this instance.
+[Unit]
+Description=Solwind tray icon
+PartOf=solwind.service graphical-session.target
+After=solwind.service graphical-session.target
+# (a failure that doesn't go away, e.g. no Quickshell, stops after 5 starts in a minute)
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+ExecStart=@BINDIR@/solwind --background
+Restart=on-failure
+RestartSec=3
+# 3: the window app already runs (outside this service): nothing to do
+RestartPreventExitStatus=3

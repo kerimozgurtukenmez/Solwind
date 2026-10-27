@@ -129,7 +129,6 @@ var dict = {
         "Needs an installation first: sudo make install": "Önce kurulum gerekli: sudo make install",
         "Show in the system tray": "Sistem tepsisinde göster",
         "Icon in the bar: click to show/hide, hover for profiles, max fan, quit": "Barda ikon: tıkla aç/gizle, üzerine gel: profiller, maksimum fan, kapat",
-        "Closing the window keeps the app running in the background. To open it again use the app menu or the terminal: solwind": "Pencereyi kapatınca uygulama arka planda çalışmaya devam eder. Tekrar açmak için uygulama menüsünden ya da terminalden: solwind",
         "Quit (fans go back to NBFC)": "Tamamen kapat (fanlar NBFC'ye döner)",
         "Notifications": "Bildirimler",
         "Critical temperature, NBFC service stopped, fan speed could not be set, max fan ended": "Kritik sıcaklık, NBFC servisi durdu, fan hızı ayarlanamadı, maksimum fan bitti",
@@ -289,6 +288,8 @@ var dict = {
         "Solwind's background service (solwindd) is not running": "Solwind'in arka plan servisi (solwindd) çalışmıyor",
         "No background service": "Arka plan servisi yok",
         "Observe mode (read only)": "İzleme modu (salt okuma)",
+        "Updated: restart Solwind": "Güncellendi: Solwind'i yeniden başlat",
+        "Closing the window keeps Solwind's background service running (it drives the fans). To open the window again: the app menu or solwind": "Pencereyi kapatmak Solwind'in arka plan servisini durdurmaz (fanları o sürer). Pencereyi yeniden açmak için: uygulama menüsü ya da solwind",
         "It reads the sensors and drives the fans and the keyboard light; this window only shows and changes its settings. It shows up here as soon as it runs.": "Sensörleri o okur, fanları ve klavye ışığını o sürer; bu pencere yalnızca ayarlarını gösterir ve değiştirir. Çalışmaya başladığı anda burada görünür."
     }
 }

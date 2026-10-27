@@ -1,11 +1,13 @@
-# Solwind is installed with make, for the whole system (the only way to install it):
+# Solwind is built and installed with make, for the whole system (the only way to install it):
+#   make                       builds the background service solwindd and the window's QML module (CMake, Qt 6;
+#                              without sudo, into build/)
 #   sudo make install          installs under /usr/local (somewhere else: PREFIX=...)
 #   sudo make uninstall        removes it, and the keyboard permission (your settings in ~/.config/solwind stay)
 #   sudo make udev             keyboard light permission for you (optional; the app's "Grant permission" does the same)
 #   sudo make uninstall-udev   removes that permission
 #   make remove-old            (without sudo) removes an install in your home folder made by the old install.sh
 #                              (Solwind 0.4.0, or Ccenter, its old name); make install asks for it when it finds one
-# Updating: git pull, solwind quit, sudo make install, then start it again (make install says how).
+# Updating: git pull, make, solwind quit, sudo make install, then start it again (make install says how).
 # Packaging: make DESTDIR=/package/root PREFIX=/usr install   (the checks against the running system are skipped)
 
 PREFIX  ?= /usr/local
@@ -22,7 +24,12 @@ CHECK_PATHS = case "$$SW_PREFIX" in /?*) ;; *) echo "PREFIX must be an absolute 
 	case "$$SW_PREFIX$$SW_DESTDIR" in *[!A-Za-z0-9_./+-]*) \
 		echo "PREFIX and DESTDIR may only use letters, digits and _ . / + - (no spaces)" >&2; exit 1 ;; esac
 
+# The build (make): solwindd and the QML module Solwind. build/, or BUILD=<folder> on the command line (not from the
+# environment: BUILD is a common name)
+BUILD := $(if $(filter command line,$(origin BUILD)),$(BUILD),build)
 APPDIR  = $(DESTDIR)$(PREFIX)/share/solwind
+# solwindd and the QML module (the launcher finds them next to share/solwind: <prefix>/lib/solwind)
+LIBDIR  = $(DESTDIR)$(PREFIX)/lib/solwind
 BINDIR  = $(DESTDIR)$(PREFIX)/bin
 APPSDIR = $(DESTDIR)$(PREFIX)/share/applications
 ICONDIR = $(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/apps
@@ -63,10 +70,25 @@ RESET_PERMS = rp() { [ -e "$$1" ] || return 0; case "$$(stat -c "%u %a" "$$1")" 
 	for f in $(KBD_ZONES); do rp "$$f" m; done; true
 LIVE = [ -z "$(DESTDIR)" ] && [ "$$(id -u)" = 0 ]
 
-.PHONY: help install uninstall udev uninstall-udev remove-old
+.PHONY: all build help install uninstall udev uninstall-udev remove-old
+
+all: build
+
+# Release build, without the tests; no RPATH (solwindd and the module only use the system's Qt). Not as root: the
+# build folder would belong to root.
+build:
+	@command -v cmake >/dev/null 2>&1 || { echo "cmake is needed to build Solwind (and Qt 6: base, declarative)" >&2; exit 1; }
+	@[ "$$(id -u)" != 0 ] || { echo "Build without sudo: make   (then: sudo make install)" >&2; exit 1; }
+	cmake -S backend -B $(BUILD) -DCMAKE_BUILD_TYPE=Release -DSOLWIND_BUILD_TESTS=OFF -DCMAKE_SKIP_RPATH=ON \
+		$(if $(wildcard $(BUILD)/CMakeCache.txt),,$(if $(shell command -v ninja),-G Ninja,))
+	cmake --build $(BUILD)
+	@# (what make install compares the sources with: a build that had nothing to do still counts as up to date)
+	@touch $(BUILD)/.solwind-built
+	@echo; echo "Built. To install it: sudo make install"
 
 help:
 	@echo "Solwind $$(cat VERSION)"
+	@echo "  make                       build it (without sudo)"
 	@echo "  sudo make install          install under $(PREFIX)"
 	@echo "  sudo make uninstall        remove it (your settings stay)"
 	@echo "  sudo make udev             keyboard light permission for you (optional)"
@@ -74,13 +96,14 @@ help:
 	@echo "  make remove-old            (without sudo) remove an install in your home folder made by the old install.sh"
 
 install:
-	@# TRANSITION (ARCH-PLAN.md phases 5-6): this tree's UI is solwindd's D-Bus client and needs the C++ backend, which
-	@# isn't built or installed before phase 6: installed, the UI couldn't start and nothing would drive the fans.
-	@# (.dev/maketest.sh tests the install steps themselves with SOLWIND_WIP_INSTALL=1, into a fake prefix.)
-	@if grep -q '^// solwindd-client: ' shell.qml && [ "$(SOLWIND_WIP_INSTALL)" != 1 ]; then \
-		echo "Not installable yet: this tree's UI needs solwindd (the C++ port in progress, ARCH-PLAN.md phase 5);"; \
-		echo "'make install' works again in phase 6. To update the installed Solwind, use main or a 0.5.x commit."; \
-		exit 1; fi
+	@[ -x $(BUILD)/solwindd ] && [ -f $(BUILD)/qml/Solwind/qmldir ] && [ -f $(BUILD)/qml/Solwind/libsolwindqml.so ] \
+		|| { echo "Not built yet: run make first (without sudo), then sudo make install" >&2; exit 1; }
+	@# a build older than this tree (git pull without make) would put an old solwindd next to the new window app
+	@v=$$($(BUILD)/solwindd --version 2>/dev/null); [ "$$v" = "solwindd $$(cat VERSION)" ] \
+		|| { echo "The build is of another version ($$v; this tree: $$(cat VERSION)): run make first (without sudo)" >&2; exit 1; }
+	@[ -f $(BUILD)/.solwind-built ] || { echo "Not built with make yet: run make first (without sudo)" >&2; exit 1; }
+	@n=$$([ ! -d backend ] || find backend -path backend/tests -prune -o -newer $(BUILD)/.solwind-built -type f -print 2>/dev/null | head -n 1); \
+		[ -z "$$n" ] || { echo "The build is older than the source ($$n changed): run make first (without sudo)" >&2; exit 1; }
 	@$(CHECK_PATHS)
 	@[ -n "$(DESTDIR)" ] || sh dist/install-check.sh install "$(PREFIX)"
 	@# the new copy is built next to the old one and swapped in only when complete (files of older versions go too)
@@ -94,24 +117,40 @@ install:
 	if [ -e $(APPDIR) ]; then mv $(APPDIR) $(APPDIR).old; fi
 	mv $(APPDIR).new $(APPDIR)
 	rm -rf $(APPDIR).old
+	@# solwindd and the QML module, swapped in the same way
+	rm -rf $(LIBDIR).new $(LIBDIR).old
+	install -d $(LIBDIR).new/qml/Solwind
+	install -m 755 $(BUILD)/solwindd $(LIBDIR).new/solwindd
+	install -m 755 $(BUILD)/qml/Solwind/libsolwindqml.so $(LIBDIR).new/qml/Solwind/
+	install -m 644 $(BUILD)/qml/Solwind/qmldir $(BUILD)/qml/Solwind/solwindqml.qmltypes $(LIBDIR).new/qml/Solwind/
+	if [ -e $(LIBDIR) ]; then mv $(LIBDIR) $(LIBDIR).old; fi
+	mv $(LIBDIR).new $(LIBDIR)
+	rm -rf $(LIBDIR).old
 	install -Dm 755 bin/solwind $(BINDIR)/solwind
 	install -d $(APPSDIR)
 	sed -e 's|@BINDIR@/solwind|$(DESKTOP_EXEC)|g' -e 's|^Icon=solwind$$|Icon=$(DESKTOP_ICON)|' dist/solwind.desktop > $(APPSDIR)/solwind.desktop
 	chmod 644 $(APPSDIR)/solwind.desktop
 	install -Dm 644 assets/solwind.svg $(ICONDIR)/solwind.svg
 	install -d $(UNITDIR)
-	sed 's|@BINDIR@|$(PREFIX)/bin|g' dist/solwind.service > $(UNITDIR)/solwind.service
-	chmod 644 $(UNITDIR)/solwind.service
+	sed -e 's|@BINDIR@|$(PREFIX)/bin|g' -e 's|@LIBDIR@|$(PREFIX)/lib/solwind|g' -e 's|@APPDIR@|$(PREFIX)/share/solwind|g' \
+		dist/solwind.service > $(UNITDIR)/solwind.service
+	sed 's|@BINDIR@|$(PREFIX)/bin|g' dist/solwind-tray.service > $(UNITDIR)/solwind-tray.service
+	chmod 644 $(UNITDIR)/solwind.service $(UNITDIR)/solwind-tray.service
+	@# the tray icon starts with the service (whoever starts it: login, solwind); it ends by itself when it's off
+	install -d $(UNITDIR)/solwind.service.wants
+	ln -sfn ../solwind-tray.service $(UNITDIR)/solwind.service.wants/solwind-tray.service
 	install -Dm 644 LICENSE $(LICDIR)/LICENSE
 	@[ -n "$(DESTDIR)" ] || sh dist/install-check.sh installed "$(PREFIX)" "$(APPS_NEW)"
 
 uninstall:
 	@$(CHECK_PATHS)
 	@[ -n "$(DESTDIR)" ] || sh dist/install-check.sh uninstall "$(PREFIX)"
-	rm -rf $(APPDIR) $(APPDIR).new $(APPDIR).old $(LICDIR)
+	rm -rf $(APPDIR) $(APPDIR).new $(APPDIR).old $(LIBDIR) $(LIBDIR).new $(LIBDIR).old $(LICDIR)
 	@# the command only if it is Solwind's launcher (a 'solwind' of another program stays)
 	if [ -f $(BINDIR)/solwind ] && head -n 2 $(BINDIR)/solwind | grep -q '^# Solwind launcher'; then rm -f $(BINDIR)/solwind; fi
-	rm -f $(APPSDIR)/solwind.desktop $(ICONDIR)/solwind.svg $(UNITDIR)/solwind.service
+	rm -f $(APPSDIR)/solwind.desktop $(ICONDIR)/solwind.svg $(UNITDIR)/solwind.service $(UNITDIR)/solwind-tray.service
+	rm -f $(UNITDIR)/solwind.service.wants/solwind-tray.service
+	rmdir $(UNITDIR)/solwind.service.wants 2>/dev/null || true
 	@# the keyboard permission (one rule in /etc for every install): only as root, and not while another Solwind
 	@# install is left that uses it
 	@if [ -n "$(DESTDIR)" ]; then $(MAKE) --no-print-directory uninstall-udev; \

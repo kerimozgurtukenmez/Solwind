@@ -12,6 +12,7 @@
 #include <QDBusMessage>
 #include <QDBusMetaType>
 
+#include <algorithm>
 #include <cmath>
 
 using namespace Qt::StringLiterals;
@@ -267,6 +268,23 @@ VariantMapList FansApi::History() const
 
 QString FansApi::StatusText() const { return m_state.statusText(m_sensors.state().gpu()); }
 QString FansApi::ProfileList() const { return m_state.profileList(); }
+
+// (shell.qml's currentProfile / boostStatus of 0.5.x, the terminal's texts)
+QString FansApi::CurrentProfile() const
+{
+    const QString n = m_state.activeName();
+    return n.isEmpty() ? m_i18n.t(u"custom settings"_s) : n;
+}
+
+QString FansApi::BoostStatus() const
+{
+    const qint64 until = m_control.boostUntil();
+    if (until == 0) return m_i18n.t(u"Max fan off"_s);
+    if (until < 0) return m_i18n.t(u"Max fan on (until turned off)"_s);
+    // Math.max(1, Math.ceil((boostUntil - Date.now()) / 60000))
+    const double left = std::max(1.0, std::ceil(double(until - m_control.now()) / 60000));
+    return m_i18n.t(u"Max fan on (%1 min)"_s).arg(qint64(left));
+}
 
 void FansApi::SetFan(int fan, const QVariantMap &raw)
 {

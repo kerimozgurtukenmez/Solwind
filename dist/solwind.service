@@ -1,26 +1,35 @@
-# Solwind background service (systemd user service).
-# make install puts it into <prefix>/lib/systemd/user (/usr/local/lib/systemd/user);
-# @BINDIR@ is replaced at install time with the folder that contains solwind.
-# The app's "start in background on login" toggle enables/disables it.
+# Solwind's background service (systemd user service): solwindd, which drives the fans and the keyboard light.
+# make install puts it into <prefix>/lib/systemd/user (/usr/local/lib/systemd/user) and fills in the @...@ paths.
+# Started by `solwind` when it isn't running; "Start in the background on login" in the app enables it.
 # Manually: systemctl --user enable --now solwind.service   |   off: systemctl --user disable --now solwind.service
+# It pulls in solwind-tray.service (the window app in the background, for the tray icon; it ends at once when the
+# tray is turned off): make install links it into solwind.service.wants.
 [Unit]
-Description=Solwind - fan and keyboard control center (background)
+Description=Solwind - fan and keyboard light control (solwindd)
 PartOf=graphical-session.target
 After=graphical-session.target
+# A failure that doesn't go away (e.g. no session bus) stops after 5 starts in a minute: with RestartSec=3 systemd's
+# default limit (5 in 10 s) is never reached, and every round would run ExecStopPost (nbfc set -a) again
+StartLimitIntervalSec=60
+StartLimitBurst=5
 
 [Service]
-Type=simple
-# Starts without a window; to open it: solwind
-ExecStart=@BINDIR@/solwind --background
-# When stopping, ask it to quit cleanly first: keyboard effect to the static colour, fans to NBFC (same as Quit).
-# Only this service's own process ($MAINPID; empty if it has already exited), never a copy started outside it.
-ExecStop=-@BINDIR@/solwind quit --pid $MAINPID
-# In any case (crash, timeout) the fans go back to NBFC's automatic control, unless the start was refused (exit 3)
-# because another Solwind copy runs and drives them ($$ is a literal $ for the shell)
-ExecStopPost=-/bin/sh -c '[ "$${EXIT_STATUS:-}" = 3 ] || exec /usr/bin/nbfc set -a'
+# Ready once it holds its D-Bus name (clients can talk to it from then on)
+Type=dbus
+BusName=solwind.Daemon
+# (coming from Ccenter, Solwind's name before 0.4.0: its settings are copied over once, the old file stays)
+ExecStartPre=-@BINDIR@/solwind --migrate
+ExecStart=@LIBDIR@/solwindd
+# The keyboard permission's rule template and checker (the app's "Grant permission")
+Environment=SOLWIND_APP_DIR=@APPDIR@
+# A stop (systemctl stop, solwind quit, logging out) is a SIGTERM: it hands the fans back to NBFC and leaves the
+# keyboard light on its static colour itself, within 20 s. In any case (a crash, a timeout) the fans go back to NBFC's
+# automatic control afterwards, unless it didn't start (exit 3) because a Solwind app of 0.5.x or older drives them
+# ($$ is a literal $ for the shell)
+ExecStopPost=-/bin/sh -c '[ "$${EXIT_STATUS:-}" = 3 ] || PATH="$${PATH:-}:/usr/local/bin:/usr/bin" exec nbfc set -a'
+TimeoutStopSec=30
 Restart=on-failure
 RestartSec=3
-# If another Solwind copy is running, solwind exits with 3: don't keep restarting
 RestartPreventExitStatus=3
 
 [Install]

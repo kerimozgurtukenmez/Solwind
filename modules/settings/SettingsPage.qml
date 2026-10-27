@@ -35,7 +35,7 @@ PageBase {
         }
     }
 
-    // Background running: the app keeps running when the window closes; start on login (systemd user service)
+    // Background running: solwindd (the systemd user service) keeps running when the window closes; start it on login
     Group {
         title: I18n.t("Background")
         ToggleRow {
@@ -60,7 +60,7 @@ PageBase {
         ButtonRow {
             icon: "power_settings_new"
             label: I18n.t("Quit (fans go back to NBFC)")
-            sub: I18n.t("Closing the window keeps the app running in the background. To open it again use the app menu or the terminal: solwind")
+            sub: I18n.t("Closing the window keeps Solwind's background service running (it drives the fans). To open the window again: the app menu or solwind")
             trailing: ""
             onClicked: Nbfc.releaseAndQuit()
         }

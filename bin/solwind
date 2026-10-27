@@ -1,8 +1,14 @@
 #!/bin/sh
 # Solwind launcher and terminal commands.
-# The app folder is looked up in order: SOLWIND_DIR, <this script's folder>/.. (a source checkout),
-# <prefix>/share/solwind (make install: /usr/local/bin -> /usr/local/share/solwind), /usr/share/solwind.
-# Exit codes: 0 done, 1 error, 2 wrong usage, 3 not started because Solwind already runs, 4 the app isn't running.
+# solwindd, the background service, drives the fans and the keyboard light (installed: the systemd user service
+# solwind.service); the window (Quickshell) only shows and changes what it does. The terminal commands talk to
+# solwindd over D-Bus (solwindd --call), with or without the window.
+# Folders, in order: SOLWIND_DIR (and SOLWIND_LIB for solwindd and the QML module, default $SOLWIND_DIR/build);
+# <this script's folder>/.. (a source checkout, built with `make` into <checkout>/build); <prefix>/share/solwind and
+# <prefix>/lib/solwind (make install: /usr/local/bin -> /usr/local/share/solwind, /usr/local/lib/solwind);
+# /usr/share/solwind and /usr/lib/solwind.
+# Exit codes: 0 done, 1 error, 2 wrong usage, 3 not started (it already runs, or an old Solwind app drives the fans),
+# 4 not running.
 
 set -u
 
@@ -26,31 +32,39 @@ err() { t "$@" >&2; }
 self=$(readlink -f "$0")
 base=${self%/bin/*}                               # the folder that holds bin/ (works whatever the command is called)
 if [ -n "${SOLWIND_DIR:-}" ]; then
-    dir=$SOLWIND_DIR
+    dir=$SOLWIND_DIR; lib=${SOLWIND_LIB:-$SOLWIND_DIR/build}
 elif [ -f "$base/shell.qml" ]; then
-    dir=$base                                     # source checkout (<checkout>/bin/solwind)
+    dir=$base; lib=${SOLWIND_LIB:-$base/build}    # source checkout (<checkout>/bin/solwind), built by `make`
 elif [ -f "$base/share/solwind/shell.qml" ]; then
-    dir=$base/share/solwind                       # make install (<prefix>/bin/solwind)
+    dir=$base/share/solwind; lib=$base/lib/solwind   # make install (<prefix>/bin/solwind)
 else
-    dir=/usr/share/solwind
+    dir=/usr/share/solwind; lib=/usr/lib/solwind
 fi
+daemon=$lib/solwindd
 
 if [ ! -f "$dir/shell.qml" ]; then
     err "solwind: app files not found ($dir)" "solwind: uygulama dosyaları bulunamadı ($dir)"
     exit 1
 fi
-command -v qs >/dev/null 2>&1 || { err "solwind: quickshell (qs) is not installed" "solwind: quickshell (qs) kurulu değil"; exit 1; }
+# (the help, the version and the report work without the build)
+case "${1:-}" in -h|--help|help|-V|--version|report) ;; *)
+    if [ ! -x "$daemon" ]; then
+        if [ "$dir" = "$base" ]; then
+            err "solwind: not built yet: run make in $base" "solwind: henüz derlenmedi: $base içinde make çalıştır"
+        else
+            err "solwind: solwindd not found ($daemon)" "solwind: solwindd bulunamadı ($daemon)"
+        fi
+        exit 1
+    fi ;;
+esac
 
 usage() {
     if [ "$lang" = tr ]; then cat <<EOF
 Kullanım: solwind [komut]
 
-  (komutsuz)         Pencereyi aç. Çalışmıyorsa burada başlatır: günlüğü bu terminalde akar, Ctrl+C kapatır
-                     (klavye ışığı ve fanlar normale döner; zorlamak için yine Ctrl+C)
-  -d | --detach      Terminale bağlamadan başlat (pencere açılır)
-  --background       Pencere açmadan başlat (systemd servisi bunu kullanır)
-  log [-f]           Çalışan uygulamanın günlüğü; -f canlı izler (Ctrl+C sadece izlemeyi bırakır)
-  open | hide | toggle
+  (komutsuz) | open  Pencereyi aç; Solwind çalışmıyorsa önce arka plan servisini (solwindd) başlatır
+  hide | toggle      Pencereyi gizle / aç-kapat
+  log [-f]           Arka plan servisinin günlüğü; -f canlı izler
   status             Fanlar, sıcaklıklar, aktif profil
   profiles           Profilleri listele (* = aktif)
   profile [ad]       Profil uygula (büyük/küçük harf fark etmez); adsız: aktif profili göster
@@ -66,23 +80,22 @@ Kullanım: solwind [komut]
   kbd themecount <n> Caelestia kaynağında renk sayısı (3-6)
   lang [tr|en]       Arayüz dili; boşsa: şu anki dili göster
   report             Hata bildirmek için tanı raporu oluştur (ev klasörüne bir metin dosyası)
-  quit               Tamamen kapat (Solwind'in kontrol ettiği fanlar NBFC'ye döner); çalışmıyorsa bir şey yapmaz
+  quit               Tamamen kapat: pencere ve arka plan servisi (Solwind'in kontrol ettiği fanlar NBFC'ye döner,
+                     klavye ışığı seçilen renginde kalır); çalışmıyorsa bir şey yapmaz
   help [komut]       Bu yardım ya da tek bir komutun yardımı (solwind <komut> --help da olur)
   --version
 
-Çıkış kodları: 0 tamam, 1 hata, 2 yanlış kullanım, 3 Solwind zaten çalıştığı için başlatılmadı (başka bir kopya ya da
-servis dışındaki bu kopya), 4 uygulama çalışmıyor.
+Komutlar pencere olmadan da çalışır (arka plan servisiyle konuşurlar).
+Çıkış kodları: 0 tamam, 1 hata, 2 yanlış kullanım, 3 başlatılmadı (zaten çalışıyor ya da fanları eski bir Solwind
+uygulaması sürüyor), 4 Solwind çalışmıyor.
 Hatalar stderr'e yazılır.
 EOF
     else cat <<EOF
 Usage: solwind [command]
 
-  (no command)       Open the window. If it isn't running, start it here: its log shows in this terminal and
-                     Ctrl+C quits it (keyboard light and fans back to normal; Ctrl+C again to force it)
-  -d | --detach      Start it without tying it to this terminal (the window opens)
-  --background       Start without a window (used by the systemd service)
-  log [-f]           The running app's log; -f follows it (Ctrl+C only stops following)
-  open | hide | toggle
+  (no command) | open Open the window; if Solwind isn't running, its background service (solwindd) is started first
+  hide | toggle      Hide / show-or-hide the window
+  log [-f]           The background service's log; -f follows it
   status             Fans, temperatures, active profile
   profiles           List profiles (* = active)
   profile [name]     Apply a profile (case-insensitive); without a name: show the active profile
@@ -98,77 +111,54 @@ Usage: solwind [command]
   kbd themecount <n> Number of colors with the Caelestia source (3-6)
   lang [tr|en]       UI language; without one: show the current language
   report             Create a diagnostic report for bug reports (a text file in your home folder)
-  quit               Quit completely (fans driven by Solwind go back to NBFC); does nothing if it isn't running
+  quit               Quit completely: the window and the background service (fans driven by Solwind go back to
+                     NBFC, the keyboard light stays on its chosen color); does nothing if it isn't running
   help [command]     This help, or the help of one command (solwind <command> --help works too)
   --version
 
-Exit codes: 0 done, 1 error, 2 wrong usage, 3 not started because Solwind already runs (another copy, or this one
-outside the service), 4 the app isn't running.
+The commands work without the window (they talk to the background service).
+Exit codes: 0 done, 1 error, 2 wrong usage, 3 not started (it already runs, or an old Solwind app drives the
+fans), 4 Solwind isn't running.
 Errors go to stderr.
 EOF
     fi
 }
-# Help of one command: its lines of the full help (open/hide/toggle share one line)
+# Help of one command: its lines of the full help (open/hide/toggle share their lines)
 usage_for() {
     usage | awk -v c="$1" 'NR == 1 { head = $0; next }
-        $1 == c || (c ~ /^(open|hide|toggle)$/ && $1 == "open") { lines = lines $0 "\n" }
+        $1 == c || (c == "open" && /^  \(.*\| open /) || (c ~ /^(hide|toggle)$/ && $1 == "hide") { lines = lines $0 "\n"; more = 1; next }
+        more && /^                     / { lines = lines $0 "\n"; next }
+        { more = 0 }
         END { if (lines == "") exit 1; printf "%s\n\n%s", head, lines }' \
     || { err "solwind: unknown command: $1" "solwind: bilinmeyen komut: $1"; usage >&2; exit 2; }
-}
-
-# The app's instances are found by path on any display, so the commands also work from a TTY or over SSH
-ipc() { qs ipc --any-display -p "$dir" "$@"; }
-
-# Is this copy running?
-running() { ipc show >/dev/null 2>&1; }
-
-# Calls an IPC function and prints its answer. An answer starting with "ERROR<tab>" or "USAGE<tab>" is a failure
-# (shell.qml): its message goes to stderr and the exit code is 1 or 2.
-call() {
-    out=$(ipc call cc "$@")                      # (qs' own errors go straight to stderr)
-    [ $? -eq 0 ] || return 1
-    tab=$(printf '\t')
-    case "$out" in
-        "ERROR$tab"*) printf '%s\n' "${out#ERROR$tab}" >&2; return 1 ;;
-        "USAGE$tab"*) printf '%s\n' "${out#USAGE$tab}" >&2; return 2 ;;
-    esac
-    [ -z "$out" ] || printf '%s\n' "$out"
-}
-
-# Is another Solwind copy (development or installed) running? Two copies must never drive the fans at once.
-# A copy under the old name (Ccenter, before 0.4.0) counts too. (qs list --json keeps paths with spaces whole)
-other_instance() {
-    qs list --all --json 2>/dev/null | sed -n 's/^ *"config_path": *"\(.*\)",*$/\1/p' | while IFS= read -r p; do
-        low=$(printf '%s' "$p" | tr '[:upper:]' '[:lower:]')
-        case "$low" in
-            */solwind/shell.qml|*/ccenter/shell.qml) [ "$p" = "$dir/shell.qml" ] || { printf '%s\n' "$p"; break; } ;;
-        esac
-    done
-}
-
-need_running() {
-    running || { err "solwind: the app is not running (to start it: solwind)" "solwind: uygulama çalışmıyor (başlatmak için: solwind)"; exit 4; }
 }
 usage_error() { err "$@"; exit 2; }
 is_int() { case "$1" in ""|-|*[!0-9-]*|?*-*) return 1 ;; esac; }
 
-# Before starting: if another copy is running, warn and exit
-guard() {
-    other=$(other_instance)
-    if [ -n "$other" ]; then
-        case "$(printf '%s' "$other" | tr '[:upper:]' '[:lower:]')" in
-            */ccenter/shell.qml) err "solwind: another copy is running (Solwind or Ccenter, its old name): $other" \
-                                     "solwind: başka bir kopya çalışıyor (Solwind ya da eski adıyla Ccenter): $other" ;;
-            *) err "solwind: another Solwind copy is running: $other" "solwind: başka bir Solwind kopyası çalışıyor: $other" ;;
-        esac
-        err "Not started, so that two copies never drive the fans at once. Quit that one first." \
-            "İki kopya aynı anda fanları kontrol etmesin diye başlatılmadı. Önce onu kapat."
-        exit 3                                    # the systemd service does not retry on this code (RestartPreventExitStatus=3)
-    fi
+# ---------- the background service (solwindd) ----------
+# (only "nobody holds the name" (4) is down: a busy or refusing solwindd still runs, and starting another would fail)
+up() { "$daemon" --get daemon Version >/dev/null 2>&1; [ $? != 4 ]; }
+need_up() {
+    up || { err "solwind: Solwind isn't running (to start it: solwind)" "solwind: Solwind çalışmıyor (başlatmak için: solwind)"; exit 4; }
 }
-
-# Coming from Ccenter (the old name): before the first start its settings are copied over once. A copy, not a move:
-# the old file stays where it was (delete it by hand once you don't need it). The app reads only the new file.
+# A method of solwindd (solwindd --call): its answer to stdout, its refusal to stderr; the exit code says which
+# (0 done, 1 refused, 2 wrong argument, 4 not running)
+dcall() {
+    "$daemon" --call "$@"
+    rc=$?
+    [ $rc != 4 ] || err "solwind: Solwind isn't running (to start it: solwind)" "solwind: Solwind çalışmıyor (başlatmak için: solwind)"
+    return $rc
+}
+# The installed service runs this copy's solwindd
+unit_ours() {
+    [ -z "${SOLWIND_NO_SYSTEMD:-}" ] && command -v systemctl >/dev/null 2>&1 || return 1
+    case "$(systemctl --user show -p ExecStart --value solwind.service 2>/dev/null)" in
+        *"path=$daemon ;"*) return 0 ;;
+    esac
+    return 1
+}
+# Coming from Ccenter (the old name, before 0.4.0): before the first start its settings are copied over once. A copy,
+# not a move: the old file stays where it was. solwindd reads only the new file.
 copy_old_settings() {
     if [ -e "$cfg/solwind/settings.json" ] || [ ! -f "$cfg/ccenter/settings.json" ]; then return 0; fi
     if mkdir -p "$cfg/solwind" && cp "$cfg/ccenter/settings.json" "$cfg/solwind/settings.json.part" \
@@ -181,151 +171,127 @@ copy_old_settings() {
             "solwind: ayarlar $cfg/ccenter klasöründen kopyalanamadı; varsayılan ayarlarla başlıyor"
     fi
 }
-
-# Wait (at most ~10 s) until the app answers. 0 = it does
-wait_running() {
+# Wait (at most ~10 s) until solwindd answers. 0 = it does
+wait_up() {
     n=0
-    while [ "$n" -lt 50 ]; do
-        running && return 0
-        sleep 0.2
-        n=$((n + 1))
-    done
+    while [ "$n" -lt 50 ]; do up && return 0; sleep 0.2; n=$((n + 1)); done
     return 1
 }
-
-# ---------- running like other programs: in the foreground, Ctrl+C quits ----------
-# Quickshell has no handler for SIGINT, SIGHUP or SIGTERM: they would kill it at once and leave the fans at the speed
-# it last set. So this script stays as a small supervisor (like Syncthing's monitor): qs runs as its child in its own
-# session, so the terminal's Ctrl+C, Ctrl+Z and hang-up don't reach it; its log goes to this terminal.
-#   - Ctrl+C, a closed terminal or SIGTERM: a clean quit (keyboard light to its colour, fans back to NBFC), at most
-#     20 s; a second Ctrl+C forces it
-#   - whenever qs has ended (also after a crash): the fans go back to NBFC's automatic control, like the service's
-#     ExecStopPost (Quickshell's in-process restart after a crash is off here, so a crash really ends it)
-say() { if [ "$lang" = tr ]; then printf '%s\n' "$2" >&2 2>/dev/null; else printf '%s\n' "$1" >&2 2>/dev/null; fi; :; }
-# 0 = the fans were handed back, 1 = it failed (NBFC not running, no answer), 2 = nbfc isn't installed
-hand_back() {
-    command -v nbfc >/dev/null 2>&1 || return 2
-    ( trap '' INT HUP; exec timeout 15 nbfc set -a ) >/dev/null 2>&1 &
-    wait $! 2>/dev/null || return 1
-}
-on_sig() {
-    trapped=1
-    # A signal before qs was started: handled right after it starts (run_supervised)
-    if [ -z "$pid" ]; then early=$1; return 0; fi
-    if [ "$quitting" = 0 ]; then
-        quitting=1
-        # Helpers run in the background, ignoring Ctrl+C and the hang-up, so a second Ctrl+C or the closing terminal
-        # doesn't cut them short; they start before anything is written (a write to a broken pipe must not stop them).
-        # "quit" is asked again every 0.5 s until the app takes it: qs ipc exits 0 even when the app isn't ready yet
-        # and then prints why (an accepted quit prints nothing).
-        ( trap '' INT HUP
-          n=0
-          while [ "$n" -lt 40 ] && kill -0 "$pid" 2>/dev/null; do
-              out=$(qs ipc --pid "$pid" call cc quit 2>&1) && [ -z "$out" ] && exit 0
-              sleep 0.5
-              n=$((n + 1))
-          done ) >/dev/null 2>&1 &
-        ( trap '' INT HUP; sleep 20; kill -USR1 $$ ) >/dev/null 2>&1 &
-        timer=$!
-        # (after a hang-up there's no terminal to write to)
-        [ "$1" = HUP ] || say "Quitting: the keyboard light and the fans go back to normal… (Ctrl+C again to force it)" \
-                              "Kapatılıyor: klavye ışığı ve fanlar normale dönüyor… (zorlamak için yine Ctrl+C)"
-    elif [ "$1" != HUP ] && [ "$forced" = 0 ]; then
-        forced=1
-        say "Forcing it to quit." "Zorla kapatılıyor."
-        kill -TERM "$pid" 2>/dev/null
+# Why it didn't start: exit 3 = an old Solwind app drives the fans (solwindd checks at start), else its log.
+# Sets start_failed to the exit code this command ends with (the window still opens: it says the service isn't running,
+# which matters when Solwind was started from the menu, with no terminal to show this)
+start_failed=""
+not_started() {    # $1: the unit (or "" without systemd), $2: its exit code if known
+    if [ "${2:-}" = 3 ]; then
+        err "solwind: not started: a Solwind app of 0.5.x or older (or Ccenter) is running and drives the fans; quit it first" \
+            "solwind: başlatılmadı: 0.5.x ya da daha eski bir Solwind uygulaması (ya da Ccenter) çalışıyor ve fanları sürüyor; önce onu kapat"
+        start_failed=3
+        return 1
     fi
+    err "solwind: the background service didn't start" "solwind: arka plan servisi başlamadı"
+    [ -z "$1" ] || journalctl --user -u "$1" -n 8 --no-pager -o cat 2>/dev/null | sed 's/^/  /' >&2
+    start_failed=1
+    return 1
 }
-on_timeout() {
-    trapped=1
-    [ "$forced" = 0 ] || return 0
-    forced=1
-    kill -TERM "$pid" 2>/dev/null
-    say "It didn't quit within 20 s, stopping it." "20 sn içinde kapanmadı, durduruluyor."
-}
-# $1: 1 = open the window, 0 = start in the background (no window)
-run_supervised() {
-    command -v setsid >/dev/null 2>&1 || { err "solwind: setsid (util-linux) is needed" "solwind: setsid (util-linux) gerekli"; exit 1; }
-    quitting=0 forced=0 timer="" pid="" trapped=0 early=""
-    trap 'on_sig INT' INT
-    trap 'on_sig INT' QUIT                       # Ctrl+\ quits like Ctrl+C (bash ignores it in scripts, dash doesn't)
-    trap 'on_sig HUP' HUP
-    trap 'on_sig TERM' TERM
-    trap 'on_timeout' USR1
-    trap '' TSTP                                 # no frozen fan controller (Ctrl+Z)
-    trap '' PIPE                                 # a broken pipe on stderr must not end the supervisor
-    # A background job of a script starts with Ctrl+C ignored, and the traps above would be inherited as ignored:
-    # give qs the defaults, like under the service (GNU env)
-    sigs=""; env --default-signal=INT true 2>/dev/null && sigs="--default-signal=INT,QUIT,TSTP"
-    bg=""; [ "$1" = 1 ] || bg=SOLWIND_BACKGROUND=1
-    # The log goes to this terminal (Quickshell writes it to stdout). Not into a pipe: one that breaks could end qs.
-    # Without a terminal (started from the app menu, or piped) nobody reads it; qs keeps its own log (solwind log).
-    if [ -t 1 ] && [ -t 2 ]; then
-        env $sigs QS_DISABLE_CRASH_HANDLER=1 $bg setsid qs -p "$dir" -n </dev/null &
+# Starts solwindd if it isn't running: as the installed service (systemd restarts it after a crash and hands the
+# fans back in any case); not installed (a source checkout), as a transient service with the same hand-back
+# (systemd-run); SOLWIND_NO_SYSTEMD=1 (tests) in the background with this environment
+start_daemon() {
+    up && return 0
+    copy_old_settings
+    if unit_ours; then
+        systemctl --user start solwind.service 2>/dev/null \
+            || { not_started solwind.service "$(systemctl --user show -p ExecMainStatus --value solwind.service 2>/dev/null)"; return 1; }
+        wait_up || not_started solwind.service
+    elif [ -z "${SOLWIND_NO_SYSTEMD:-}" ] && command -v systemd-run >/dev/null 2>&1; then
+        # (a failed run of an earlier start is cleared first; $$ is a literal $ for the shell systemd starts)
+        systemctl --user reset-failed solwind-dev.service >/dev/null 2>&1
+        systemd-run --user --unit=solwind-dev --collect --quiet -p Type=dbus -p BusName=solwind.Daemon \
+            -p "Environment=SOLWIND_APP_DIR=$dir" -p TimeoutStopSec=30 -p "Description=Solwind (solwindd of $dir)" \
+            -p "ExecStopPost=-/bin/sh -c '[ \"\$\${EXIT_STATUS:-}\" = 3 ] || PATH=\"\$\${PATH:-}:/usr/local/bin:/usr/bin\" exec nbfc set -a'" \
+            "$daemon" >/dev/null 2>&1 \
+            || { not_started solwind-dev.service "$(systemctl --user show -p ExecMainStatus --value solwind-dev.service 2>/dev/null)"; return 1; }
+        wait_up || not_started solwind-dev.service
+    elif [ -n "${SOLWIND_NO_SYSTEMD:-}" ]; then
+        # (a background job isn't a process group leader, so setsid runs solwindd itself: $! is its pid, and a start
+        # it refused can be told by its exit code)
+        SOLWIND_APP_DIR=$dir setsid "$daemon" </dev/null >>"${SOLWIND_DAEMON_LOG:-/dev/null}" 2>&1 &
+        dpid=$!
+        n=0
+        while [ "$n" -lt 50 ]; do
+            up && return 0
+            kill -0 "$dpid" 2>/dev/null || { wait "$dpid"; not_started "" $?; return 1; }
+            sleep 0.2; n=$((n + 1))
+        done
+        not_started ""
     else
-        env $sigs QS_DISABLE_CRASH_HANDLER=1 $bg setsid qs -p "$dir" -n </dev/null >/dev/null 2>&1 &
-    fi
-    pid=$!
-    [ -z "$early" ] || on_sig "$early"
-    # A signal's trap interrupts wait: wait again until qs has really ended
-    while :; do
-        trapped=0
-        wait "$pid"
-        st=$?
-        [ "$trapped" = 1 ] || break
-    done
-    trap '' INT QUIT HUP TERM USR1               # the hand-back below is not interrupted
-    [ -z "$timer" ] || kill "$timer" 2>/dev/null
-    # qs -n exits 0 at once if this copy got started meanwhile: that one drives the fans, leave them alone
-    if [ "$st" = 0 ] && [ "$quitting" = 0 ] && running; then
-        err "solwind: this copy is already running" "solwind: bu kopya zaten çalışıyor"
-        exit 3
-    fi
-    hand_back
-    case $? in
-        0) fans_en="the fans went back to NBFC." fans_tr="fanlar NBFC'ye döndü." ;;
-        2) fans_en="nbfc not found: check the fans." fans_tr="nbfc bulunamadı: fanlara bak." ;;
-        *) fans_en="the fans could NOT be handed back (is NBFC running?): run nbfc set -a" \
-           fans_tr="fanlar NBFC'ye GERİ VERİLEMEDİ (NBFC çalışıyor mu?): nbfc set -a çalıştır" ;;
-    esac
-    if [ "$forced" = 1 ]; then
-        say "Stopped; $fans_en" "Durduruldu; $fans_tr"; exit 1
-    elif [ "$st" -gt 128 ] && [ "$st" -le 192 ]; then          # 128 + signal number (Linux signals go up to 64)
-        sn=$((st - 128))
-        case $sn in
-            1|2|9|15) say "Solwind was stopped from outside (signal $sn); $fans_en" "Solwind dışarıdan durduruldu (sinyal $sn); $fans_tr" ;;
-            *) say "Solwind crashed (signal $sn); $fans_en" "Solwind çöktü (sinyal $sn); $fans_tr" ;;
-        esac
+        err "solwind: systemd (systemctl, systemd-run) is needed to run Solwind's background service" \
+            "solwind: Solwind'in arka plan servisi için systemd (systemctl, systemd-run) gerekli"
         exit 1
-    elif [ "$st" != 0 ]; then
-        say "Solwind ended with code $st; $fans_en" "Solwind $st koduyla bitti; $fans_tr"; exit 1
     fi
-    say "Solwind quit; $fans_en" "Solwind kapandı; $fans_tr"
-    exit 0
 }
 
-# quit [--pid PID]: asks the app to quit and waits (at most ~10 s) until it has (the keyboard light and the fans
-# are handed back first), so the systemd service's stop doesn't cut that short. With --pid only that instance:
-# the service passes its own main process, which is empty if it has already exited (then there's nothing to stop,
-# and a copy running outside the service is left alone).
-quit_app() {
+# ---------- the window (Quickshell) ----------
+command -v qs >/dev/null 2>&1 || qs_missing=1
+# The window app's instance is found by its folder on any display, so this also works from a TTY or over SSH
+ui_ipc() { qs ipc --any-display -p "$dir" "$@"; }
+ui_running() { [ -z "${qs_missing:-}" ] && ui_ipc show >/dev/null 2>&1; }
+# The window app: the QML module Solwind from $lib/qml; SOLWIND_LIB tells it which solwindd it belongs to (the
+# autostart toggle)
+ui_env() { env QML_IMPORT_PATH="$lib/qml${QML_IMPORT_PATH:+:$QML_IMPORT_PATH}" SOLWIND_LIB="$lib" "$@"; }
+need_qs() {
+    [ -z "${qs_missing:-}" ] || { err "solwind: quickshell (qs) is not installed" "solwind: quickshell (qs) kurulu değil"; exit 1; }
+}
+# Opens the window (started in the background, away from this terminal, if it isn't running)
+open_window() {
+    need_qs
+    # The service has just started the tray icon's instance (solwind-tray.service): that one gets the window
+    if ! ui_running && unit_ours && [ "$(systemctl --user is-active solwind-tray.service 2>/dev/null)" != inactive ]; then
+        n=0
+        while [ "$n" -lt 25 ] && ! ui_running; do sleep 0.2; n=$((n + 1)); done
+    fi
+    command -v setsid >/dev/null 2>&1 || { err "solwind: setsid (util-linux) is needed" "solwind: setsid (util-linux) gerekli"; exit 1; }
+    # An instance without a window ends by itself when the tray is off (shell.qml): one found just then can be gone
+    # before it takes "open". So "open" counts once it was taken and the instance still answers a moment later.
+    tries=0
+    while [ "$tries" -lt 3 ]; do
+        tries=$((tries + 1))
+        if ! ui_running; then
+            ui_env setsid -f qs -p "$dir" -n </dev/null >/dev/null 2>&1
+            n=0
+            while [ "$n" -lt 50 ] && ! ui_running; do sleep 0.2; n=$((n + 1)); done
+        fi
+        ui_running && ui_ipc call cc open >/dev/null 2>&1 && sleep 0.5 && ui_running && return 0
+        sleep 0.5
+    done
+    err "solwind: the window didn't open. Its log: qs log -p $dir" "solwind: pencere açılmadı. Günlüğü: qs log -p $dir"
+    exit 1
+}
+
+# quit [--pid PID]: the window (if it runs) and solwindd quit; waits (at most ~30 s) until solwindd is gone, so the
+# fans have been handed back when it returns. (--pid: the service of 0.5.x and older stopped the window app this
+# way; kept for an upgrade while such a unit is still loaded)
+quit_all() {
     if [ "${1:-}" = --pid ]; then
         pid=${2:-}
         [ -n "$pid" ] || exit 0
         is_int "$pid" || usage_error "Usage: solwind quit [--pid <process id>]" "Kullanım: solwind quit [--pid <süreç no>]"
-        qs ipc --pid "$pid" call cc quit >/dev/null 2>&1 || exit 0   # (--pid picks the instance; no --any-display with it)
+        qs ipc --pid "$pid" call cc quit >/dev/null 2>&1 || exit 0
         n=0
         while [ "$n" -lt 50 ] && [ -e "/proc/$pid" ]; do sleep 0.2; n=$((n + 1)); done
         exit 0
     fi
-    if ! running; then
-        err "solwind: the app is not running" "solwind: uygulama çalışmıyor"
+    ui=0; ui_running && ui=1
+    if ! up && [ $ui = 0 ]; then
+        err "solwind: Solwind isn't running" "solwind: Solwind çalışmıyor"
         exit 0
     fi
-    call quit || exit $?
+    # The window quits solwindd itself and goes once it has; without it, solwindd is asked directly
+    if [ $ui = 1 ]; then ui_ipc call cc quit >/dev/null 2>&1; fi
+    up && "$daemon" --call daemon Quit >/dev/null 2>&1
     n=0
-    while [ "$n" -lt 50 ] && running; do sleep 0.2; n=$((n + 1)); done
-    running && { err "solwind: the app hasn't quit yet" "solwind: uygulama henüz kapanmadı"; exit 1; }
+    while [ "$n" -lt 150 ] && { up || ui_running; }; do sleep 0.2; n=$((n + 1)); done
+    up && { err "solwind: the background service hasn't quit yet" "solwind: arka plan servisi henüz kapanmadı"; exit 1; }
     exit 0
 }
 
@@ -333,66 +299,62 @@ quit_app() {
 case "${2:-}" in -h|--help) case "${1:-}" in ""|-*) ;; *) usage_for "$1"; exit 0 ;; esac ;; esac
 
 case "${1:-}" in
-    "")
-        if running; then
-            call open || exit $?
-            err "solwind: already running, the window is open. Its log: solwind log -f" \
-                "solwind: zaten çalışıyor, pencere açıldı. Günlüğü: solwind log -f"
-            exit 0
-        fi
-        guard
-        copy_old_settings
-        run_supervised 1 ;;
-    -d|--detach)
-        # Like qs -d / caelestia shell -d: start it away from this terminal (still supervised), return once it answers
-        if running; then call open; exit $?; fi
-        guard
-        command -v setsid >/dev/null 2>&1 || { err "solwind: setsid (util-linux) is needed" "solwind: setsid (util-linux) gerekli"; exit 1; }
-        setsid -f "$self" </dev/null >/dev/null 2>&1
-        wait_running || { err "solwind: the app didn't start. To see why, run: solwind" "solwind: uygulama başlamadı. Nedenini görmek için: solwind"; exit 1; }
-        exit 0 ;;
+    ""|open|-d|--detach)
+        need_qs
+        start_daemon
+        open_window
+        exit ${start_failed:-0} ;;
     --background)
-        # This copy already runs: starting a second one would only exit at once. (Another copy appearing between
-        # this check and the start is not caught: qs -n then exits 0. A tiny window.)
-        if running; then
-            err "solwind: this copy is already running" "solwind: bu kopya zaten çalışıyor"
+        # The tray icon (solwind-tray.service): the window app without a window; it ends by itself when the tray is
+        # off. Already running (a window opened before): nothing to do.
+        need_qs
+        if ui_running; then
+            err "solwind: the window app is already running" "solwind: pencere uygulaması zaten çalışıyor"
             exit 3
         fi
-        guard
-        copy_old_settings
-        # Under the systemd service ExecStart runs this script itself, so SYSTEMD_EXEC_PID is this process.
-        # (Not INVOCATION_ID: a uwsm session hands it down to every terminal started from Hyprland.)
-        if [ "${SYSTEMD_EXEC_PID:-}" = "$$" ]; then
-            # Under the systemd service: qs itself is the main process (ExecStop/ExecStopPost rely on that), systemd
-            # supervises it. Quickshell's own crash handler is off: it would restart the app inside the same process
-            # (more than 10 s after start, src/launch/main.cpp), so systemd would never see the crash and
-            # ExecStopPost (fans back to NBFC) wouldn't run. Without it the process ends, systemd hands the fans
-            # back and starts the service again 3 s later (Restart=on-failure).
-            export QS_DISABLE_CRASH_HANDLER=1
-            exec env SOLWIND_BACKGROUND=1 qs -p "$dir" -n
+        exec env SOLWIND_BACKGROUND=1 QML_IMPORT_PATH="$lib/qml${QML_IMPORT_PATH:+:$QML_IMPORT_PATH}" SOLWIND_LIB="$lib" \
+            qs -p "$dir" -n ;;
+    --migrate)
+        # (the service, before solwindd starts: the Ccenter settings copy above)
+        copy_old_settings; exit 0 ;;
+    hide|toggle)
+        need_qs
+        if ui_running; then ui_ipc call cc "$1" >/dev/null; exit 0; fi
+        if [ "$1" = hide ]; then
+            err "solwind: the window app isn't running" "solwind: pencere uygulaması çalışmıyor"
+            exit 4
         fi
-        run_supervised 0 ;;
+        start_daemon
+        open_window
+        exit ${start_failed:-0} ;;
     log)
-        # The running app's log (also its earlier lines); -f keeps following it. Ctrl+C here only stops the viewer.
-        shift; exec qs log --any-display -p "$dir" "$@" ;;
-    open|hide|toggle|status|profiles)
-        need_running; call "$1" ;;
+        # solwindd's log (the service's journal; a source checkout's transient service too). Ctrl+C only stops it.
+        shift
+        command -v journalctl >/dev/null 2>&1 || { err "solwind: journalctl (systemd) is needed" "solwind: journalctl (systemd) gerekli"; exit 1; }
+        case "${1:-}" in
+            "") exec journalctl --user -u solwind.service -u solwind-dev.service -u solwind-tray.service -n 100 --no-pager ;;
+            *) exec journalctl --user -u solwind.service -u solwind-dev.service -u solwind-tray.service -n 100 "$@" ;;
+        esac ;;
+    status)
+        need_up; dcall fans StatusText ;;
+    profiles)
+        need_up; dcall fans ProfileList ;;
     quit)
-        shift; quit_app "$@" ;;
+        shift; quit_all "$@" ;;
     profile)
-        need_running
-        if [ $# -lt 2 ]; then call currentProfile; else shift; call profile "$*"; fi ;;
+        need_up
+        if [ $# -lt 2 ]; then dcall fans CurrentProfile; else shift; dcall fans ApplyProfile sb "$*" true; fi ;;
     boost)
         case "${2:-}" in
             ""|on|off) ;;
             *) is_int "$2" || usage_error "Usage: solwind boost [minutes | on | off]" "Kullanım: solwind boost [dakika | on | off]" ;;
         esac
-        need_running
+        need_up
         case "${2:-}" in
-            "") call boostStatus ;;
-            on) call boost -- -1 ;;
-            off) call boost -- 0 ;;
-            *) call boost -- "$2" ;;
+            "") dcall fans BoostStatus ;;
+            on) dcall fans SetBoost x -1 && dcall fans BoostStatus ;;
+            off) dcall fans SetBoost x 0 && dcall fans BoostStatus ;;
+            *) dcall fans SetBoost x "$2" && dcall fans BoostStatus ;;
         esac ;;
     kbd)
         # wrong usage is reported before "not running"
@@ -407,24 +369,27 @@ case "${1:-}" in
                 [ $# -ge 4 ] && is_int "$3" && is_int "$4" || usage_error "Usage: solwind kbd range <lowest %> <highest %>" "Kullanım: solwind kbd range <en düşük %> <en yüksek %>" ;;
             *) err "solwind: unknown kbd command: $2" "solwind: bilinmeyen kbd komutu: $2"; usage_for kbd >&2; exit 2 ;;
         esac
-        need_running
+        need_up
         case "${2:-}" in
-            "") call kbd ;;
-            info) call kbdInfo ;;
-            color) call kbdColor "$3" ;;
-            brightness) call kbdBrightness -- "$3" ;;
-            effect) call kbdEffect "$3" ;;
-            themecount) call kbdThemeCount -- "$3" ;;
-            source) call kbdSource "$3" ;;
-            range) call kbdRange -- "$3" "$4" ;;
-            speed) call kbdSpeed -- "$3" ;;
+            "") dcall keyboard StatusText ;;
+            info) dcall keyboard InfoText ;;
+            color) dcall keyboard SetColor s "$3" ;;
+            brightness) dcall keyboard SetBrightness i "$3" ;;
+            effect) dcall keyboard SetEffect s "$3" ;;
+            themecount) dcall keyboard SetThemeCount i "$3" ;;
+            source) dcall keyboard SetSource s "$3" ;;
+            range) dcall keyboard SetRange ii "$3" "$4" ;;
+            speed) dcall keyboard SetSpeed i "$3" ;;
         esac ;;
     report)
-        # Diagnostic report (works without the app running): one text file in your home folder
+        # Diagnostic report (works without Solwind running): one text file in your home folder
         exec sh "$dir/scripts/report.sh" "$dir" ;;
     lang)
-        need_running
-        if [ $# -lt 2 ]; then call currentLang; else call lang "$2"; fi ;;
+        case "${2:-}" in ""|tr|en) ;; *) usage_error "tr | en" "tr | en" ;; esac
+        need_up
+        if [ $# -ge 2 ]; then dcall daemon SetLanguage s "$2" || exit $?; l=$2; else l=$("$daemon" --get daemon Language) || exit 1; fi
+        # (in that language, as the window answered)
+        if [ "$l" = tr ]; then echo "Dil: Türkçe"; else echo "Language: English"; fi ;;
     -h|--help)
         usage ;;
     help)

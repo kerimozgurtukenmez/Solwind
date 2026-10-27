@@ -289,6 +289,13 @@ private slots:
         QVERIFY2(lines[3].startsWith(u"CPU: 50.0°C   GPU: "_s), qPrintable(lines[3]));
         QCOMPARE(lines.mid(4), (QStringList{ u"Global: off"_s, u"Fan 1 (CPU Fan): Auto · NBFC auto · current 30% · target 30%"_s,
                                              u"Fan 2 (GPU Fan): Auto · NBFC auto · current 30% · target 30%"_s }));
+        QCOMPARE(call(u"CurrentProfile"_s).arguments().value(0).toString(), u"custom settings"_s);
+        QCOMPARE(call(u"BoostStatus"_s).arguments().value(0).toString(), u"Max fan off"_s);
+        QCOMPARE(call(u"SetBoost"_s, { qlonglong(15) }).type(), QDBusMessage::ReplyMessage);
+        QCOMPARE(call(u"BoostStatus"_s).arguments().value(0).toString(), u"Max fan on (15 min)"_s);
+        QCOMPARE(call(u"SetBoost"_s, { qlonglong(-1) }).type(), QDBusMessage::ReplyMessage);
+        QCOMPARE(call(u"BoostStatus"_s).arguments().value(0).toString(), u"Max fan on (until turned off)"_s);
+        QCOMPARE(call(u"SetBoost"_s, { qlonglong(0) }).type(), QDBusMessage::ReplyMessage);
         QCOMPARE(call(u"ProfileList"_s).arguments().value(0).toString(),
                  u"  NBFC Auto  (auto)\n  Quiet  (quiet)\n  Balanced  (balanced)\n  Performance  (performance)"_s);
         const QStringList reserved = prop(u"ReservedNames"_s).toStringList();
@@ -501,6 +508,22 @@ private slots:
         FakeWorld::writeAt(runtime + u"/quickshell/"_s + entry, "");
         expectExit(*p, 3);
         QVERIFY(fanIs(0, true));                                // handed back to it
+    }
+    // Since 1.0: a check that fails later (qs list broken) is only reported; fan control goes on
+    void carriesOnWhenALaterCheckFails()
+    {
+        settings("{\"configs\":{\"TestA\":{\"fans\":{\"0\":{\"mode\":1,\"fixed\":0.4}}}}}");
+        std::unique_ptr<QProcess> p;
+        startAndWait(p);
+        QTRY_VERIFY_WITH_TIMEOUT(fanIs(0, false, 40), 8000);
+        w->write(u"qs-fail"_s, "");
+        FakeWorld::writeAt(runtime + u"/quickshell/by-id/brokenqs/log.qslog"_s, "");
+        QTest::qWait(6000);                                     // (3 tries, a second apart)
+        QCOMPARE(p->state(), QProcess::Running);
+        QVERIFY(nameOwned() && fanIs(0, false, 40));
+        QFile::remove(w->cct() + u"/qs-fail"_s);
+        QDBusInterface(service, u"/solwind"_s, service).call(u"Quit"_s);
+        expectExit(*p, 0);
     }
     // ---------- the keyboard over D-Bus (KeyboardApi: the terminal commands' checks and texts) ----------
     void keyboardOverDBus()

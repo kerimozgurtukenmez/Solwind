@@ -58,9 +58,16 @@ need_rights() {
     t "This changes files under $prefix: run it with sudo ($again)." "Bu, $prefix altındaki dosyaları değiştirir: sudo ile çalıştır ($again)."
     exit 1
 }
-# Is the installed app running (for any user)? The folders qs was started with (-p). Without pgrep it can't tell.
+# Is the installed app running (for any user)? Its solwindd (the background service: by the program's path), or its
+# window app (the folders qs was started with, -p). Without pgrep it can't tell.
 running() {
     if ! command -v pgrep >/dev/null 2>&1; then echo "?"; return 0; fi
+    _dwant=$(real_path "$prefix/lib/solwind/solwindd")
+    for _p in $(pgrep -x solwindd 2>/dev/null); do
+        # (a program replaced on disk while it ran shows as "<path> (deleted)")
+        _e=$(readlink "/proc/$_p/exe" 2>/dev/null); _e=${_e% (deleted)}
+        [ "$_e" = "$_dwant" ] && { printf '%s\n' "$prefix/lib/solwind"; return 0; }
+    done
     _want=$(real_path "$app")
     for _p in $(pgrep -x 'qs|quickshell' 2>/dev/null); do
         tr '\0' '\n' < "/proc/$_p/cmdline" 2>/dev/null | awk 'prev == "-p" || prev == "--path" { print; exit } { prev = $0 }'
@@ -77,8 +84,9 @@ not_running() {
         t "pgrep (procps) is needed to check that Solwind isn't running; install it, then run $again again." \
           "Solwind'in çalışmadığını denetlemek için pgrep (procps) gerekli; kur, sonra $again komutunu yeniden çalıştır."
     else
-        t "Solwind is running from $app. Quit it first (solwind quit, or 'Quit' in the app), then run $again again." \
-          "Solwind şu an $app klasöründen çalışıyor. Önce kapat (solwind quit ya da uygulamada 'Tamamen kapat'), sonra $again komutunu yeniden çalıştır."
+        _r=$(printf '%s\n' "$_r" | head -n 1)
+        t "Solwind is running from $_r. Quit it first (solwind quit, or 'Quit' in the app), then run $again again." \
+          "Solwind şu an $_r klasöründen çalışıyor. Önce kapat (solwind quit ya da uygulamada 'Tamamen kapat'), sonra $again komutunu yeniden çalıştır."
     fi
     exit 1
 }
