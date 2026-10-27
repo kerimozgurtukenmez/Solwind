@@ -108,7 +108,7 @@ int main(int argc, char **argv)
     SampleHistory history;
     KeyboardController keyboard(paths, settings, i18n, control);
     KeyboardApi keyboardApi(keyboard, i18n);
-    DaemonApi api(paths, settings, loaded, &hints);
+    DaemonApi api(paths, settings, i18n, loaded, &hints);
     api.controlMode = control;
     SensorsApi sensorsApi(sensors);
     FansApi fansApi(nbfc, sensors, history, fans, fanState, i18n, settings, control);
@@ -217,6 +217,7 @@ int main(int argc, char **argv)
     PropertyPublisher sensorsProps(bus, QString::fromLatin1(SensorsApi::path), u"solwind.Sensors"_s, &sensorsApi);
     PropertyPublisher fansProps(bus, QString::fromLatin1(FansApi::path), u"solwind.Fans"_s, &fansApi);
     PropertyPublisher keyboardProps(bus, QString::fromLatin1(KeyboardApi::path), u"solwind.Keyboard"_s, &keyboardApi);
+    PropertyPublisher daemonProps(bus, QString::fromLatin1(DaemonApi::objectPath), u"solwind.Daemon"_s, &api);
     QObject::connect(&keyboard, &KeyboardController::changed, &app, [&] { keyboardProps.publish(); });
     // How often (SPEC.md P-1, P-2): fast while a window is open or Solwind drives fans; the sensors are read while
     // the fan page is open, Solwind drives fans in Fixed/Curve mode (the safety limit watches the GPU too), or
@@ -236,7 +237,13 @@ int main(int argc, char **argv)
     QObject::connect(&nbfc, &FanPlugin::changed, &app, [&] { fansProps.publish(); });
     QObject::connect(&fans, &FanController::changed, &app, [&] { pace(); fansProps.publish(); });
     QObject::connect(&fanState, &FanState::changed, &app, [&] { fansProps.publish(); });
-    QObject::connect(&settings, &Settings::changed, &app, [&] { pace(); fansProps.publish(); });
+    // (the language too: profile labels and keyboard texts are in it)
+    QObject::connect(&settings, &Settings::changed, &app, [&] {
+        pace();
+        fansProps.publish();
+        keyboardProps.publish();
+        daemonProps.publish();
+    });
     if (control) {
         // Another config: the old one's settings don't belong to these fans (CF-1); the new one's are restored on the
         // next read. Emitted inside the status read, before the fans are taken over (N-8, N-14).

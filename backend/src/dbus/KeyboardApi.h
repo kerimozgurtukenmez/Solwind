@@ -1,5 +1,7 @@
 #pragma once
 
+#include "DBusUtil.h"
+
 #include <QDBusContext>
 #include <QObject>
 #include <QStringList>
@@ -39,6 +41,7 @@ class KeyboardApi : public QObject, protected QDBusContext
     Q_PROPERTY(int MaxBrightness READ maxBrightness)
     Q_PROPERTY(int Brightness READ brightness)
     Q_PROPERTY(QString Color READ color)                     // the chosen colour, "#RRGGBB"
+    Q_PROPERTY(DoubleList ColorF READ colorF)                // the same unrounded: r, g, b 0..1 (the UI's colour wheel)
     Q_PROPERTY(QString Effect READ effect)                   // static | breathing | cycle
     Q_PROPERTY(QString Source READ source)                   // single | multi | theme
     Q_PROPERTY(QStringList Colors READ colors)               // the colour list ("#rrggbb", 1..6)
@@ -51,6 +54,11 @@ class KeyboardApi : public QObject, protected QDBusContext
     Q_PROPERTY(bool EffectActive READ effectActive)
     Q_PROPERTY(bool Paused READ paused)
     Q_PROPERTY(int CycleIndex READ cycleIndex)               // the colour the effect shows now (the UI highlights it)
+    // Texts the UI shows, in the UI language
+    Q_PROPERTY(QString KindText READ kindText)               // "RGB, single zone", ...
+    Q_PROPERTY(QString SupportText READ supportText)         // "full (tested)", ...
+    Q_PROPERTY(QString NoPermissionText READ noPermissionText)
+    Q_PROPERTY(QStringList NoteTexts READ noteTexts)         // one per Notes entry
 
 public:
     static constexpr const char *path = "/solwind/Keyboard";
@@ -78,6 +86,7 @@ public:
     int maxBrightness() const;
     int brightness() const;
     QString color() const;
+    DoubleList colorF() const;
     QString effect() const;
     QString source() const;
     QStringList colors() const;
@@ -90,6 +99,10 @@ public:
     bool effectActive() const;
     bool paused() const;
     int cycleIndex() const;
+    QString kindText() const;
+    QString supportText() const;
+    QString noPermissionText() const;
+    QStringList noteTexts() const;
 
 public slots:
     Q_SCRIPTABLE void Refresh();                             // detection again (the Keyboard page opened, ...)
@@ -103,6 +116,12 @@ public slots:
     Q_SCRIPTABLE QString SetThemeCount(int n);               // 3..6 (clamped)
     Q_SCRIPTABLE QString SetRange(int low, int high);        // breathing levels, percent
     Q_SCRIPTABLE void SetColors(const QStringList &colors);  // 1..6 colours "#rrggbb"
+    // The UI's controls (colour wheel, sliders) as Keyboard.qml took them: no rounding to percent or 8 bits, and no
+    // checks beyond its own (it shows them only where they work); no answer text
+    Q_SCRIPTABLE void SetColorF(double r, double g, double b);   // 0..1 each
+    Q_SCRIPTABLE void SetBrightnessRaw(double level);            // in the light's own steps, 0..MaxBrightness
+    Q_SCRIPTABLE void SetSpeedF(double v);                       // 0..1
+    Q_SCRIPTABLE void SetRangeF(double low, double high);        // 0..1 each
     Q_SCRIPTABLE void GrantPermission();                     // the admin password dialog (pkexec)
     Q_SCRIPTABLE void RevokePermission();
 

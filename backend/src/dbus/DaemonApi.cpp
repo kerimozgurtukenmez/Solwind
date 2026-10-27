@@ -2,6 +2,7 @@
 
 #include "ClientHints.h"
 
+#include "core/I18n.h"
 #include "core/Paths.h"
 #include "core/Settings.h"
 
@@ -11,12 +12,18 @@
 
 using namespace Qt::StringLiterals;
 
-DaemonApi::DaemonApi(const Paths &paths, Settings &settings, bool settingsLoaded, ClientHints *hints, QObject *parent)
-    : QObject(parent), m_paths(paths), m_settings(settings), m_settingsLoaded(settingsLoaded), m_hints(hints)
+DaemonApi::DaemonApi(const Paths &paths, Settings &settings, const I18n &i18n, bool settingsLoaded, ClientHints *hints,
+                     QObject *parent)
+    : QObject(parent), m_paths(paths), m_settings(settings), m_i18n(i18n), m_settingsLoaded(settingsLoaded), m_hints(hints)
 {
 }
 
 QString DaemonApi::version() const { return QStringLiteral(SOLWIND_VERSION); }
+QString DaemonApi::language() const { return m_i18n.lang(); }
+QString DaemonApi::savedLanguage() const { return m_settings.uiLang(); }
+bool DaemonApi::notifyEnabled() const { return m_settings.notifyOn(u"enabled"_s); }
+bool DaemonApi::notifyProfile() const { return m_settings.notifyOn(u"profile"_s); }
+bool DaemonApi::trayEnabled() const { return m_settings.uiOn(u"tray"_s); }
 
 QVariantMap DaemonApi::Status() const
 {
@@ -72,6 +79,17 @@ void DaemonApi::SetLanguage(const QString &lang)
         return;
     }
     m_settings.setUiLang(lang);
+}
+
+void DaemonApi::SetUi(const QString &key, bool on)
+{
+    if (!calledFromDBus()) return;
+    if (!controlMode) { sendErrorReply(u"solwind.Error.Observe"_s, u"observe mode: nothing is written"_s); return; }
+    if (key != u"tray"_s) {
+        sendErrorReply(u"solwind.Error.Usage"_s, u"ui: tray"_s);
+        return;
+    }
+    m_settings.setUi(key, on);
 }
 
 void DaemonApi::Quit()

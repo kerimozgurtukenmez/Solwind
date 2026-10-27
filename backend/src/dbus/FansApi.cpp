@@ -153,6 +153,7 @@ VariantMapList FansApi::profiles() const
 }
 
 QString FansApi::activeProfile() const { return m_state.activeId(); }
+QStringList FansApi::reservedNames() const { return m_state.reservedNames(); }
 qlonglong FansApi::boostUntil() const { return m_control.boostUntil(); }
 QString FansApi::boostBlocked() const { return m_controlMode ? m_control.boostBlocked() : m_i18n.t(u"Solwind only watches the fans now"_s); }
 double FansApi::safety() const { return m_control.safety(); }
@@ -263,6 +264,9 @@ VariantMapList FansApi::History() const
     for (const auto &s : m_history.samples()) out.append(sampleMap(s.t, s.cpu, s.gpu, s.fan));
     return out;
 }
+
+QString FansApi::StatusText() const { return m_state.statusText(m_sensors.state().gpu()); }
+QString FansApi::ProfileList() const { return m_state.profileList(); }
 
 void FansApi::SetFan(int fan, const QVariantMap &raw)
 {

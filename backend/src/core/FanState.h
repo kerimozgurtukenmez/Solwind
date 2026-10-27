@@ -62,11 +62,14 @@ public:
     QString activeName() const;
     QStringList namesOf(const ProfileEntry &p) const;
     bool reservedName(const QString &name) const;
+    QStringList reservedNames() const;                          // every name the built-ins answer to (lower case)
     Profile snapshot(const QString &name) const;
     void applyProfile(const ProfileEntry &p);
     // By any name it answers to (UI, terminal, tray); fromClient: a terminal / keybind, notified if notify.profile
     Result applyByName(const QString &name, bool fromClient);
     QString profileList() const;
+    // `solwind status` (statusText); gpu: the discrete GPU's temperature, NaN if none (FanState.qml takes Sensors.gpu)
+    QString statusText(double gpu) const;
     // SaveProfile from a client: name trimmed, 1..32 characters, not a built-in's (UI-7); "" = saved, else why not
     QString saveProfile(const QString &name);
     QString removeProfile(const QString &name);                 // "" = removed (built-ins can't be)

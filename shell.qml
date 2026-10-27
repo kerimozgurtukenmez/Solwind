@@ -1,4 +1,5 @@
 //@ pragma AppId solwind
+// solwindd-client: the fans and the keyboard light are driven by solwindd (D-Bus); this window only shows and changes them
 import Quickshell
 import Quickshell.Io
 import QtQuick
@@ -13,7 +14,7 @@ import qs.services
 ShellRoot {
     id: root
     // The window state lives outside the window: closing the window destroys it completely
-    // (UI, graphics context and render caches are freed; fan control keeps running in FanState)
+    // (UI, graphics context and render caches are freed; fan control keeps running in solwindd)
     // Started by the service (SOLWIND_BACKGROUND=1) it runs in the background without opening the window
     property bool shown: Quickshell.env("SOLWIND_BACKGROUND") !== "1"
     property int tab: 0
@@ -80,6 +81,12 @@ ShellRoot {
                     Layout.fillWidth: true
                     spacing: Tokens.spacing.small
                     Chip {
+                        visible: !Daemon.connected
+                        dot: Colours.error
+                        text: I18n.t("No background service")
+                    }
+                    Chip {
+                        visible: Daemon.connected
                         dot: Nbfc.running ? Colours.success : Colours.outlineStrong
                         text: Nbfc.running ? (Nbfc.readOnly ? I18n.t("Running (read-only)") : I18n.t("Running")) : I18n.t("Stopped")
                     }
@@ -97,10 +104,40 @@ ShellRoot {
 
                 StackLayout {
                     anchors { fill: parent; margins: Tokens.padding.extraLarge; bottomMargin: 0 }
+                    // Without solwindd there is nothing to show or change (only the settings page's quit / report)
+                    visible: Daemon.connected || root.tab === 2
                     currentIndex: root.tab
                     FanPage {}
                     KeyboardPage {}
                     SettingsPage {}
+                }
+                ColumnLayout {
+                    visible: !Daemon.connected && root.tab !== 2
+                    anchors.centerIn: parent
+                    width: Math.min(parent.width - 2 * Tokens.padding.extraLarge, 520)
+                    spacing: Tokens.spacing.medium
+                    MaterialIcon {
+                        Layout.alignment: Qt.AlignHCenter
+                        text: "cloud_off"
+                        size: Tokens.font.icon.extraLarge
+                        color: Colours.fgDim
+                    }
+                    StyledText {
+                        Layout.fillWidth: true
+                        horizontalAlignment: Text.AlignHCenter
+                        wrapMode: Text.Wrap
+                        text: Daemon.downText
+                        color: Colours.fg
+                        font: Tokens.font.title.small
+                    }
+                    StyledText {
+                        Layout.fillWidth: true
+                        horizontalAlignment: Text.AlignHCenter
+                        wrapMode: Text.Wrap
+                        text: I18n.t("It reads the sensors and drives the fans and the keyboard light; this window only shows and changes its settings. It shows up here as soon as it runs.")
+                        color: Colours.fgDim
+                        font: Tokens.font.body.medium
+                    }
                 }
             }
         }
@@ -116,15 +153,10 @@ ShellRoot {
 
     Timer { id: gcTimer; interval: 1000; onTriggered: gc() }
 
-    // Sensors are read while the fan tab is open, while Solwind drives fans, or while notifications are on (critical temperature)
-    Binding { target: Sensors; property: "active"; value: (root.shown && root.tab === 0) || Nbfc.needsSensors || Notify.enabled }
-    // Always-running services (also while the window is closed): event watcher and fan state
-    readonly property var alerts: Alerts
-    readonly property var fanState: FanState
-    readonly property var keyboard: Keyboard     // keyboard effects keep running while the window is closed
-    // Polling pace: fast while the window is open or Solwind drives fans, otherwise relaxed (performance)
+    // What this UI shows, so solwindd reads as often as it needs (it also reads the sensors while it drives fans or
+    // notifications are on, and fast while it drives fans): the fan page, and a window at all
+    Binding { target: Sensors; property: "active"; value: root.shown && root.tab === 0 }
     Binding { target: Nbfc; property: "uiVisible"; value: root.shown }
-    Binding { target: Sensors; property: "fast"; value: root.shown || Nbfc.controlling }
 
     // Tray (Caelestia bar): left click shows/hides the window, the menu has profiles and max fan
     Binding { target: Tray; property: "windowVisible"; value: root.shown }
@@ -151,9 +183,12 @@ ShellRoot {
 
     // Terminal control: solwind <command> (= qs ipc -p <app folder> call cc <command> [argument]).
     // A failure is answered with "ERROR<tab>message" (exit code 1) or, for a wrong argument, "USAGE<tab>message"
-    // (exit code 2); bin/solwind prints the message to stderr.
+    // (exit code 2); bin/solwind prints the message to stderr. The work is done by solwindd: its answer (or its refusal,
+    // solwind.Error.Usage = a wrong argument) is passed on.
     function fail(msg) { return "ERROR\t" + msg }
     function badArg(msg) { return "USAGE\t" + msg }
+    function relay(r) { return r.ok ? String(r.value ?? "") : r.errorName === "solwind.Error.Usage" ? badArg(r.error) : fail(r.error) }
+    function daemonText(obj, method) { return relay(Daemon.call(obj, method)) }
     IpcHandler {
         target: "cc"
         function toggle(): void { root.shown = !root.shown }
@@ -171,7 +206,8 @@ ShellRoot {
         function currentProfile(): string { return FanState.activeName() || I18n.t("custom settings") }
         // Max fan: minutes (0 = off, -1 = until turned off)
         function boost(minutes: int): string {
-            if (!Nbfc.setBoost(minutes)) return root.fail(Nbfc.boostBlocked())
+            const r = Daemon.call("fans", "SetBoost", "x", [minutes])
+            if (!r.ok) return root.relay(r)
             return minutes === 0 ? I18n.t("Max fan off")
                  : minutes > 0 ? I18n.t("Max fan on (%1 min)").arg(minutes) : I18n.t("Max fan on (until turned off)")
         }
@@ -180,62 +216,28 @@ ShellRoot {
             if (Nbfc.boostUntil < 0) return I18n.t("Max fan on (until turned off)")
             return I18n.t("Max fan on (%1 min)").arg(Math.max(1, Math.ceil((Nbfc.boostUntil - Date.now()) / 60000)))
         }
-        function profiles(): string { return FanState.profileList() }
-        // UI language: tr | en
+        function profiles(): string { return root.daemonText("fans", "ProfileList") }
+        // UI language: tr | en (the answer in the new language: the daemon's comes back a moment later)
         function lang(id: string): string {
             if (I18n.languages.findIndex(l => l.id === id) < 0) return root.badArg("tr | en")
-            I18n.setLang(id)
-            return I18n.t("Language: %1").arg(I18n.languages.find(l => l.id === id).name)
+            const r = Daemon.call("daemon", "SetLanguage", "s", [id])
+            if (!r.ok) return root.relay(r)
+            return I18n.tIn(id, "Language: %1").arg(I18n.languages.find(l => l.id === id).name)
         }
         function currentLang(): string { return I18n.t("Language: %1").arg(I18n.languages.find(l => l.id === I18n.lang)?.name ?? I18n.lang) }
         // Keyboard light: colour "#rrggbb", brightness in percent (0-100)
-        function kbd(): string { return Keyboard.statusText() }
+        function kbd(): string { return root.daemonText("keyboard", "StatusText") }
         // Detection report (laptop, driver, light, permission, support level): handy for bug reports
-        function kbdInfo(): string { return Keyboard.infoText() }
-        function kbdColor(hex: string): string {
-            if (!Keyboard.available) return root.fail(I18n.t("No keyboard light found"))
-            if (!Keyboard.rgb) return root.fail(I18n.t("This keyboard light is not RGB"))
-            if (!/^#?[0-9a-fA-F]{6}$/.test(hex)) return root.badArg(I18n.t("The color must look like #rrggbb (e.g. #ff0000)"))
-            if (!Keyboard.writable) { Keyboard.refresh(); return root.fail(Keyboard.noPermissionText()) }   // (it may have been granted meanwhile)
-            Keyboard.setColor(hex.startsWith("#") ? hex : "#" + hex)
-            return I18n.t("Color: %1").arg(Keyboard.hex(Keyboard.color))
-        }
-        function kbdEffect(name: string): string {
-            if (["static", "breathing", "cycle"].indexOf(name) < 0) return root.badArg(I18n.t("Effect: %1").arg("static | breathing | cycle"))
-            if (!Keyboard.effectsAllowed) return root.fail(I18n.t("Effects are not available for this keyboard"))
-            if (!Keyboard.writable) { Keyboard.refresh(); return root.fail(Keyboard.noPermissionText()) }   // (it may have been granted meanwhile)
-            Keyboard.setEffect(name)
-            return I18n.t("Effect: %1").arg(name)
-        }
-        function kbdSource(name: string): string {
-            if (["single", "multi", "theme"].indexOf(name) < 0) return root.badArg(I18n.t("Color source: single | multi | theme"))
-            if (!Keyboard.setSource(name)) return root.fail(I18n.t("A color cycle needs several colors: multi | theme"))
-            return I18n.t("Color source: %1").arg(name)
-        }
-        function kbdSpeed(percent: int): string {
-            if (!Keyboard.effectsAllowed) return root.fail(I18n.t("Effects are not available for this keyboard"))
-            Keyboard.setSpeed(Math.max(0, Math.min(100, percent)) / 100)
-            return I18n.t("Speed: %1% (%2 s per breath / color)").arg(Math.round(Keyboard.speed * 100)).arg(I18n.num(Keyboard.period, 1))
-        }
+        function kbdInfo(): string { return root.daemonText("keyboard", "InfoText") }
+        function kbdColor(hex: string): string { return root.relay(Daemon.call("keyboard", "SetColor", "s", [hex])) }
+        function kbdEffect(name: string): string { return root.relay(Daemon.call("keyboard", "SetEffect", "s", [name])) }
+        function kbdSource(name: string): string { return root.relay(Daemon.call("keyboard", "SetSource", "s", [name])) }
+        function kbdSpeed(percent: int): string { return root.relay(Daemon.call("keyboard", "SetSpeed", "i", [percent])) }
         // Number of colours for the Caelestia source (3-6)
-        function kbdThemeCount(n: int): string {
-            if (!Keyboard.effectsAllowed) return root.fail(I18n.t("Effects are not available for this keyboard"))
-            Keyboard.setThemeCount(n)
-            return I18n.t("Caelestia colors: %1 (%2)").arg(Keyboard.themeCount).arg(Keyboard.themeColors.map(c => Keyboard.hex(c)).join(" "))
-        }
+        function kbdThemeCount(n: int): string { return root.relay(Daemon.call("keyboard", "SetThemeCount", "i", [n])) }
         // Lowest and highest breathing level (percent)
-        function kbdRange(low: int, high: int): string {
-            if (!Keyboard.effectsAllowed) return root.fail(I18n.t("Effects are not available for this keyboard"))
-            Keyboard.setRange(low / 100, high / 100)
-            return I18n.t("Breathing range: %1% – %2%").arg(Math.round(Keyboard.minLevel * 100)).arg(Math.round(Keyboard.maxLevel * 100))
-        }
-        function kbdBrightness(percent: int): string {
-            if (!Keyboard.available) return root.fail(I18n.t("No keyboard light found"))
-            if (!Keyboard.hasBrightness) return root.fail(I18n.t("This keyboard light has no brightness setting (color only)"))
-            if (!Keyboard.writable) { Keyboard.refresh(); return root.fail(Keyboard.noPermissionText()) }   // (it may have been granted meanwhile)
-            Keyboard.setBrightness(Math.max(0, Math.min(100, percent)) * Keyboard.maxBrightness / 100)
-            return I18n.t("Brightness: %1%").arg(Math.max(0, Math.min(100, percent)))
-        }
-        function status(): string { return FanState.statusText() }
+        function kbdRange(low: int, high: int): string { return root.relay(Daemon.call("keyboard", "SetRange", "ii", [low, high])) }
+        function kbdBrightness(percent: int): string { return root.relay(Daemon.call("keyboard", "SetBrightness", "i", [percent])) }
+        function status(): string { return root.daemonText("fans", "StatusText") }
     }
 }

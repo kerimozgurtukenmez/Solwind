@@ -3,6 +3,7 @@
 // errors, max fan, quitting (D-Bus, SIGTERM) with the fans handed back, observe mode refusing writes, the guard
 // against the QML app (TRANSITION), notifications (NT-2, NT-3, NT-7, QT-3). Nothing real is touched.
 #include "TestEnv.h"
+#include "core/OldAppGuard.h"
 #include "dbus/DBusUtil.h"
 #include "dbus/DaemonApi.h"
 
@@ -93,6 +94,18 @@ class TstControlD : public QObject
         m << u"solwind.Fans"_s << name;
         const QDBusMessage r = QDBusConnection::sessionBus().call(m);
         return r.arguments().value(0).value<QDBusVariant>().variant();
+    }
+    QVariant dprop(const QString &name)
+    {
+        QDBusMessage m = QDBusMessage::createMethodCall(service, u"/solwind"_s, u"org.freedesktop.DBus.Properties"_s, u"Get"_s);
+        m << service << name;
+        return QDBusConnection::sessionBus().call(m).arguments().value(0).value<QDBusVariant>().variant();
+    }
+    QDBusMessage dcall(const QString &method, const QVariantList &args = {})
+    {
+        QDBusMessage m = QDBusMessage::createMethodCall(service, u"/solwind"_s, service, method);
+        m.setArguments(args);
+        return QDBusConnection::sessionBus().call(m, QDBus::Block, 10000);
     }
     QDBusMessage kcall(const QString &method, const QVariantList &args = {})
     {
@@ -254,6 +267,62 @@ private slots:
         QCOMPARE(d.value(u"safety"_s).toDouble(), 80.0);
         QCOMPARE(d.value(u"configs"_s).toObject().value(u"TestA"_s).toObject().value(u"active"_s).toString(), u"quiet"_s);
     }
+    // What the UI (phase 5) uses besides the terminal's methods: the settings it shows, the status texts, the
+    // profile names it can't take
+    void clientSurface()
+    {
+        std::unique_ptr<QProcess> p;
+        startAndWait(p);
+        QTRY_VERIFY_WITH_TIMEOUT(prop(u"Restored"_s).toBool(), 8000);
+        QCOMPARE(dprop(u"Language"_s).toString(), u"en"_s);         // (LANG=en_US.UTF-8, nothing saved)
+        QCOMPARE(dprop(u"SavedLanguage"_s).toString(), QString());
+        QVERIFY(dprop(u"NotifyEnabled"_s).toBool() && dprop(u"NotifyProfile"_s).toBool() && dprop(u"TrayEnabled"_s).toBool());
+        QCOMPARE(dcall(u"SetUi"_s, { u"window"_s, false }).errorName(), u"solwind.Error.Usage"_s);
+        QCOMPARE(dcall(u"SetUi"_s, { u"tray"_s, false }).type(), QDBusMessage::ReplyMessage);
+        QCOMPARE(dcall(u"SetNotify"_s, { u"profile"_s, false }).type(), QDBusMessage::ReplyMessage);
+        QVERIFY(!dprop(u"TrayEnabled"_s).toBool() && !dprop(u"NotifyProfile"_s).toBool() && dprop(u"NotifyEnabled"_s).toBool());
+
+        const QStringList lines = call(u"StatusText"_s).arguments().value(0).toString().split(u'\n');
+        QCOMPARE(lines.size(), 7);
+        QCOMPARE(lines.mid(0, 3), (QStringList{ u"Service: running"_s, u"Config: TestA"_s, u"Profile: custom settings"_s }));
+        QVERIFY2(lines[3].startsWith(u"CPU: 50.0°C   GPU: "_s), qPrintable(lines[3]));
+        QCOMPARE(lines.mid(4), (QStringList{ u"Global: off"_s, u"Fan 1 (CPU Fan): Auto · NBFC auto · current 30% · target 30%"_s,
+                                             u"Fan 2 (GPU Fan): Auto · NBFC auto · current 30% · target 30%"_s }));
+        QCOMPARE(call(u"ProfileList"_s).arguments().value(0).toString(),
+                 u"  NBFC Auto  (auto)\n  Quiet  (quiet)\n  Balanced  (balanced)\n  Performance  (performance)"_s);
+        const QStringList reserved = prop(u"ReservedNames"_s).toStringList();
+        for (const QString &n : { u"auto"_s, u"nbfc auto"_s, u"nbfc otomatik"_s, u"quiet"_s, u"sessiz"_s, u"performans"_s })
+            QVERIFY2(reserved.contains(n), qPrintable(n));
+        QVERIFY(!reserved.contains(u"Quiet"_s));                     // (lower case only)
+
+        // In Turkish, a speed of 1%: the line is formatted in one pass ("%%5" isn't a placeholder again, SPEC.md §21e)
+        QCOMPARE(dcall(u"SetLanguage"_s, { u"tr"_s }).type(), QDBusMessage::ReplyMessage);
+        QCOMPARE(dprop(u"Language"_s).toString(), u"tr"_s);
+        QCOMPARE(dprop(u"SavedLanguage"_s).toString(), u"tr"_s);
+        QCOMPARE(call(u"SetFan"_s, { 0, st(1, 0.01) }).type(), QDBusMessage::ReplyMessage);
+        QTRY_VERIFY_WITH_TIMEOUT(fanIs(0, false, 1), 6000);
+        QTRY_VERIFY_WITH_TIMEOUT(call(u"StatusText"_s).arguments().value(0).toString().split(u'\n').value(5)
+                                     == u"Fan 1 (CPU Fan): Sabit · NBFC elle · anlık %1 · hedef %1"_s, 6000);
+        QCOMPARE(call(u"StatusText"_s).arguments().value(0).toString().split(u'\n').value(0), u"Servis: çalışıyor"_s);
+        // Profile labels follow the language
+        const auto labels = [&] {
+            QStringList l;
+            const QDBusArgument a = prop(u"Profiles"_s).value<QDBusArgument>();
+            a.beginArray();
+            while (!a.atEnd()) { QVariantMap m; a >> m; l << m.value(u"label"_s).toString(); }
+            a.endArray();
+            return l;
+        };
+        QCOMPARE(labels().value(1), u"Sessiz"_s);
+
+        QDBusInterface(service, u"/solwind"_s, service).call(u"Quit"_s);
+        expectExit(*p, 0);
+        QFile f(w->settingsHome() + u"/solwind/settings.json"_s);
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        const QJsonObject d = QJsonDocument::fromJson(f.readAll()).object();
+        QCOMPARE(d.value(u"ui"_s).toObject(), (QJsonObject{ { u"tray"_s, false }, { u"lang"_s, u"tr"_s } }));
+        QCOMPARE(d.value(u"notify"_s).toObject(), (QJsonObject{ { u"profile"_s, false } }));
+    }
     void observeRefusesAndWritesNothing()
     {
         settings("{\"configs\":{\"TestA\":{\"fans\":{\"0\":{\"mode\":1,\"fixed\":0.4}}}}}");
@@ -302,6 +371,37 @@ private slots:
         startAndWait(q);                                        // Caelestia alone: starts
         QDBusInterface(service, u"/solwind"_s, service).call(u"Quit"_s);
         expectExit(*q, 0);
+    }
+    void startsNextToTheClientUi()
+    {
+        // The UI as solwindd's client (phase 5) has the marker line: no reason to step aside, even in a folder called
+        // solwind with the app's AppId. The same file without it is still the QML app.
+        const QByteArray client = "//@ pragma AppId solwind\n// solwindd-client: drives nothing itself\nimport Quickshell\n";
+        w->write(u"solwind/shell.qml"_s, client);
+        w->write(u"solwind/services/Nbfc.qml"_s, "pragma Singleton\nimport Quickshell\nimport QtQuick\nimport Solwind\n");
+        w->write(u"qs-list.json"_s, u"[{\"config_path\": \"%1/solwind/shell.qml\", \"pid\": 7}]"_s.arg(w->cct()).toUtf8());
+        std::unique_ptr<QProcess> q;
+        startAndWait(q);
+        QDBusInterface api(service, u"/solwind"_s, service);
+        QCOMPARE(QDBusReply<QVariantMap>(api.call(u"Status"_s)).value().value(u"mode"_s).toString(), u"control"_s);
+        // The marker must be the line itself: indented or later than the first 4096 bytes it doesn't count
+        QVERIFY(!OldAppGuard::isQmlApp(w->cct() + u"/solwind/shell.qml"_s));
+        w->write(u"other/shell.qml"_s, "//@ pragma AppId solwind\n  // solwindd-client: x\n");
+        QVERIFY(OldAppGuard::isQmlApp(w->cct() + u"/other/shell.qml"_s));
+        w->write(u"late/shell.qml"_s, "//@ pragma AppId solwind\n" + QByteArray(4100, ' ') + "\n// solwindd-client: x\n");
+        QVERIFY(OldAppGuard::isQmlApp(w->cct() + u"/late/shell.qml"_s));
+        // The marker next to the old services (a half-copied install), or with none, is still the QML app
+        w->write(u"half/solwind/shell.qml"_s, client);
+        w->write(u"half/solwind/services/Nbfc.qml"_s, "pragma Singleton\nimport Quickshell\nimport Quickshell.Io\nimport QtQuick\nimport qs.utils\n");
+        QVERIFY(OldAppGuard::isQmlApp(w->cct() + u"/half/solwind/shell.qml"_s));
+        w->write(u"bare/solwind/shell.qml"_s, client);
+        QVERIFY(OldAppGuard::isQmlApp(w->cct() + u"/bare/solwind/shell.qml"_s));
+        // An old copy starting next to it is still found: the daemon steps aside
+        w->write(u"old/solwind/shell.qml"_s, "//@ pragma AppId solwind\nimport Quickshell\n");
+        w->write(u"qs-list.json"_s, u"[{\"config_path\": \"%1/solwind/shell.qml\", \"pid\": 7}, {\"config_path\": \"%1/old/solwind/shell.qml\", \"pid\": 8}]"_s
+                                        .arg(w->cct()).toUtf8());
+        FakeWorld::writeAt(runtime + u"/quickshell/by-id/n3wqshell/log.qslog"_s, "");   // (its Quickshell entries)
+        expectExit(*q, 3);
     }
     void noStartWhenItCantTell()
     {
@@ -426,6 +526,28 @@ private slots:
         QTRY_VERIFY(content(d + u"/multi_intensity"_s) != u"0 255 0"_s);   // frames
         QCOMPARE(kcall(u"SetColors"_s, { QStringList{ u"#12345"_s } }).errorName(), u"solwind.Error.Usage"_s);
         QVERIFY(kcall(u"StatusText"_s).arguments().value(0).toString().startsWith(u"Keyboard light: hp::kbd_backlight (RGB, single zone)"_s));
+        // The UI's controls: no rounding to percent / 8 bits (Keyboard.qml's own setters)
+        QCOMPARE(kcall(u"SetEffect"_s, { u"static"_s }).type(), QDBusMessage::ReplyMessage);
+        QCOMPARE(kcall(u"SetColorF"_s, { 0.0, 0.5, 1.0 }).type(), QDBusMessage::ReplyMessage);
+        QCOMPARE(kprop(u"Color"_s).toString(), u"#0080FF"_s);
+        QTRY_COMPARE(content(d + u"/multi_intensity"_s), u"0 128 255"_s);
+        QCOMPARE(kcall(u"SetBrightnessRaw"_s, { 100.4 }).type(), QDBusMessage::ReplyMessage);
+        QTRY_COMPARE(content(d + u"/brightness"_s), u"100"_s);
+        QCOMPARE(kcall(u"SetSpeedF"_s, { 0.25 }).type(), QDBusMessage::ReplyMessage);
+        QCOMPARE(kprop(u"Speed"_s).toDouble(), 0.25);
+        QCOMPARE(kprop(u"Period"_s).toDouble(), 6.25);
+        QCOMPARE(kcall(u"SetRangeF"_s, { 0.2, 0.1 }).type(), QDBusMessage::ReplyMessage);   // low pushes high along
+        QCOMPARE(kprop(u"MinLevel"_s).toDouble(), 0.2);
+        QCOMPARE(kprop(u"MaxLevel"_s).toDouble(), 0.2);
+        QCOMPARE(kcall(u"SetSpeedF"_s, { std::nan("") }).errorName(), u"solwind.Error.Usage"_s);
+        QCOMPARE(kcall(u"SetColorF"_s, { 0.0, std::nan(""), 1.0 }).errorName(), u"solwind.Error.Usage"_s);
+        QCOMPARE(kprop(u"Speed"_s).toDouble(), 0.25);
+        QCOMPARE(kprop(u"KindText"_s).toString(), u"RGB, single zone"_s);
+        QCOMPARE(kprop(u"SupportText"_s).toString(), u"full (tested)"_s);
+        QCOMPARE(kprop(u"NoPermissionText"_s).toString(), u"No write permission: Keyboard tab > 'Grant permission' (or: sudo make udev)"_s);
+        QCOMPARE(kprop(u"NoteTexts"_s).toStringList(), QStringList());
+        QCOMPARE(kcall(u"SetColor"_s, { u"#00ff00"_s }).type(), QDBusMessage::ReplyMessage);
+        QCOMPARE(kcall(u"SetBrightness"_s, { 50 }).type(), QDBusMessage::ReplyMessage);
         // Quitting: back to the chosen static colour
         QDBusInterface(service, u"/solwind"_s, service).call(u"Quit"_s);
         expectExit(*p, 0);

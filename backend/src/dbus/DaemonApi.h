@@ -7,6 +7,7 @@
 #include <functional>
 
 class ClientHints;
+class I18n;
 class Settings;
 struct Paths;
 
@@ -17,14 +18,25 @@ class DaemonApi : public QObject, protected QDBusContext
     Q_OBJECT
     Q_CLASSINFO("D-Bus Interface", "solwind.Daemon")
     Q_PROPERTY(QString Version READ version CONSTANT SCRIPTABLE true)
+    // The settings clients show (the daemon owns settings.json; clients don't read it)
+    Q_PROPERTY(QString Language READ language)               // the language texts are in: "tr" | "en"
+    Q_PROPERTY(QString SavedLanguage READ savedLanguage)     // the saved choice: "tr" | "en" | "" (the system's)
+    Q_PROPERTY(bool NotifyEnabled READ notifyEnabled)        // notify.enabled
+    Q_PROPERTY(bool NotifyProfile READ notifyProfile)        // notify.profile
+    Q_PROPERTY(bool TrayEnabled READ trayEnabled)            // ui.tray (the UI's tray icon)
 
 public:
     static constexpr const char *serviceName = "solwind.Daemon";
     static constexpr const char *objectPath = "/solwind";
 
-    DaemonApi(const Paths &paths, Settings &settings, bool settingsLoaded, ClientHints *hints = nullptr,
-              QObject *parent = nullptr);
+    DaemonApi(const Paths &paths, Settings &settings, const I18n &i18n, bool settingsLoaded,
+              ClientHints *hints = nullptr, QObject *parent = nullptr);
     QString version() const;
+    QString language() const;
+    QString savedLanguage() const;
+    bool notifyEnabled() const;
+    bool notifyProfile() const;
+    bool trayEnabled() const;
     // More fields for Status() (the reading pace), filled in by main
     std::function<QVariantMap()> extraStatus;
     bool controlMode = false;             // false: observe mode, nothing is written
@@ -42,6 +54,8 @@ public slots:
     Q_SCRIPTABLE void SetNotify(const QString &key, bool on);
     // The UI language: "tr", "en", or "" (follow the system); notifications and messages use it
     Q_SCRIPTABLE void SetLanguage(const QString &lang);
+    // UI options (settings ui.<key>): "tray" (the UI shows a tray icon)
+    Q_SCRIPTABLE void SetUi(const QString &key, bool on);
     // Quits cleanly (pending settings written first); the reply is sent before the daemon goes away
     Q_SCRIPTABLE void Quit();
 
@@ -51,6 +65,7 @@ signals:
 private:
     const Paths &m_paths;
     Settings &m_settings;
+    const I18n &m_i18n;
     bool m_settingsLoaded;
     ClientHints *m_hints;
 };

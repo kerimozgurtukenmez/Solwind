@@ -29,17 +29,32 @@ OldAppGuard::OldAppGuard(QObject *parent) : QObject(parent)
     connect(&m_watcher, &QFileSystemWatcher::directoryChanged, this, [this] { watch(); m_debounce.start(); });
 }
 
+namespace {
+QString head(const QString &path)
+{
+    QFile f(path);
+    return f.open(QIODevice::ReadOnly) ? QString::fromUtf8(f.read(4096)) : QString();
+}
+} // namespace
+
 bool OldAppGuard::isQmlApp(const QString &configPath)
 {
+    const QString shell = head(configPath);
+    // The UI that is solwindd's client (phase 5) drives nothing itself: its shell.qml says so in its first lines, and
+    // its services are the D-Bus adapters (services/Nbfc.qml imports Solwind). Both must hold: a new shell.qml next to
+    // the old services (a half-copied install) is still the QML app.
+    static const QRegularExpression client(u"^// solwindd-client: \\S"_s, QRegularExpression::MultilineOption);
+    static const QRegularExpression adapter(u"^import Solwind\\s*$"_s, QRegularExpression::MultilineOption);
+    if (client.match(shell).hasMatch()
+        && adapter.match(head(QFileInfo(configPath).absolutePath() + u"/services/Nbfc.qml"_s)).hasMatch())
+        return false;
     // Either one is enough (the safe side: rather step aside once too often)
     const QString l = configPath.toLower();
     if (l.endsWith(u"/solwind/shell.qml"_s) || l.endsWith(u"/ccenter/shell.qml"_s)) return true;
-    QFile f(configPath);
-    if (!f.open(QIODevice::ReadOnly)) return false;
     // The pragma is in the first lines (Quickshell reads `//@ pragma` lines at the top of shell.qml)
     static const QRegularExpression appId(u"^\\s*//@\\s*pragma\\s+AppId\\s+(solwind|ccenter)\\s*$"_s,
                                           QRegularExpression::MultilineOption);
-    return appId.match(QString::fromUtf8(f.read(4096))).hasMatch();
+    return appId.match(shell).hasMatch();
 }
 
 OldAppGuard::Result OldAppGuard::match(const QByteArray &json)

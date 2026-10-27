@@ -48,6 +48,11 @@ QString KeyboardApi::error() const { return m_kbd.error(); }
 int KeyboardApi::maxBrightness() const { return m_kbd.maxBrightness(); }
 int KeyboardApi::brightness() const { return m_kbd.brightness(); }
 QString KeyboardApi::color() const { return Qml::hex(m_kbd.color()); }
+DoubleList KeyboardApi::colorF() const
+{
+    const QColor c = m_kbd.color();
+    return { double(c.redF()), double(c.greenF()), double(c.blueF()) };
+}
 QString KeyboardApi::effect() const { return m_kbd.effect(); }
 QString KeyboardApi::source() const { return m_kbd.source(); }
 QStringList KeyboardApi::colors() const { return m_kbd.colors(); }
@@ -60,6 +65,15 @@ QStringList KeyboardApi::themeColors() const { return hexes(m_kbd.themeColors())
 bool KeyboardApi::effectActive() const { return m_kbd.effectActive(); }
 bool KeyboardApi::paused() const { return m_kbd.paused(); }
 int KeyboardApi::cycleIndex() const { return m_kbd.cycleIndex(); }
+QString KeyboardApi::kindText() const { return m_kbd.kindText(); }
+QString KeyboardApi::supportText() const { return m_kbd.supportText(); }
+QString KeyboardApi::noPermissionText() const { return m_kbd.noPermissionText(); }
+QStringList KeyboardApi::noteTexts() const
+{
+    QStringList out;
+    for (const QString &n : m_kbd.notes()) out << m_kbd.noteText(n);
+    return out;
+}
 
 // Changes are refused in observe mode (the QML app next to it drives the light), and once quitting has begun
 bool KeyboardApi::changeRefused()
@@ -159,6 +173,35 @@ void KeyboardApi::SetColors(const QStringList &colors)
     if (colors.isEmpty() || colors.size() > 6) return void(usage(u"1 to 6 colors"_s));
     for (const QString &c : colors) if (!re.match(c).hasMatch()) return void(usage(u"not a color #rrggbb: "_s + c));
     m_kbd.setColors(colors);
+}
+
+// (NaN and infinities can come over D-Bus; the UI never sends them)
+void KeyboardApi::SetColorF(double r, double g, double b)
+{
+    if (changeRefused()) return;
+    if (!std::isfinite(r) || !std::isfinite(g) || !std::isfinite(b)) return void(usage(u"not a number"_s));
+    m_kbd.setColor(QColor::fromRgbF(float(qBound(0.0, r, 1.0)), float(qBound(0.0, g, 1.0)), float(qBound(0.0, b, 1.0))));
+}
+
+void KeyboardApi::SetBrightnessRaw(double level)
+{
+    if (changeRefused()) return;
+    if (!std::isfinite(level)) return void(usage(u"not a number"_s));
+    m_kbd.setBrightness(level);
+}
+
+void KeyboardApi::SetSpeedF(double v)
+{
+    if (changeRefused()) return;
+    if (!std::isfinite(v)) return void(usage(u"not a number"_s));
+    m_kbd.setSpeed(v);
+}
+
+void KeyboardApi::SetRangeF(double low, double high)
+{
+    if (changeRefused()) return;
+    if (!std::isfinite(low) || !std::isfinite(high)) return void(usage(u"not a number"_s));
+    m_kbd.setRange(low, high);
 }
 
 void KeyboardApi::GrantPermission() { if (!changeRefused()) m_kbd.grantPermission(); }

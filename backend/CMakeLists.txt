@@ -72,6 +72,8 @@ add_executable(solwindd src/main.cpp)
 target_link_libraries(solwindd PRIVATE solwind_core)
 install(TARGETS solwindd RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
+add_subdirectory(qml)
+
 option(SOLWIND_BUILD_TESTS "Build the tests" ON)
 if(SOLWIND_BUILD_TESTS)
     enable_testing()

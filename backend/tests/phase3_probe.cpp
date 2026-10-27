@@ -300,7 +300,8 @@ QJsonObject runOne(const QJsonObject &sc)
                                    { u"statusSeq"_s, double(plugin.reads) } } },
             { u"s"_s, QJsonObject{ { u"fanSt"_s, fanSt }, { u"globalSt"_s, stJson(state.globalSt()) }, { u"globalOn"_s, state.globalOn() },
                                    { u"restored"_s, state.restored() }, { u"active"_s, state.activeId() },
-                                   { u"activeName"_s, state.activeName() } } },
+                                   { u"activeName"_s, state.activeName() }, { u"status"_s, state.statusText(gpu) },
+                                   { u"profiles"_s, state.profileList() } } },
             { u"settings"_s, settings.data() },
             { u"ret"_s, ret } };
         plugin.started.clear();

@@ -49,6 +49,7 @@ class FansApi : public QObject, protected QDBusContext
     // [{ name (the id for built-ins), label (in the UI language), builtin, icon }]
     Q_PROPERTY(VariantMapList Profiles READ profiles)
     Q_PROPERTY(QString ActiveProfile READ activeProfile)     // its name ("" = own settings)
+    Q_PROPERTY(QStringList ReservedNames READ reservedNames)   // names a user profile can't take (lower case)
     Q_PROPERTY(qlonglong BoostUntil READ boostUntil)         // max fan: 0 off, -1 until turned off, else the end (ms)
     Q_PROPERTY(QString BoostBlocked READ boostBlocked)       // why max fan can't be turned on now ("" = it can)
     Q_PROPERTY(double Safety READ safety)                    // Fixed/Curve fans go to 100% at this temperature
@@ -84,6 +85,7 @@ public:
     bool restored() const;
     VariantMapList profiles() const;
     QString activeProfile() const;
+    QStringList reservedNames() const;
     qlonglong boostUntil() const;
     QString boostBlocked() const;
     double safety() const;
@@ -106,6 +108,8 @@ public slots:
     Q_SCRIPTABLE bool Recommend(QStringList &found);
     // The last 10 minutes: [{ t: ms since the epoch, cpu, gpu, fan }]
     Q_SCRIPTABLE VariantMapList History() const;
+    Q_SCRIPTABLE QString StatusText() const;                 // `solwind status`
+    Q_SCRIPTABLE QString ProfileList() const;                // `solwind profiles` ("* " marks the active one)
 
     Q_SCRIPTABLE void SetFan(int fan, const QVariantMap &st);
     Q_SCRIPTABLE void SetGlobal(const QVariantMap &st);

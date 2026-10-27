@@ -11,7 +11,9 @@
 // the daemon doesn't start while a QML Solwind / Ccenter runs, and steps aside (fans back to automatic, quit) when one
 // starts. The running Quickshell instances come from `qs list --all --json` (as the solwind command, SPEC.md CLI-8);
 // one is the QML app if its folder is named solwind / ccenter (any case), or its shell.qml starts with
-// `//@ pragma AppId solwind` (older versions: ccenter) wherever it lives. A new Quickshell instance creates entries in
+// `//@ pragma AppId solwind` (older versions: ccenter) wherever it lives - unless its first lines have the line
+// `// solwindd-client: ...` and its services/Nbfc.qml imports Solwind (the UI as solwindd's D-Bus client, phase 5:
+// it drives nothing itself). A new Quickshell instance creates entries in
 // $XDG_RUNTIME_DIR/quickshell/by-pid and by-id (measured), which are watched; checked every 60 s as well (every 30 s
 // while neither folder exists yet). When it can't be told (qs list fails), it fails safe: no start, or step aside.
 class OldAppGuard : public QObject

@@ -1,6 +1,7 @@
 pragma Singleton
 import Quickshell
 import QtQuick
+import Solwind
 import "translations.js" as T
 
 // UI language. Strings in the code are English; translations live in translations.js (key = the English text).
@@ -10,9 +11,10 @@ Singleton {
     id: root
 
     readonly property var languages: [{ id: "tr", name: "Türkçe" }, { id: "en", name: "English" }]
-    // Saved choice; otherwise the system language (Turkish if the locale is Turkish, else English)
+    // The system language (Turkish if the locale is Turkish, else English)
     readonly property string system: Qt.locale().name.startsWith("tr") ? "tr" : "en"
-    readonly property string lang: Settings.uiLang() !== "" ? Settings.uiLang() : system
+    // The daemon's: its notifications, messages and profile names are in it too (saved choice, else its system's)
+    readonly property string lang: Solwind.connected === true && ["tr", "en"].indexOf(Solwind.daemon.Language) >= 0 ? Solwind.daemon.Language : system
 
     function t(s) {
         if (lang === "en") return s

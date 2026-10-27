@@ -6,9 +6,11 @@
 #include "Notifier.h"
 #include "plugins/FanPlugin.h"
 
+#include <QJsonValue>
 #include <QLocale>
 
 #include <algorithm>
+#include <cmath>
 
 using namespace Qt::StringLiterals;
 
@@ -203,6 +205,14 @@ bool FanState::reservedName(const QString &name) const
     return false;
 }
 
+QStringList FanState::reservedNames() const
+{
+    QStringList out;
+    for (const ProfileEntry &p : builtins())
+        for (const QString &n : namesOf(p)) if (!out.contains(n)) out << n;
+    return out;
+}
+
 Profile FanState::snapshot(const QString &name) const
 {
     Profile p;
@@ -260,6 +270,37 @@ QString FanState::profileList() const
     QStringList lines;
     for (const ProfileEntry &p : allProfiles())
         lines << (p.name == active ? u"* "_s : u"  "_s) + displayName(p) + (p.builtin ? u"  ("_s + p.name + u")"_s : QString());
+    return lines.join(u'\n');
+}
+
+// The fan lines are formatted in one pass: FanState.qml's chained .arg() made the Turkish "%%5" a placeholder again
+// when a value before it was 0 or 1, and the speeds came out wrong (SPEC.md §21e, a deliberate fix)
+QString FanState::statusText(double gpu) const
+{
+    const QStringList modes{ m_i18n.t(u"Auto"_s), m_i18n.t(u"Fixed"_s), m_i18n.t(u"Curve"_s) };
+    const auto mode = [&](int m) { return m >= 0 && m < modes.size() ? modes[m] : u"undefined"_s; };   // (modes[m])
+    const QString active = activeName();
+    const double t = m_plugin.temp();
+    QStringList lines{
+        m_i18n.t(u"Service: %1"_s).arg(m_plugin.running() ? m_i18n.t(u"running"_s) : m_i18n.t(u"stopped"_s))
+            + (m_plugin.readOnly() ? u" ("_s + m_i18n.t(u"read-only"_s) + u")"_s : QString()),
+        u"Config: "_s + (m_plugin.configId().isEmpty() ? u"-"_s : m_plugin.configId()),
+        m_i18n.t(u"Profile: %1"_s).arg(active.isEmpty() ? m_i18n.t(u"custom settings"_s) : active),
+        // (Number.toFixed)
+        u"CPU: "_s + (std::isfinite(t) ? QString::number(t, 'f', 1) + u"°C"_s : u"-"_s)
+            + u"   GPU: "_s + (std::isfinite(gpu) ? QString::number(gpu, 'f', 0) + u"°C"_s : u"-"_s),
+        u"Global: "_s + (m_globalOn ? m_i18n.t(u"on (%1)"_s).arg(mode(m_globalSt.mode)) : m_i18n.t(u"off"_s))
+            + (m_control.boosting() ? u"   "_s + m_i18n.t(u"Max fan: on"_s) : QString()),
+    };
+    const QList<FanPlugin::Fan> &fans = m_plugin.fans();
+    for (qsizetype i = 0; i < fans.size(); ++i) {
+        const FanPlugin::Fan &f = fans[i];
+        const int m = m_globalOn ? m_globalSt.mode : (i < m_fanSt.size() ? m_fanSt[i].mode : 0);
+        lines << m_i18n.t(u"Fan %1 (%2): %3 · NBFC %4 · current %5% · target %6%"_s)
+                     .arg(QString::number(i + 1), f.name, mode(m),
+                          f.autoControl ? m_i18n.t(u"auto"_s) : m_i18n.t(u"manual"_s),
+                          js::toString(QJsonValue(js::round(f.current))), js::toString(QJsonValue(js::round(f.target))));
+    }
     return lines.join(u'\n');
 }
 

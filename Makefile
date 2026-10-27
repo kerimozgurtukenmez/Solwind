@@ -74,6 +74,13 @@ help:
 	@echo "  make remove-old            (without sudo) remove an install in your home folder made by the old install.sh"
 
 install:
+	@# TRANSITION (ARCH-PLAN.md phases 5-6): this tree's UI is solwindd's D-Bus client and needs the C++ backend, which
+	@# isn't built or installed before phase 6: installed, the UI couldn't start and nothing would drive the fans.
+	@# (.dev/maketest.sh tests the install steps themselves with SOLWIND_WIP_INSTALL=1, into a fake prefix.)
+	@if grep -q '^// solwindd-client: ' shell.qml && [ "$(SOLWIND_WIP_INSTALL)" != 1 ]; then \
+		echo "Not installable yet: this tree's UI needs solwindd (the C++ port in progress, ARCH-PLAN.md phase 5);"; \
+		echo "'make install' works again in phase 6. To update the installed Solwind, use main or a 0.5.x commit."; \
+		exit 1; fi
 	@$(CHECK_PATHS)
 	@[ -n "$(DESTDIR)" ] || sh dist/install-check.sh install "$(PREFIX)"
 	@# the new copy is built next to the old one and swapped in only when complete (files of older versions go too)
