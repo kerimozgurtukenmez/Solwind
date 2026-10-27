@@ -23,7 +23,9 @@ Alerts::Alerts(FanPlugin &plugin, FanController &control, const I18n &i18n, Noti
     connect(&m_critical, &QTimer::timeout, this, [this] {
         // Say what really happens: nothing is written while NBFC is stopped or read-only
         const bool owned = !m_control.targets().isEmpty();
-        const QString what = !m_plugin.running()
+        const QString what = m_plugin.id().isEmpty()
+            ? m_i18n.t(u"Safety limit (%1°C) exceeded; no fan plugin is installed, so Solwind can't change the fan speed."_s)
+            : !m_plugin.running()
             ? m_i18n.t(u"Safety limit (%1°C) exceeded; NBFC isn't running, so Solwind can't change the fan speed."_s)
             : m_plugin.readOnly()
             ? m_i18n.t(u"Safety limit (%1°C) exceeded; NBFC is in read-only mode, so fan speeds can't be set."_s)

@@ -4,6 +4,7 @@
 #include <QHash>
 #include <QList>
 #include <QSet>
+#include <QStringList>
 #include <QString>
 
 #include <optional>
@@ -41,7 +42,7 @@ public:
     enum class AtStart { Never, WhenStaticAndOn, Always };
 
     virtual ~KeyboardPlugin() = default;
-    virtual QString id() const = 0;           // led-rgb | hp-zoned | hp-rgbzones | asus-tuf | led-mono
+    virtual QString id() const = 0;           // the kind of light (Keyboard.Backend): led-rgb, hp-zoned, hp-rgbzones ...
     virtual bool rgb() const = 0;
     virtual bool hasBrightness() const { return true; }
     // Software effects write many times a second: only on the combination they were tested with (K-12)
@@ -57,8 +58,6 @@ public:
     // Where a colour goes for one zone (a light's folder, or an rgb_zones file), and the value written (K-20)
     virtual QString colorPath(const QString &zone) const { return zone + QStringLiteral("/multi_intensity"); }
     virtual QString colorValue(const QColor &c, double level, const KbdFormat &f) const;
-    // The plugins, in the order they are asked (K-8)
-    static const QList<const KeyboardPlugin *> &all();
 };
 
 // QML's colour helpers, to the bit (qtdeclarative qqmlbuiltinfunctions.cpp / qquickvaluetypes.cpp, Qt 6.10 and dev):
@@ -69,4 +68,14 @@ QColor hsva(double h, double s, double v, double a = 1);
 QColor lighter(const QColor &c, double factor = 1);
 QString hex(const QColor &c);                  // Keyboard.qml hex(): "#RRGGBB"
 QString number(double v);                      // a JS number as String() writes it
+}
+
+// The keyboard plugins' shared pieces (the multicolor LED class: brightness + multi_intensity)
+namespace kbd {
+QStringList words(const QString &s);           // s.trim().split(/\s+/)
+// colour x level per hardware channel, clamped and rounded (Keyboard.qml intensity(), K-20)
+QString intensity(const QColor &c, double level, const KbdFormat &f);
+KbdFormat multiFormat(const KbdLight &first);  // channel order and top values (K-13)
+std::optional<QColor> multiColor(const KbdLight &first, const KbdFormat &f);   // the colour it shows (K-14)
+bool every(const QList<KbdLight> &l, bool (*ok)(const KbdLight &));            // all, and at least one
 }

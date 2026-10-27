@@ -20,7 +20,7 @@ Singleton {
     readonly property string driver: up ? (k.Driver ?? "") : ""       // kernel driver of the light, e.g. hp-wmi
     readonly property var dmi: up && k.Dmi ? k.Dmi : ({ vendor: "", product: "", family: "", board: "" })
     readonly property string kernel: up ? (k.Kernel ?? "") : ""
-    readonly property var notes: up && k.Notes ? Array.from(k.Notes) : []   // legion-usb, rog-usb, hp-none
+    readonly property var notes: up && k.Notes ? Array.from(k.Notes) : []   // legion-usb, rog-usb, hp-none, no-plugin
     readonly property bool rgb: up && k.Rgb === true
     readonly property bool hasBrightness: up && k.HasBrightness === true
     readonly property bool effectsAllowed: up && k.EffectsAllowed === true   // software effects (only where tested)

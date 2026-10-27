@@ -15,7 +15,7 @@ Signatures below are D-Bus types: `s` string, `b` boolean, `i` int32, `x` int64,
 | Name | Meaning | `solwind` exit code |
 |---|---|---|
 | `solwind.Error.Usage` | A wrong argument (the message says which) | 2 |
-| `solwind.Error.Failed` | Refused now (NBFC not running or read-only, no keyboard light, no permission, quitting, ...) | 1 |
+| `solwind.Error.Failed` | Refused now (no fan plugin, NBFC not running or read-only, no keyboard light, no permission, quitting, ...) | 1 |
 | `solwind.Error.Observe` | solwindd was started with `--observe` and only reads | 1 |
 | `org.freedesktop.DBus.Error.InvalidArgs` | `Watch` / `Unwatch` with an unknown topic | 2 |
 
@@ -29,6 +29,8 @@ Signatures below are D-Bus types: `s` string, `b` boolean, `i` int32, `x` int64,
 | `SavedLanguage` | s | The saved choice: `tr`, `en`, or `""` (the system's) |
 | `NotifyEnabled`, `NotifyProfile` | b | Notifications on; notify when a profile is changed from a terminal or keybind |
 | `TrayEnabled` | b | The window app shows a tray icon |
+| `Plugins` | aa{sv} | The plugins solwindd loaded at start: `id` (`HP/hp-wmi-keyboard` ...), `brand`, `module`, `kind` (`fan` or `keyboard`), `version`, `description`, `file`, `used` (it drives the fans - only one fan plugin does - or it has keyboard lights to offer) |
+| `PluginFailures` | aa{sv} | Plugin files it didn't load: `file`, `why` (built for another Solwind, others could change it, a link, ...) |
 
 | Method | Arguments → answer | |
 |---|---|---|
@@ -41,17 +43,21 @@ Signatures below are D-Bus types: `s` string, `b` boolean, `i` int32, `x` int64,
 
 ## `/solwind/Fans` — `solwind.Fans`
 
+The fans of the fan plugin solwindd loaded (one at a time; with none, there are no fans and every change is refused with `No fan plugin is installed`). NBFC's service and configs (the properties and methods marked *service*) are there only when `HasService` is true; without it those methods are refused and those properties stay empty.
+
 | Property | Type | |
 |---|---|---|
+| `Plugin` | s | The fan plugin's id (`NBFC/nbfc`); `""` = none is installed |
+| `HasService` | b | It has a service and configs (NBFC) |
 | `Running`, `ReadOnly` | b | NBFC's service runs; it's in read-only mode |
 | `Temp` | d | NBFC's temperature (°C) |
 | `Fans` | aa{sv} | One per fan: `name`, `temp`, `auto`, `critical`, `current`, `target` (%), `rpm` |
-| `ConfigId`, `FileConfigId` | s | The config the fans belong to; the one selected in `/etc/nbfc/nbfc.json` |
-| `NoConfig`, `ConfigPending` | b | None selected yet; selected, but used only after NBFC restarts |
-| `Configs`, `Recommended` | as | Known configs; the ones `Recommend` found |
-| `ConfigList` | a{sv} | Where the list came from: `dirs`, `fromDirs`, `fromCli`, `cliCode`, `cliLine` |
-| `ConfigCurves` | aa{sv} | The selected config's threshold table per fan: `points` [{t, s}], `hyst`; `{}` if it has none |
-| `BootEnabled` | b | NBFC's service starts at boot |
+| `ConfigId`, `FileConfigId` | s | The config the fans belong to; *service:* the one selected in `/etc/nbfc/nbfc.json` |
+| `NoConfig`, `ConfigPending` | b | *service:* none selected yet; selected, but used only after NBFC restarts |
+| `Configs`, `Recommended` | as | *service:* known configs; the ones `Recommend` found |
+| `ConfigList` | a{sv} | *service:* where the list came from: `dirs`, `fromDirs`, `fromCli`, `cliCode`, `cliLine` |
+| `ConfigCurves` | aa{sv} | *service:* the selected config's threshold table per fan: `points` [{t, s}], `hyst`; `{}` if it has none |
+| `BootEnabled` | b | *service:* NBFC's service starts at boot |
 | `FanSettings` | aa{sv} | Solwind's setting per fan (see *A fan setting* below) |
 | `Global`, `GlobalOn` | a{sv}, b | The setting written to every fan while `GlobalOn` |
 | `Restored` | b | The saved settings of this config are applied |
@@ -62,8 +68,8 @@ Signatures below are D-Bus types: `s` string, `b` boolean, `i` int32, `x` int64,
 | `BoostBlocked` | s | Why max fan can't be turned on now (`""` = it can) |
 | `Safety` | d | Fans in Fixed/Curve mode go to 100% at this temperature |
 | `SafetyHeld` | ai | Fans held at 100% by it right now |
-| `Controlling`, `Holding`, `AdminBusy` | b | Solwind drives fans; an NBFC action that handed them back runs; an action waits for the password dialog |
-| `Message`, `MessageError` | s, b | What that action waits for, or why it failed |
+| `Controlling`, `Holding`, `AdminBusy` | b | Solwind drives fans; an NBFC action that handed them back runs; *service:* an action waits for the password dialog |
+| `Message`, `MessageError` | s, b | *service:* what that action waits for, or why it failed |
 
 | Method | Arguments → answer | |
 |---|---|---|
@@ -74,10 +80,10 @@ Signatures below are D-Bus types: `s` string, `b` boolean, `i` int32, `x` int64,
 | `SaveProfile` / `RemoveProfile` | s | Save the current settings under a name (1–32 characters) / remove a user profile |
 | `SetBoost` | x minutes | > 0 for that long, < 0 until turned off, 0 off |
 | `SetSafety` | i | 70–100 °C |
-| `StartService`, `StopService`, `RestartService` | | NBFC's service; asks for the admin password (pkexec) |
-| `SetReadOnly`, `SetBoot` | b | Same |
-| `ApplyConfig` | s | Selects a listed config and restarts NBFC (password) |
-| `Recommend` | → b ok, as | `nbfc config -r` (can take a while: allow 30 s) |
+| `StartService`, `StopService`, `RestartService` | | *service:* NBFC's service; asks for the admin password (pkexec) |
+| `SetReadOnly`, `SetBoot` | b | *service:* same |
+| `ApplyConfig` | s | *service:* selects a listed config and restarts NBFC (password) |
+| `Recommend` | → b ok, as | *service:* `nbfc config -r` (can take a while: allow 30 s); without a service `false, []` |
 | `History` | → aa{sv} | The last 10 minutes: `t` (ms), `cpu`, `gpu`, `fan` (average %) |
 | `StatusText`, `ProfileList`, `CurrentProfile`, `BoostStatus` | → s | The texts of `solwind status`, `profiles`, `profile`, `boost` |
 
@@ -103,10 +109,10 @@ Read while a client watches `fans`, while Solwind drives fans, or while notifica
 | Property | Type | |
 |---|---|---|
 | `Available`, `Ready` | b | A light was found; the first look is done |
-| `Backend` | s | `led-rgb`, `hp-zoned`, `hp-rgbzones`, `asus-tuf`, `led-mono` or `""` |
+| `Backend` | s | The kind of light (the keyboard plugin's): `led-rgb`, `hp-zoned`, `hp-rgbzones`, or `""` (none, or no plugin takes it) |
 | `Name`, `Driver`, `Kernel`, `Zones` | s, s, s, i | |
 | `Dmi` | a{sv} | `vendor`, `product`, `family`, `board` |
-| `Notes` | as | `legion-usb`, `rog-usb`, `hp-none` |
+| `Notes` | as | `legion-usb`, `rog-usb`, `hp-none`, `no-plugin` (a light was found, but no installed plugin takes it; `NoteTexts` names it) |
 | `Rgb`, `HasBrightness`, `EffectsAllowed`, `Tested` | b | What this light can do; effects only where tested |
 | `Writable`, `RuleAt`, `RuleLegacy`, `RuleOld`, `PermBusy` | b, s, b, b, b | The write permission and its udev rule |
 | `Error` | s | The last write error |

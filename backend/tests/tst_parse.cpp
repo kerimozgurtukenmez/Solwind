@@ -1,7 +1,7 @@
 // The pure parts of Nbfc.qml and Sensors.qml (SPEC.md N-1..N-8, A-10..A-12, S-4..S-11, Q-5). The same functions are
 // also compared with the QML itself by .dev/phase2diff.sh.
 #include "core/Sensors.h"
-#include "plugins/fan/nbfc/NbfcParse.h"
+#include "NbfcParse.h"
 
 #include <QJsonArray>
 #include <QJsonDocument>

@@ -36,6 +36,9 @@ class FakeWorld
 {
 public:
     QTemporaryDir dir;
+    // Where solwindd started by a test loads plugins from (SOLWIND_PLUGIN_PATH): this build's, never your own
+    // ~/.local/share/solwind/plugins; a folder without any for the tests of solwindd without plugins
+    QString pluginPath = QStringLiteral(PLUGINS_DIR);
 
     FakeWorld()
     {
@@ -119,6 +122,7 @@ public:
         e.insert(QStringLiteral("SOLWIND_SYS"), sysRoot());
         e.insert(QStringLiteral("SOLWIND_NBFC_ROOT"), nbfcRoot());
         e.insert(QStringLiteral("XDG_CONFIG_HOME"), settingsHome());
+        e.insert(QStringLiteral("SOLWIND_PLUGIN_PATH"), pluginPath);
         return e;
     }
     // Runs one of the fakes by its full path, never a real tool of the same name found on PATH

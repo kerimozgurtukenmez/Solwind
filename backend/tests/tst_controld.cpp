@@ -353,7 +353,9 @@ private slots:
     }
     void refusesToStartNextToTheQmlApp()
     {
-        w->write(u"qs-list.json"_s, "[{\"config_path\": \"/usr/local/share/solwind/shell.qml\", \"pid\": 1}]");
+        // (an old app in the fake world: a real /usr/local/share/solwind may be the client UI of 1.0 by now)
+        w->write(u"old/solwind/shell.qml"_s, "//@ pragma AppId solwind\nimport Quickshell\n");
+        w->write(u"qs-list.json"_s, u"[{\"config_path\": \"%1/old/solwind/shell.qml\", \"pid\": 1}]"_s.arg(w->cct()).toUtf8());
         settings("{\"configs\":{\"TestA\":{\"fans\":{\"0\":{\"mode\":1,\"fixed\":0.4}}}}}");
         auto p = start();
         QVERIFY(p->waitForFinished(8000));

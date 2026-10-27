@@ -212,6 +212,14 @@ installed)
         t "  background service can't be turned on (systemd doesn't look for services under $prefix)." \
           "  arka plan servisi açılamaz (systemd $prefix altında servis aramaz)."
     fi
+    # No plugin comes with Solwind (PLUGIN-PLAN.md); one built for another version isn't loaded
+    if [ -z "$(find "$data/solwind/plugins" -name '*.so' 2>/dev/null | head -n 1)" ]; then
+        t "  No plugin comes with Solwind. For your fans and keyboard light (without sudo): make plugins, then make plugin P=<name>" \
+          "  Solwind eklentisiz gelir. Fanların ve klavye ışığın için (sudo olmadan): make plugins, sonra make plugin P=<ad>"
+    else
+        t "  Install your plugins again for this version (without sudo): make plugin P=<name> for each (make plugins lists them)" \
+          "  Eklentilerini bu sürüm için yeniden kur (sudo olmadan): her biri için make plugin P=<ad> (make plugins listeler)"
+    fi
     if service_on; then
         t "  Your background service is on; it starts on your next login. To start it now:" \
           "  Arka plan servisin açık; sonraki oturum açılışında başlar. Şimdi başlatmak için:"

@@ -78,6 +78,10 @@ public:
     qint64 quietUntil = 0;
     QString serviceConfig, fileConfig, config;
     int failedPolls = 0;
+
+    void start() override {}               // (the probe reads when the scenario says so)
+    void setFast(bool) override {}
+    int interval() const override { return 2000; }
     double driverTemp = NaN;
     QList<Fan> fanList;
     quint64 polls = 0, reads = 0, readSeq = 0;

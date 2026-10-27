@@ -28,13 +28,13 @@ Colors follow your Caelestia theme:
 
 ## Features
 
-**Fans** (through [NBFC-Linux](https://github.com/nbfc-linux/nbfc-linux)):
+**Fans** (through [NBFC-Linux](https://github.com/nbfc-linux/nbfc-linux), the `NBFC/nbfc` plugin):
 - Per fan: **Auto** (NBFC decides), **Fixed** or **Curve** (following the CPU, the GPU or the hotter one)
 - Curve editor, profiles (Quiet, Balanced, Performance and your own), max fan button, a 10 minute graph
 - Speeds up right away, slows down gently. Above 90 °C every fan it controls goes to 100%
 - NBFC service controls and config picker, notifications, tray icon
 
-**Keyboard:**
+**Keyboard** (a plugin per kind of light):
 - Color, brightness, breathing and color cycle effects (also with your Caelestia theme colors)
 - Detects your laptop and light, and only shows what your keyboard can do (`solwind kbd info`)
 
@@ -42,24 +42,23 @@ English and Turkish. Colors, rounding and fonts come from your Caelestia setup; 
 
 ### Supported keyboards
 
-Solwind only uses the files a kernel driver offers in `/sys`, never the firmware or USB directly. Only the first row is tested on real hardware.
+Each kind of light has its own plugin (see [Plugins](#plugins)). Solwind only uses the files a kernel driver offers in `/sys`, never the firmware or USB directly. Only the first row is tested on real hardware.
 
-| Laptop | Kernel light | What works |
-|---|---|---|
-| HP Victus / OMEN, single-zone RGB | `hp::kbd_backlight` (extra module, [see below](#hp-laptops)) | Color, brightness, effects |
-| HP OMEN / Victus, four-zone RGB | `hp::kbd_zoned_backlight-*` or `hp::kbd_backlight_zone0`–`3` (extra module) | Color (same on all zones), brightness |
-| HP OMEN / Victus, four-zone RGB | `rgb_zones/zone00`–`zone03` (older copies of the module) | Color only, same on all zones |
-| ASUS TUF with RGB | `asus::kbd_backlight` + `kbd_rgb_mode` | Static color, brightness. Never saves to the BIOS |
-| ASUS (other), Lenovo, Chromebooks | `asus::`, `platform::`, `tpacpi::`, `chromeos::kbd_backlight` | Brightness |
-| ASUS ROG, Lenovo Legion RGB | colors go through USB | Brightness only; use [asusctl](https://gitlab.com/asus-linux/asusctl) / [L5P-Keyboard-RGB](https://github.com/4JX/L5P-Keyboard-RGB) for colors |
-| HP per-key RGB, HP white backlight, other OMEN modules | not offered by the kernel or the module | — |
+| Laptop | Plugin | Kernel light | What works |
+|---|---|---|---|
+| HP Victus / OMEN, single-zone RGB | `HP/hp-wmi-keyboard` | `hp::kbd_backlight` (extra module, [see below](#hp-laptops)) | Color, brightness, effects |
+| HP OMEN / Victus, four-zone RGB | `HP/hp-wmi-keyboard-zones` | `hp::kbd_zoned_backlight-*` or `hp::kbd_backlight_zone0`–`3` (extra module) | Color (same on all zones), brightness |
+| HP OMEN / Victus, four-zone RGB | `HP/hp-wmi-rgb-zones` | `rgb_zones/zone00`–`zone03` (older copies of the module) | Color only, same on all zones |
+| ASUS, Lenovo, Chromebooks and others | none yet | | Earlier versions had built-in support for ASUS TUF colors and other brands' brightness (only tried with a fake `/sys`). They'll come back as plugins once I've looked into each driver again. |
+| ASUS ROG, Lenovo Legion RGB | — | colors go through USB | Not through the kernel; use [asusctl](https://gitlab.com/asus-linux/asusctl) / [L5P-Keyboard-RGB](https://github.com/4JX/L5P-Keyboard-RGB) for colors |
+| HP per-key RGB, HP white backlight, other OMEN modules | — | not offered by the kernel or the module | — |
 
 Effects are only on for the HP single-zone keyboard, the one I could test them on.
 
 ### HP laptops
 
 - **Keyboard colors** need the extra kernel module [hp-wmi-fan-and-backlight-control](https://github.com/TUXOV/hp-wmi-fan-and-backlight-control); the official kernel doesn't support HP keyboard lights yet (as of Linux 7.3). It only helps RGB keyboards.
-- **Fans** need NBFC with a config for your exact model. Configs using ACPI methods also need `acpi_call` (`acpi_call-dkms` on Arch).
+- **Fans** need NBFC with a config for your exact model (and the `NBFC/nbfc` plugin). Configs using ACPI methods also need `acpi_call` (`acpi_call-dkms` on Arch).
 
 ```sh
 git clone https://github.com/TUXOV/hp-wmi-fan-and-backlight-control
@@ -108,10 +107,10 @@ make                  # builds solwindd (without sudo)
 sudo make install
 ```
 
-It goes under `/usr/local` (command, solwindd, app, menu entry, icon, systemd user services). Then open **Solwind** from the app launcher or run `solwind`. On a first install the launcher may only show it after you log in again or restart the shell.
+It goes under `/usr/local` (command, solwindd, app, menu entry, icon, systemd user services). Then install the [plugins](#plugins) for your laptop, and open **Solwind** from the app launcher or run `solwind`. On a first install the launcher may only show it after you log in again or restart the shell.
 
-- **Update:** `git pull`, `make`, `solwind quit`, `sudo make install`, then `solwind` (`make install` prints the command if you use the background service).
-- **Uninstall:** `solwind quit`, then `sudo make uninstall`. Turn the background service off first; it tells you if you forgot. Your settings stay in `~/.config/solwind`.
+- **Update:** `git pull`, `make`, `solwind quit`, `sudo make install`, `make plugin P=...` again for each plugin you use, then `solwind` (`make install` prints the command if you use the background service).
+- **Uninstall:** `solwind quit`, then `sudo make uninstall`. Turn the background service off first; it tells you if you forgot. Your settings stay in `~/.config/solwind`, your plugins in `~/.local/share/solwind/plugins`.
 - **Packaging:** `make DESTDIR=/package/root PREFIX=/usr install`.
 
 `make install` stops without changing anything while Solwind runs or when it finds an older install in your home folder.
@@ -127,6 +126,23 @@ sudo make install
 ```
 
 Keybinds or scripts that use `ccenter` need `solwind` now.
+
+### Plugins
+
+Solwind itself only reads the temperatures. What it drives comes from plugins, and **none is installed with it**: you add the ones for your laptop. Each is built with Solwind (`make`) and installed into your home folder, without sudo:
+
+```sh
+make plugins                       # the ones built, and the ones you have
+make plugin P=NBFC/nbfc            # fans through NBFC
+make plugin P=HP/hp-wmi-keyboard   # an HP single-zone RGB keyboard (see the table above for the others)
+solwind quit; solwind              # solwindd loads plugins when it starts
+```
+
+They go to `~/.local/share/solwind/plugins`; `make remove-plugin P=<name>` removes one. `solwind report` and `busctl --user get-property solwind.Daemon /solwind solwind.Daemon Plugins` show which ones solwindd loaded.
+
+- A plugin runs inside solwindd, as your user. For now the only plugins are the ones in this repository; downloading them from the app comes later.
+- solwindd loads a plugin only if it was built with the same Solwind (the same version and plugin interface), and only if no one but you (or root) can change the file or the plugin folders it is in (a link is refused too). After an update, install your plugins again (`make plugin P=...`): until then solwindd skips them and says why.
+- Without a fan plugin the fan page only shows the temperatures; without a keyboard plugin the Keyboard page says which light it found.
 
 ### Permissions
 
@@ -177,11 +193,12 @@ Run `solwind report` (or **Create report** in Settings) and attach the file to a
 - Day-to-day use needs no admin rights: solwindd runs as your user, fan speeds go through `nbfc set`.
 - Admin actions only happen when you click them, through your system's password dialog. Solwind never sees your password.
 - The keyboard is only touched through the kernel. The keyboard permission is for your user only, and the rule is checked line by line before it's installed.
+- Plugins are code that runs inside solwindd, as your user; solwindd skips one that someone else could have changed (see [Plugins](#plugins)).
 - NBFC config files and Caelestia's files are never changed.
 
 ## Development
 
-`backend/` is solwindd (C++/Qt, CMake; tests: `cmake -S backend -B <dir> && cmake --build <dir> && ctest --test-dir <dir>`), `backend/qml/` the QML module the window uses to talk to it. In the window, `services/` only passes solwindd's state to the pages in `modules/`. Run it from the cloned folder with `make` and `./bin/solwind` (quit the installed copy first): solwindd then runs as a temporary systemd service with the same hand-back. UI text is English in the code, wrapped in `I18n.t(…)`, with the Turkish text in `services/translations.js` (solwindd uses the same file).
+`backend/` is solwindd (C++/Qt, CMake; tests: `cmake -S backend -B <dir> && cmake --build <dir> && ctest --test-dir <dir>`), `backend/plugins/<Brand>/<name>/` its plugins (the interfaces they implement are in `backend/src/plugins/`), `backend/qml/` the QML module the window uses to talk to it. In the window, `services/` only passes solwindd's state to the pages in `modules/`. Run it from the cloned folder with `make` and `./bin/solwind` (quit the installed copy first): solwindd then runs as a temporary systemd service with the same hand-back, with every plugin of the build (and the ones in your home folder). UI text is English in the code, wrapped in `I18n.t(…)`, with the Turkish text in `services/translations.js` (solwindd uses the same file).
 
 ## Thanks
 

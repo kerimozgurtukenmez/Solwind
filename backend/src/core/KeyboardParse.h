@@ -19,7 +19,9 @@ struct KbdFound {
     int brightness = 0;
     KbdFormat format;
     std::optional<QColor> shownColor;         // what the light shows, if it can be read back
-    QStringList notes;                        // legion-usb | rog-usb | hp-none
+    QStringList notes;                        // legion-usb | rog-usb | hp-none | no-plugin
+    // A keyboard light that no loaded plugin takes (the note no-plugin): its name and driver
+    QString unsupportedName, unsupportedDriver;
     QString ruleAt;                           // "etc" | "lib" | ""
     bool ruleLegacy = false, ruleOld = false;
     // dmi / kernel lines (kept from before if a read had none, as the QML properties)
@@ -28,6 +30,7 @@ struct KbdFound {
 };
 
 namespace KeyboardParse {
-// `prevVendor`: the vendor known before this read (the notes use the property, which keeps it without a dmi line)
-KbdFound parse(const QString &text, const QString &prevVendor = QString());
+// `prevVendor`: the vendor known before this read (the notes use the property, which keeps it without a dmi line).
+// `plugins`: the loaded keyboard plugins, asked in this order (K-8); the first that takes a light is used.
+KbdFound parse(const QString &text, const QString &prevVendor, const QList<const KeyboardPlugin *> &plugins);
 }

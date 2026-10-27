@@ -31,6 +31,8 @@ class KeyboardController : public QObject
     Q_OBJECT
 public:
     KeyboardController(const Paths &paths, Settings &settings, const I18n &i18n, bool control, QObject *parent = nullptr);
+    // The loaded keyboard plugins, in the order they are asked (before start())
+    void setPlugins(const QList<const KeyboardPlugin *> &plugins) { m_plugins = plugins; }
     ~KeyboardController() override;
 
     void start();                                         // the first read (Keyboard.qml: Component.onCompleted)
@@ -161,6 +163,8 @@ private:
     QStringList m_dmi{ QString(), QString(), QString(), QString() }, m_notes;
     bool m_writable = false, m_ruleLegacy = false, m_ruleOld = false, m_ready = false, m_permBusy = false;
     QString m_lastScan;
+    QList<const KeyboardPlugin *> m_plugins;
+    QString m_unsupportedName, m_unsupportedDriver;   // a light no plugin takes (note no-plugin)
     int m_maxBrightness = 255, m_brightness = 0;
     KbdFormat m_format;
     QColor m_color{ Qt::white };

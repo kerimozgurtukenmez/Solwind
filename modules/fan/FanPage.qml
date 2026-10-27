@@ -14,9 +14,19 @@ PageBase {
 
     pinnedContent: TempCard {}
 
+    // No fan plugin installed: the temperatures only (PLUGIN-PLAN.md)
+    Group {
+        visible: Nbfc.noPlugin
+        InfoRow {
+            icon: "extension_off"
+            label: I18n.t("No fan plugin is installed")
+            sub: I18n.t("Solwind shows the temperatures, but can't control the fans without one. Install the one for your fans from Solwind's source folder: make plugins lists them, make plugin P=<name> installs one; then restart Solwind.")
+        }
+    }
+
     // NBFC isn't running: say so first, with the way to start it
     Group {
-        visible: !Nbfc.running
+        visible: Nbfc.hasService && !Nbfc.running
         ButtonRow {
             icon: "error"
             accent: Colours.error
@@ -31,6 +41,7 @@ PageBase {
 
     // Fan settings are locked while the service is stopped or in read-only mode
     ColumnLayout {
+        visible: !Nbfc.noPlugin
         Layout.fillWidth: true
         spacing: Tokens.spacing.largeIncreased
         enabled: Nbfc.running && !Nbfc.readOnly
@@ -78,6 +89,6 @@ PageBase {
     }
 
     HistoryCard {}
-    ServiceCard {}
-    ConfigCard {}
+    ServiceCard { visible: Nbfc.hasService }
+    ConfigCard { visible: Nbfc.hasService }
 }

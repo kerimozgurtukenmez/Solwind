@@ -1,0 +1,10 @@
+{
+    "id": "NBFC/nbfc",
+    "brand": "NBFC",
+    "module": "nbfc_service (NBFC-Linux)",
+    "kind": "fan",
+    "version": "1.0.0",
+    "priority": 50,
+    "description": "Fans through NBFC-Linux (nbfc set); its service and laptop configs",
+    "sdk": "@SOLWIND_SDK_ID@"
+}

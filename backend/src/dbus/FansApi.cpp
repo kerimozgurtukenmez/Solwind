@@ -5,7 +5,8 @@
 #include "core/History.h"
 #include "core/I18n.h"
 #include "core/Sensors.h"
-#include "plugins/fan/nbfc/NbfcPlugin.h"
+#include "plugins/FanPlugin.h"
+#include "plugins/FanService.h"
 
 #include <QDBusArgument>
 #include <QDBusConnection>
@@ -70,23 +71,32 @@ std::optional<QList<QVariantMap>> pointMaps(const QVariant &v)
 }
 } // namespace
 
-FansApi::FansApi(NbfcPlugin &nbfc, const Sensors &sensors, const SampleHistory &history, FanController &control,
+FansApi::FansApi(FanPlugin &fan, const QString &pluginId, const Sensors &sensors, const SampleHistory &history, FanController &control,
                  FanState &state, const I18n &i18n, Settings &settings, bool controlMode, QObject *parent)
-    : QObject(parent), m_nbfc(nbfc), m_sensors(sensors), m_history(history), m_control(control), m_state(state),
+    : QObject(parent), m_fan(fan), m_pluginId(pluginId), m_sensors(sensors), m_history(history), m_control(control), m_state(state),
       m_i18n(i18n), m_settings(settings), m_controlMode(controlMode)
 {
 }
 
 // ---------- reading ----------
 
-bool FansApi::running() const { return m_nbfc.running(); }
-bool FansApi::readOnly() const { return m_nbfc.readOnly(); }
-double FansApi::temp() const { return m_nbfc.temp(); }
+FanService *FansApi::svc() const { return m_fan.service(); }
+bool FansApi::hasService() const { return svc() != nullptr; }
+bool FansApi::noService()
+{
+    if (svc()) return false;
+    if (calledFromDBus()) sendErrorReply(u"solwind.Error.Failed"_s, m_i18n.t(u"This fan plugin has no service to control"_s));
+    return true;
+}
+
+bool FansApi::running() const { return m_fan.running(); }
+bool FansApi::readOnly() const { return m_fan.readOnly(); }
+double FansApi::temp() const { return m_fan.temp(); }
 
 VariantMapList FansApi::fans() const
 {
     VariantMapList out;
-    const auto &fans = m_nbfc.fans();
+    const auto &fans = m_fan.fans();
     for (int i = 0; i < fans.size(); ++i) {
         const FanPlugin::Fan &f = fans[i];
         out.append({ { u"name"_s, f.name }, { u"temp"_s, f.temp }, { u"auto"_s, f.autoControl },
@@ -96,34 +106,29 @@ VariantMapList FansApi::fans() const
     return out;
 }
 
-QString FansApi::configId() const { return m_nbfc.configId(); }
-QString FansApi::fileConfigId() const { return m_nbfc.monitor().fileConfigId(); }
-bool FansApi::noConfig() const { return m_nbfc.monitor().noConfig(); }
-bool FansApi::configPending() const { return m_nbfc.monitor().configPending(); }
-bool FansApi::bootEnabled() const { return m_nbfc.monitor().bootEnabled(); }
-QStringList FansApi::configs() const { return m_nbfc.monitor().configs(); }
+QString FansApi::configId() const { return m_fan.configId(); }
+QString FansApi::fileConfigId() const { return svc() ? svc()->fileConfigId() : QString(); }
+bool FansApi::noConfig() const { return svc() && svc()->noConfig(); }
+bool FansApi::configPending() const { return svc() && svc()->configPending(); }
+bool FansApi::bootEnabled() const { return svc() && svc()->bootEnabled(); }
+QStringList FansApi::configs() const { return svc() ? svc()->configs() : QStringList(); }
 
-QVariantMap FansApi::configList() const
-{
-    const NbfcMonitor &m = m_nbfc.monitor();
-    return { { u"dirs"_s, m.configDirsUsed() }, { u"fromDirs"_s, int(m.configsFromDirs().size()) },
-             { u"fromCli"_s, int(m.configsFromCli().size()) }, { u"cliCode"_s, m.cliListCode() },
-             { u"cliLine"_s, m.cliListLine() } };
-}
+QVariantMap FansApi::configList() const { return svc() ? svc()->configList() : QVariantMap(); }
 
 VariantMapList FansApi::configCurves() const
 {
     VariantMapList out;
-    for (const auto &c : m_nbfc.monitor().configCurves()) {
+    if (!svc()) return out;
+    for (const auto &c : svc()->configCurves()) {
         if (!c) { out.append(QVariantMap()); continue; }
         VariantMapList pts;
-        for (const Nbfc::CurvePoint &p : c->points) pts.append({ { u"t"_s, p.t }, { u"s"_s, p.s } });
+        for (const FanService::CurvePoint &p : c->points) pts.append({ { u"t"_s, p.t }, { u"s"_s, p.s } });
         out.append({ { u"points"_s, QVariant::fromValue(pts) }, { u"hyst"_s, c->hyst } });
     }
     return out;
 }
 
-QStringList FansApi::recommended() const { return m_nbfc.monitor().recommended(); }
+QStringList FansApi::recommended() const { return svc() ? svc()->recommended() : QStringList(); }
 
 QVariantMap FansApi::stMap(const FanSt &st)
 {
@@ -162,15 +167,15 @@ double FansApi::safety() const { return m_control.safety(); }
 QList<int> FansApi::safetyHeld() const
 {
     QList<int> out;
-    for (int i = 0; i < m_nbfc.fans().size(); ++i) if (m_control.hot(i)) out << i;
+    for (int i = 0; i < m_fan.fans().size(); ++i) if (m_control.hot(i)) out << i;
     return out;
 }
 
 bool FansApi::controlling() const { return m_control.controlling(); }
-bool FansApi::holding() const { return m_nbfc.holding(); }
-bool FansApi::adminBusy() const { return m_nbfc.adminBusy(); }
-QString FansApi::message() const { return m_nbfc.message(); }
-bool FansApi::messageError() const { return m_nbfc.messageError(); }
+bool FansApi::holding() const { return m_fan.holding(); }
+bool FansApi::adminBusy() const { return svc() && svc()->adminBusy(); }
+QString FansApi::message() const { return svc() ? svc()->message() : QString(); }
+bool FansApi::messageError() const { return svc() && svc()->messageError(); }
 
 QVariantMap FansApi::sampleMap(qint64 t, double cpu, double gpu, double fan)
 {
@@ -253,7 +258,8 @@ bool FansApi::Recommend(QStringList &)
     setDelayedReply(true);
     const QDBusMessage msg = QDBusContext::message();
     QDBusConnection conn = connection();
-    m_nbfc.recommend([msg, conn](bool ok, const QStringList &found) mutable {
+    if (!svc()) { conn.send(msg.createReply(QVariantList{ false, QStringList() })); return false; }
+    svc()->recommend([msg, conn](bool ok, const QStringList &found) mutable {
         conn.send(msg.createReply(QVariantList{ ok, found }));
     });
     return false;
@@ -294,7 +300,7 @@ void FansApi::SetFan(int fan, const QVariantMap &raw)
     if (!st) return usage(why);
     if (!m_state.restored()) return failed(m_i18n.t(u"Fans not read yet (is NBFC running?), try again"_s));
     if (fan < 0 || fan >= m_state.fanSt().size()) return usage(u"no fan %1"_s.arg(fan));
-    if (const QString b = m_nbfc.blockedReason(false); !b.isEmpty()) return failed(b);
+    if (const QString b = m_fan.blockedReason(false); !b.isEmpty()) return failed(b);
     m_state.setFan(fan, *st);
 }
 
@@ -305,7 +311,7 @@ void FansApi::SetGlobal(const QVariantMap &raw)
     const auto st = stFromClient(raw, &why);
     if (!st) return usage(why);
     if (!m_state.restored()) return failed(m_i18n.t(u"Fans not read yet (is NBFC running?), try again"_s));
-    if (const QString b = m_nbfc.blockedReason(false); !b.isEmpty()) return failed(b);
+    if (const QString b = m_fan.blockedReason(false); !b.isEmpty()) return failed(b);
     m_state.setGlobal(*st);
 }
 
@@ -313,7 +319,7 @@ void FansApi::SetGlobalOn(bool on)
 {
     if (changeRefused()) return;
     if (!m_state.restored()) return failed(m_i18n.t(u"Fans not read yet (is NBFC running?), try again"_s));
-    if (const QString b = m_nbfc.blockedReason(false); !b.isEmpty()) return failed(b);
+    if (const QString b = m_fan.blockedReason(false); !b.isEmpty()) return failed(b);
     m_state.setGlobalOn(on);
 }
 
@@ -355,19 +361,19 @@ void FansApi::SetSafety(int celsius)
     m_settings.setSafety(celsius);
 }
 
-void FansApi::StartService() { if (!changeRefused()) m_nbfc.startService(); }
-void FansApi::StopService() { if (!changeRefused()) m_nbfc.stopService(); }
-void FansApi::RestartService() { if (!changeRefused()) m_nbfc.restartService(m_nbfc.readOnly()); }
-void FansApi::SetReadOnly(bool on) { if (!changeRefused()) m_nbfc.setReadOnly(on); }
-void FansApi::SetBoot(bool on) { if (!changeRefused()) m_nbfc.setBoot(on); }
+void FansApi::StartService() { if (!changeRefused() && !noService()) svc()->startService(); }
+void FansApi::StopService() { if (!changeRefused() && !noService()) svc()->stopService(); }
+void FansApi::RestartService() { if (!changeRefused() && !noService()) svc()->restartService(m_fan.readOnly()); }
+void FansApi::SetReadOnly(bool on) { if (!changeRefused() && !noService()) svc()->setReadOnly(on); }
+void FansApi::SetBoot(bool on) { if (!changeRefused() && !noService()) svc()->setBoot(on); }
 
 void FansApi::ApplyConfig(const QString &name)
 {
-    if (changeRefused()) return;
+    if (changeRefused() || noService()) return;
     if (name.isEmpty()) return usage(u"no config name"_s);
-    if (name == m_nbfc.configId()) return;                 // already the one (UI-6)
+    if (name == m_fan.configId()) return;                 // already the one (UI-6)
     // Only one of the listed configs, as the QML UI offered (deliberate): `nbfc config -s` also takes a file path,
     // and a config decides what NBFC writes to the embedded controller
     if (!configs().contains(name)) return usage(u"not a known config: %1"_s.arg(name));
-    m_nbfc.applyConfig(name);
+    svc()->applyConfig(name);
 }

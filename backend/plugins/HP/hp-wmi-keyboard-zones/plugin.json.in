@@ -1,0 +1,10 @@
+{
+    "id": "HP/hp-wmi-keyboard-zones",
+    "brand": "HP",
+    "module": "hp-wmi (hp-wmi-fan-and-backlight-control 0.0.3 and later)",
+    "kind": "keyboard",
+    "version": "1.0.0",
+    "priority": 10,
+    "description": "HP four-zone RGB keyboard light (one LED per zone, the same color on all), not tested",
+    "sdk": "@SOLWIND_SDK_ID@"
+}

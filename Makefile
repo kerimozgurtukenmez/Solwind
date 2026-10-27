@@ -5,9 +5,14 @@
 #   sudo make uninstall        removes it, and the keyboard permission (your settings in ~/.config/solwind stay)
 #   sudo make udev             keyboard light permission for you (optional; the app's "Grant permission" does the same)
 #   sudo make uninstall-udev   removes that permission
+#   make plugins               (without sudo) the plugins built and the ones installed in your home folder
+#   make plugin P=<Brand>/<name>          (without sudo) installs one into ~/.local/share/solwind/plugins
+#   make remove-plugin P=<Brand>/<name>   (without sudo) removes it again
+#                              No plugin is installed with Solwind: without one it only reads the sensors (PLUGIN-PLAN)
 #   make remove-old            (without sudo) removes an install in your home folder made by the old install.sh
 #                              (Solwind 0.4.0, or Ccenter, its old name); make install asks for it when it finds one
-# Updating: git pull, make, solwind quit, sudo make install, then start it again (make install says how).
+# Updating: git pull, make, solwind quit, sudo make install, make plugin P=... for each plugin you use (a plugin is
+# loaded only by the Solwind version it was built with), then start it again (make install says how).
 # Packaging: make DESTDIR=/package/root PREFIX=/usr install   (the checks against the running system are skipped)
 
 PREFIX  ?= /usr/local
@@ -28,7 +33,7 @@ CHECK_PATHS = case "$$SW_PREFIX" in /?*) ;; *) echo "PREFIX must be an absolute 
 # environment: BUILD is a common name)
 BUILD := $(if $(filter command line,$(origin BUILD)),$(BUILD),build)
 APPDIR  = $(DESTDIR)$(PREFIX)/share/solwind
-# solwindd and the QML module (the launcher finds them next to share/solwind: <prefix>/lib/solwind)
+# solwindd, its plugin SDK library and the QML module (the launcher finds them next to share/solwind: <prefix>/lib/solwind)
 LIBDIR  = $(DESTDIR)$(PREFIX)/lib/solwind
 BINDIR  = $(DESTDIR)$(PREFIX)/bin
 APPSDIR = $(DESTDIR)$(PREFIX)/share/applications
@@ -70,21 +75,27 @@ RESET_PERMS = rp() { [ -e "$$1" ] || return 0; case "$$(stat -c "%u %a" "$$1")" 
 	for f in $(KBD_ZONES); do rp "$$f" m; done; true
 LIVE = [ -z "$(DESTDIR)" ] && [ "$$(id -u)" = 0 ]
 
-.PHONY: all build help install uninstall udev uninstall-udev remove-old
+# Plugins you install yourself, where solwindd looks: $XDG_DATA_HOME (only an absolute one, as the XDG spec says) or
+# ~/.local/share. (solwindd also loads <prefix>/lib/solwind/plugins; make install puts none there and replaces that
+# folder with the rest of <prefix>/lib/solwind on every install.)
+PLUGIN_HOME = $(if $(filter /%,$(XDG_DATA_HOME)),$(XDG_DATA_HOME),$(HOME)/.local/share)/solwind/plugins
+
+.PHONY: all build help install uninstall udev uninstall-udev remove-old plugins plugin remove-plugin
 
 all: build
 
-# Release build, without the tests; no RPATH (solwindd and the module only use the system's Qt). Not as root: the
-# build folder would belong to root.
+# Release build, without the tests. RPATH: solwindd only $ORIGIN (its libsolwind-sdk.so lies next to it); the QML
+# module and the plugins none (the system's Qt; a plugin uses the libsolwind-sdk.so solwindd has loaded). Not as
+# root: the build folder would belong to root.
 build:
 	@command -v cmake >/dev/null 2>&1 || { echo "cmake is needed to build Solwind (and Qt 6: base, declarative)" >&2; exit 1; }
 	@[ "$$(id -u)" != 0 ] || { echo "Build without sudo: make   (then: sudo make install)" >&2; exit 1; }
-	cmake -S backend -B $(BUILD) -DCMAKE_BUILD_TYPE=Release -DSOLWIND_BUILD_TESTS=OFF -DCMAKE_SKIP_RPATH=ON \
+	cmake -S backend -B $(BUILD) -DCMAKE_BUILD_TYPE=Release -DSOLWIND_BUILD_TESTS=OFF \
 		$(if $(wildcard $(BUILD)/CMakeCache.txt),,$(if $(shell command -v ninja),-G Ninja,))
 	cmake --build $(BUILD)
 	@# (what make install compares the sources with: a build that had nothing to do still counts as up to date)
 	@touch $(BUILD)/.solwind-built
-	@echo; echo "Built. To install it: sudo make install"
+	@echo; echo "Built. To install it: sudo make install   (then the plugins you need: make plugins)"
 
 help:
 	@echo "Solwind $$(cat VERSION)"
@@ -94,9 +105,12 @@ help:
 	@echo "  sudo make udev             keyboard light permission for you (optional)"
 	@echo "  sudo make uninstall-udev   remove that permission"
 	@echo "  make remove-old            (without sudo) remove an install in your home folder made by the old install.sh"
+	@echo "  make plugins               the plugins (built, installed)"
+	@echo "  make plugin P=<Brand>/<name>          install one into your home folder (without sudo)"
+	@echo "  make remove-plugin P=<Brand>/<name>   remove it"
 
 install:
-	@[ -x $(BUILD)/solwindd ] && [ -f $(BUILD)/qml/Solwind/qmldir ] && [ -f $(BUILD)/qml/Solwind/libsolwindqml.so ] \
+	@[ -x $(BUILD)/solwindd ] && [ -f $(BUILD)/libsolwind-sdk.so ] && [ -f $(BUILD)/qml/Solwind/qmldir ] && [ -f $(BUILD)/qml/Solwind/libsolwindqml.so ] \
 		|| { echo "Not built yet: run make first (without sudo), then sudo make install" >&2; exit 1; }
 	@# a build older than this tree (git pull without make) would put an old solwindd next to the new window app
 	@v=$$($(BUILD)/solwindd --version 2>/dev/null); [ "$$v" = "solwindd $$(cat VERSION)" ] \
@@ -121,6 +135,7 @@ install:
 	rm -rf $(LIBDIR).new $(LIBDIR).old
 	install -d $(LIBDIR).new/qml/Solwind
 	install -m 755 $(BUILD)/solwindd $(LIBDIR).new/solwindd
+	install -m 644 $(BUILD)/libsolwind-sdk.so $(LIBDIR).new/libsolwind-sdk.so
 	install -m 755 $(BUILD)/qml/Solwind/libsolwindqml.so $(LIBDIR).new/qml/Solwind/
 	install -m 644 $(BUILD)/qml/Solwind/qmldir $(BUILD)/qml/Solwind/solwindqml.qmltypes $(LIBDIR).new/qml/Solwind/
 	if [ -e $(LIBDIR) ]; then mv $(LIBDIR) $(LIBDIR).old; fi
@@ -191,3 +206,48 @@ uninstall-udev:
 # Runs as you (not root): it changes only your home folder
 remove-old:
 	@sh dist/remove-old.sh
+
+# ---------- plugins (PLUGIN-PLAN.md): built by make, installed one by one into your home folder, as you ----------
+# P=<Brand>/<name>: letters, digits and _ . + - only, one folder deep (no "..", no absolute path)
+CHECK_P = case "$$SW_P" in [A-Za-z0-9]*/[A-Za-z0-9]*) ;; *) echo "Usage: make plugin P=<Brand>/<name>   (make plugins lists them)" >&2; exit 1 ;; esac; \
+	case "$$SW_P" in *[!A-Za-z0-9_./+-]*|*/*/*|*..*) echo "Not a plugin name: $$SW_P   (make plugins lists them)" >&2; exit 1 ;; esac
+export SW_P := $(P)
+NOT_ROOT = [ "$$(id -u)" != 0 ] || { echo "Without sudo: plugins go into your own home folder ($(PLUGIN_HOME))" >&2; exit 1; }
+
+plugins:
+	@echo "Built ($(BUILD)/plugins):"
+	@if [ -d $(BUILD)/plugins ]; then (cd $(BUILD)/plugins && find . -name '*.so' | sed -e 's|^\./||' -e 's|\.so$$||' -e 's|^|  |' | sort); \
+	else echo "  none: run make"; fi
+	@echo "Installed ($(PLUGIN_HOME)):"
+	@if [ -d "$(PLUGIN_HOME)" ] && [ -n "$$(find "$(PLUGIN_HOME)" -name '*.so' | head -n 1)" ]; then \
+		(cd "$(PLUGIN_HOME)" && find . -name '*.so' | sed -e 's|^\./||' -e 's|\.so$$||' -e 's|^|  |' | sort); else echo "  none"; fi
+
+plugin:
+	@$(NOT_ROOT)
+	@$(CHECK_P)
+	@[ -f "$(BUILD)/plugins/$(P).so" ] || { echo "No plugin $(P) in $(BUILD): run make first (make plugins lists them)" >&2; exit 1; }
+	@# (as make install: a build older than the source, or of another version, would load wrong or not at all)
+	@[ -f $(BUILD)/.solwind-built ] || { echo "Not built with make yet: run make first" >&2; exit 1; }
+	@n=$$([ ! -d backend ] || find backend -path backend/tests -prune -o -newer $(BUILD)/.solwind-built -type f -print 2>/dev/null | head -n 1); \
+		[ -z "$$n" ] || { echo "The build is older than the source ($$n changed): run make first" >&2; exit 1; }
+	@# the folders and the file: only you can change them (solwindd refuses a plugin others could change)
+	umask 022 && install -d "$(PLUGIN_HOME)/$(dir $(P))"
+	@chmod go-w "$(PLUGIN_HOME)" "$(PLUGIN_HOME)/$(dir $(P))"
+	install -m 644 "$(BUILD)/plugins/$(P).so" "$(PLUGIN_HOME)/$(P).so.new"
+	mv -f "$(PLUGIN_HOME)/$(P).so.new" "$(PLUGIN_HOME)/$(P).so"
+	@v=$$($(PREFIX)/lib/solwind/solwindd --version 2>/dev/null); [ -z "$$v" ] || [ "$$v" = "solwindd $$(cat VERSION)" ] \
+		|| echo "Note: the installed Solwind is $${v#solwindd }, this plugin is for $$(cat VERSION): it is loaded once that is installed (sudo make install)"
+	@# solwindd as a service gets the systemd user manager's environment: if its data folder differs, it looks elsewhere
+	@sd=$$(systemctl --user show-environment 2>/dev/null | sed -n 's/^XDG_DATA_HOME=//p'); \
+		case "$$sd" in /*) ;; *) sd="$$HOME/.local/share" ;; esac; \
+		if systemctl --user show-environment >/dev/null 2>&1 && [ "$$sd/solwind/plugins" != "$(PLUGIN_HOME)" ]; then \
+		echo "Note: Solwind's background service looks in $$sd/solwind/plugins (its XDG_DATA_HOME differs from this shell's)"; fi
+	@echo "Installed $(P) into $(PLUGIN_HOME). solwindd loads plugins when it starts: solwind quit, then solwind"
+
+remove-plugin:
+	@$(NOT_ROOT)
+	@$(CHECK_P)
+	@[ -f "$(PLUGIN_HOME)/$(P).so" ] || { echo "$(P) isn't installed in $(PLUGIN_HOME)" >&2; exit 1; }
+	rm -f "$(PLUGIN_HOME)/$(P).so"
+	@rmdir "$(PLUGIN_HOME)/$(dir $(P))" 2>/dev/null || true
+	@echo "Removed $(P). It stays loaded until solwindd starts again: solwind quit, then solwind"

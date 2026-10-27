@@ -1,6 +1,5 @@
 #include "NbfcPlugin.h"
 
-#include "core/I18n.h"
 #include "core/JsCompat.h"
 
 #include <QDateTime>
@@ -11,8 +10,8 @@
 
 using namespace Qt::StringLiterals;
 
-NbfcPlugin::NbfcPlugin(const Paths &paths, const I18n &i18n, QObject *parent)
-    : FanPlugin(parent), m_paths(paths), m_i18n(i18n), m_mon(paths)
+NbfcPlugin::NbfcPlugin(const PluginHost &host, QObject *parent)
+    : FanPlugin(parent), m_paths(host.paths()), m_host(host), m_mon(host.paths())
 {
     now = [] { return QDateTime::currentMSecsSinceEpoch(); };
     m_mon.lostHeld = [this] { return m_quitting || quiet(); };
@@ -40,9 +39,9 @@ bool NbfcPlugin::quiet() const
 
 QString NbfcPlugin::blockedReason(bool withHolding) const
 {
-    if (!running()) return m_i18n.t(u"The NBFC service is not running"_s);
-    if (readOnly()) return m_i18n.t(u"NBFC is in read-only mode, fan speeds can't be written"_s);
-    if (withHolding && holding()) return m_i18n.t(u"Waiting for the NBFC service action to finish"_s);
+    if (!running()) return m_host.t(u"The NBFC service is not running"_s);
+    if (readOnly()) return m_host.t(u"NBFC is in read-only mode, fan speeds can't be written"_s);
+    if (withHolding && holding()) return m_host.t(u"Waiting for the NBFC service action to finish"_s);
     return QString();
 }
 
@@ -117,8 +116,8 @@ void NbfcPlugin::sudo(const QStringList &args, const QString &label, std::functi
     m_adminQueue.append({ QStringList{ u"pkexec"_s } + args, [this, then](int code, const QByteArray &out, const QByteArray &err) {
         m_adminQuietUntil = now() + 5000;
         if (code == 0) setMessage(QString(), false);
-        else setMessage(m_i18n.t(u"Failed: %1"_s).arg(Nbfc::firstLine(QString::fromUtf8(err.isEmpty() ? out : err)) + u" ("_s
-                                                        + m_i18n.t(u"code %1"_s).arg(code) + u")"_s), true);
+        else setMessage(m_host.t(u"Failed: %1"_s).arg(Nbfc::firstLine(QString::fromUtf8(err.isEmpty() ? out : err)) + u" ("_s
+                                                        + m_host.t(u"code %1"_s).arg(code) + u")"_s), true);
         if (then) then(code);
         m_mon.pollNow();
         emit changed();
@@ -132,7 +131,7 @@ void NbfcPlugin::handBackThen(const QStringList &args, std::function<void(int)> 
     ++m_holds;
     emit changed();
     auto act = [this, args, then] {
-        sudo(args, m_i18n.t(u"Waiting for admin permission…"_s), [this, then](int code) {
+        sudo(args, m_host.t(u"Waiting for admin permission…"_s), [this, then](int code) {
             --m_holds;
             if (then) then(code);
             emit changed();
@@ -149,7 +148,7 @@ void NbfcPlugin::startService()
     m_mon.clearLost();
     QStringList args{ u"nbfc"_s, u"start"_s };
     if (readOnly()) args << u"-r"_s;
-    sudo(args, m_i18n.t(u"Waiting for admin permission…"_s));
+    sudo(args, m_host.t(u"Waiting for admin permission…"_s));
 }
 
 void NbfcPlugin::stopService()
@@ -161,7 +160,7 @@ void NbfcPlugin::restartService(bool ro)
 {
     QStringList args{ u"nbfc"_s, u"restart"_s };
     if (ro) args << u"-r"_s;
-    sudo(args, m_i18n.t(u"Waiting for admin permission…"_s));
+    sudo(args, m_host.t(u"Waiting for admin permission…"_s));
 }
 
 void NbfcPlugin::setReadOnly(bool on)
@@ -173,7 +172,7 @@ void NbfcPlugin::setReadOnly(bool on)
 
 void NbfcPlugin::setBoot(bool on)
 {
-    sudo({ u"systemctl"_s, on ? u"enable"_s : u"disable"_s, u"nbfc_service"_s }, m_i18n.t(u"Waiting for admin permission…"_s),
+    sudo({ u"systemctl"_s, on ? u"enable"_s : u"disable"_s, u"nbfc_service"_s }, m_host.t(u"Waiting for admin permission…"_s),
          [this](int) { m_mon.refreshBoot(); });
 }
 
@@ -187,7 +186,27 @@ void NbfcPlugin::applyConfig(const QString &name)
 void NbfcPlugin::recommend(std::function<void(bool, const QStringList &)> done)
 {
     m_mon.recommend([this, done](bool ok, const QStringList &found) {
-        if (ok && found.isEmpty()) setMessage(m_i18n.t(u"No recommendation found"_s), false);
+        if (ok && found.isEmpty()) setMessage(m_host.t(u"No recommendation found"_s), false);
         if (done) done(ok, found);
     });
+}
+
+QVariantMap NbfcPlugin::configList() const
+{
+    return { { u"dirs"_s, m_mon.configDirsUsed() }, { u"fromDirs"_s, int(m_mon.configsFromDirs().size()) },
+             { u"fromCli"_s, int(m_mon.configsFromCli().size()) }, { u"cliCode"_s, m_mon.cliListCode() },
+             { u"cliLine"_s, m_mon.cliListLine() } };
+}
+
+QList<std::optional<FanService::Curve>> NbfcPlugin::configCurves() const
+{
+    QList<std::optional<Curve>> out;
+    for (const auto &c : m_mon.configCurves()) {
+        if (!c) { out << std::nullopt; continue; }
+        Curve x;
+        x.hyst = c->hyst;
+        for (const Nbfc::CurvePoint &p : c->points) x.points << CurvePoint{ p.t, p.s };
+        out << x;
+    }
+    return out;
 }

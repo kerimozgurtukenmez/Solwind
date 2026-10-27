@@ -1,0 +1,10 @@
+{
+    "id": "Test/old-sdk",
+    "brand": "Test",
+    "module": "none",
+    "kind": "keyboard",
+    "version": "1.0.0",
+    "priority": 1,
+    "description": "Built for an older Solwind",
+    "sdk": "0.0.0"
+}

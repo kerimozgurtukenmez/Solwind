@@ -13,7 +13,7 @@ namespace {
 struct Usb { QString vid, pid, name; };
 }
 
-KbdFound KeyboardParse::parse(const QString &text, const QString &prevVendor)
+KbdFound KeyboardParse::parse(const QString &text, const QString &prevVendor, const QList<const KeyboardPlugin *> &plugins)
 {
     KbdFound r;
     QList<KbdLight> leds, rgbZones;
@@ -73,7 +73,7 @@ KbdFound KeyboardParse::parse(const QString &text, const QString &prevVendor)
         for (const KbdLight &l : leds) if (l.name.contains(u"::kbd_backlight"_s) && !inZoned(l)) { c.single = l; break; }
 
     QList<KbdLight> use;
-    for (const KeyboardPlugin *pl : KeyboardPlugin::all()) {
+    for (const KeyboardPlugin *pl : plugins) {
         use = pl->match(c);
         if (!use.isEmpty()) { r.plugin = pl; break; }
     }
@@ -111,6 +111,17 @@ KbdFound KeyboardParse::parse(const QString &text, const QString &prevVendor)
     if (vendor.contains(u"asus"_s) && id != u"asus-tuf"_s
         && std::any_of(usb.begin(), usb.end(), [](const Usb &u) { return u.vid == u"0b05"_s && nkey.match(u.name).hasMatch(); }))
         r.notes << u"rog-usb"_s;
-    if ((vendor == u"hp"_s || vendor.contains(u"hewlett"_s)) && id.isEmpty()) r.notes << u"hp-none"_s;
+    // A light is there, but no installed plugin takes it (since 1.0: plugins are installed one by one). Otherwise, on an
+    // HP without any light: the extra module is missing.
+    const std::optional<KbdLight> found = c.single ? c.single
+                                        : !c.zoned.isEmpty() ? std::optional<KbdLight>(c.zoned[0])
+                                        : !c.rgbZones.isEmpty() ? std::optional<KbdLight>(c.rgbZones[0]) : std::nullopt;
+    if (id.isEmpty() && found) {
+        r.notes << u"no-plugin"_s;
+        r.unsupportedName = found->name;
+        r.unsupportedDriver = found->driver;
+    } else if ((vendor == u"hp"_s || vendor.contains(u"hewlett"_s)) && id.isEmpty()) {
+        r.notes << u"hp-none"_s;
+    }
     return r;
 }

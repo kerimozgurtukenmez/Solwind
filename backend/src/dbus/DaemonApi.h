@@ -4,10 +4,13 @@
 #include <QObject>
 #include <QVariantMap>
 
+#include "DBusUtil.h"
+
 #include <functional>
 
 class ClientHints;
 class I18n;
+class PluginLoader;
 class Settings;
 struct Paths;
 
@@ -25,6 +28,10 @@ class DaemonApi : public QObject, protected QDBusContext
     Q_PROPERTY(bool NotifyProfile READ notifyProfile)        // notify.profile
     Q_PROPERTY(bool TrayEnabled READ trayEnabled)            // ui.tray (the UI's tray icon)
     Q_PROPERTY(QString Mode READ mode)                       // "control" | "observe" (only reads: changes are refused)
+    // The loaded plugins: { id, brand, module, kind (fan | keyboard), version, description, file, used (it drives the
+    // fans - one fan plugin does -, or it has keyboard plugins) }; the files that weren't loaded: { file, why }
+    Q_PROPERTY(VariantMapList Plugins READ plugins)
+    Q_PROPERTY(VariantMapList PluginFailures READ pluginFailures)
 
 public:
     static constexpr const char *serviceName = "solwind.Daemon";
@@ -39,6 +46,9 @@ public:
     bool notifyProfile() const;
     bool trayEnabled() const;
     QString mode() const { return controlMode ? QStringLiteral("control") : QStringLiteral("observe"); }
+    VariantMapList plugins() const;
+    VariantMapList pluginFailures() const;
+    const PluginLoader *loader = nullptr;   // (main)
     // More fields for Status() (the reading pace), filled in by main
     std::function<QVariantMap()> extraStatus;
     bool controlMode = false;             // false: observe mode, nothing is written

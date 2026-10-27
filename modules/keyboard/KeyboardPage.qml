@@ -80,14 +80,16 @@ PageBase {
                     Layout.fillWidth: true
                     spacing: 2
                     StyledText {
-                        text: !Keyboard.ready ? I18n.t("Reading…") : Keyboard.available ? Keyboard.name : I18n.t("No keyboard light found")
+                        text: !Keyboard.ready ? I18n.t("Reading…") : Keyboard.available ? Keyboard.name
+                            : Keyboard.notes.indexOf("no-plugin") >= 0 ? I18n.t("No plugin for this keyboard light") : I18n.t("No keyboard light found")
                         color: Colours.fg
                         font: Tokens.font.title.small
                     }
                     StyledText {
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
-                        text: !Keyboard.available ? I18n.t("This computer has no keyboard light the kernel recognizes.")
+                        text: !Keyboard.available ? (Keyboard.notes.indexOf("no-plugin") >= 0 ? I18n.t("A keyboard light was found, but no installed plugin supports it.")
+                                                                                               : I18n.t("This computer has no keyboard light the kernel recognizes."))
                             : Keyboard.kindText() + (Keyboard.effectsAllowed ? " · " + I18n.t("effect: %1").arg(page.current.name) : "")
                         color: Colours.fgDim
                         font: Tokens.font.label.small

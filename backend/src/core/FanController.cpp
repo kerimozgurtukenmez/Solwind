@@ -185,6 +185,7 @@ void FanController::sendAuto(int fan)
 
 QString FanController::boostBlocked() const
 {
+    if (m_plugin.id().isEmpty()) return m_plugin.blockedReason(true);   // (no fan plugin installed: it says so)
     if (!canWrite()) return m_i18n.t(u"This fan driver isn't trusted to write fan speeds yet"_s);
     return m_plugin.blockedReason(true);                  // nothing would be written while it isn't running etc.
 }

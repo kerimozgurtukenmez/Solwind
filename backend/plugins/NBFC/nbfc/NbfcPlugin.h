@@ -3,11 +3,11 @@
 #include "NbfcMonitor.h"
 #include "core/Cmd.h"
 #include "plugins/FanPlugin.h"
+#include "plugins/FanService.h"
+#include "plugins/PluginHost.h"
 
 #include <QList>
 #include <QStringList>
-
-class I18n;
 
 // NBFC-Linux as a fan plugin: the read side (NbfcMonitor) plus speed commands (`nbfc set`, no root needed) and the
 // service actions that need root (`pkexec nbfc start|stop|restart|config`, `pkexec systemctl enable|disable`).
@@ -17,15 +17,19 @@ class I18n;
 // NBFC keeps target speeds and saves them when it stops, then sets them again at its next start - also in read-only
 // mode, also for a new config by fan number (SPEC.md A-3). So before stopping NBFC or switching its config every fan
 // goes back to automatic, and nothing is written until that action has finished (holding()).
-class NbfcPlugin : public FanPlugin
+class NbfcPlugin : public FanPlugin, public FanService
 {
     Q_OBJECT
 public:
-    NbfcPlugin(const Paths &paths, const I18n &i18n, QObject *parent = nullptr);
+    explicit NbfcPlugin(const PluginHost &host, QObject *parent = nullptr);
 
     NbfcMonitor &monitor() { return m_mon; }
     const NbfcMonitor &monitor() const { return m_mon; }
-    void start() { m_mon.start(); }
+    void start() override { m_mon.start(); }
+    void setFast(bool fast) override { m_mon.setFast(fast); }
+    int interval() const override { return m_mon.interval(); }
+    FanService *service() override { return this; }
+    const FanService *service() const override { return this; }
 
     // ---------- FanPlugin ----------
     QString id() const override { return QStringLiteral("nbfc"); }
@@ -46,20 +50,29 @@ public:
 
     QString blockedReason(bool withHolding = true) const override;
 
-    // ---------- service actions (A-4..A-9): run through pkexec, one after another, no time limit ----------
-    void startService();
-    void stopService();
-    void restartService(bool readOnly);
-    void setReadOnly(bool on);
-    void setBoot(bool on);
-    void applyConfig(const QString &name);
-    void recommend(std::function<void(bool ok, const QStringList &found)> done);
-    QString message() const { return m_message; }        // what an action is waiting for / why it failed
-    bool messageError() const { return m_messageError; }
-    bool adminBusy() const { return m_admin.busy() || !m_adminQueue.isEmpty(); }
+    // ---------- FanService: service actions (A-4..A-9): run through pkexec, one after another, no time limit ----------
+    void startService() override;
+    void stopService() override;
+    void restartService(bool readOnly) override;
+    void setReadOnly(bool on) override;
+    void setBoot(bool on) override;
+    void applyConfig(const QString &name) override;
+    void recommend(std::function<void(bool ok, const QStringList &found)> done) override;
+    QString message() const override { return m_message; }        // what an action is waiting for / why it failed
+    bool messageError() const override { return m_messageError; }
+    bool adminBusy() const override { return m_admin.busy() || !m_adminQueue.isEmpty(); }
+    // ---------- FanService: the configs ----------
+    bool bootEnabled() const override { return m_mon.bootEnabled(); }
+    QString fileConfigId() const override { return m_mon.fileConfigId(); }
+    bool noConfig() const override { return m_mon.noConfig(); }
+    bool configPending() const override { return m_mon.configPending(); }
+    QStringList configs() const override { return m_mon.configs(); }
+    QVariantMap configList() const override;
+    QList<std::optional<Curve>> configCurves() const override;
+    QStringList recommended() const override { return m_mon.recommended(); }
 
     // Set while quitting (L-2: a lost service isn't reported then)
-    void setQuitting(bool on) { m_quitting = on; }
+    void setQuitting(bool on) override { m_quitting = on; }
 
     std::function<qint64()> now;                          // the clock (tests)
 
@@ -71,7 +84,7 @@ private:
     void setMessage(const QString &text, bool error);
 
     Paths m_paths;
-    const I18n &m_i18n;
+    const PluginHost &m_host;
     NbfcMonitor m_mon;
     QList<Fan> m_fans;
 

@@ -9,7 +9,8 @@
 class FanController;
 class FanState;
 class I18n;
-class NbfcPlugin;
+class FanPlugin;
+class FanService;
 class Sensors;
 class SampleHistory;
 
@@ -22,6 +23,8 @@ class FansApi : public QObject, protected QDBusContext
 {
     Q_OBJECT
     Q_CLASSINFO("D-Bus Interface", "solwind.Fans")
+    Q_PROPERTY(QString Plugin READ plugin)                    // the fan plugin's id ("" = no fan plugin installed)
+    Q_PROPERTY(bool HasService READ hasService)              // it has a service (NBFC): the service / config parts below
     Q_PROPERTY(bool Running READ running)
     Q_PROPERTY(bool ReadOnly READ readOnly)
     Q_PROPERTY(double Temp READ temp)                        // NBFC's temperature (°C, NaN while it isn't running)
@@ -62,9 +65,12 @@ class FansApi : public QObject, protected QDBusContext
 
 public:
     static constexpr const char *path = "/solwind/Fans";
-    FansApi(NbfcPlugin &nbfc, const Sensors &sensors, const SampleHistory &history, FanController &control,
+    // fan: the active fan plugin (NoFanPlugin if none is installed), pluginId its plugin's id ("" = none)
+    FansApi(FanPlugin &fan, const QString &pluginId, const Sensors &sensors, const SampleHistory &history, FanController &control,
             FanState &state, const I18n &i18n, Settings &settings, bool controlMode, QObject *parent = nullptr);
 
+    QString plugin() const { return m_pluginId; }
+    bool hasService() const;
     bool running() const;
     bool readOnly() const;
     double temp() const;
@@ -141,7 +147,10 @@ private:
     void usage(const QString &msg);
     void failed(const QString &msg);
 
-    NbfcPlugin &m_nbfc;
+    FanPlugin &m_fan;
+    QString m_pluginId;
+    FanService *svc() const;                               // the plugin's service part, nullptr if none
+    bool noService();                                      // refuses (Failed) if there is none
     const Sensors &m_sensors;
     const SampleHistory &m_history;
     FanController &m_control;

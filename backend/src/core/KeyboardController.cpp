@@ -100,7 +100,9 @@ void KeyboardController::refresh(std::function<void()> done)
 void KeyboardController::parse(const QString &text)
 {
     m_lastScan = text;
-    const KbdFound f = KeyboardParse::parse(text, m_dmi[0]);
+    const KbdFound f = KeyboardParse::parse(text, m_dmi[0], m_plugins);
+    m_unsupportedName = f.unsupportedName;
+    m_unsupportedDriver = f.unsupportedDriver;
     if (f.dmi) m_dmi = *f.dmi;
     if (f.kernel) m_kernel = *f.kernel;
     const bool firstRead = !m_ready;
@@ -166,7 +168,7 @@ void KeyboardController::readFiles(const QStringList &files, std::function<void(
 QString KeyboardController::colorValue(const QColor &c, double level) const
 {
     if (m_plugin) return m_plugin->colorValue(c, level, m_format);
-    return KeyboardPlugin::all().last()->colorValue(c, level, m_format);   // (none found: the plain form, never written)
+    return kbd::intensity(c, level, m_format);            // (none found: the plain form, never written)
 }
 
 QString KeyboardController::colorPath(const QString &zone) const
@@ -711,6 +713,9 @@ QString KeyboardController::noteText(const QString &n) const
         return m_i18n.t(u"This Lenovo has a USB RGB keyboard controller (ITE). Its colors are not exposed by the kernel; tools like L5P-Keyboard-RGB or OpenRGB control it."_s);
     if (n == u"rog-usb"_s)
         return m_i18n.t(u"This ASUS has an Aura (N-KEY) USB keyboard. Its colors are controlled by asusctl, not through the kernel light."_s);
+    if (n == u"no-plugin"_s)
+        return m_i18n.t(u"Found the keyboard light %1 (driver %2), but no installed plugin supports it."_s)
+            .arg(m_unsupportedName, m_unsupportedDriver.isEmpty() ? u"?"_s : m_unsupportedDriver);
     if (n == u"hp-none"_s)
         return m_i18n.t(u"No HP keyboard light found. If this laptop has an RGB keyboard: the official kernel doesn't support HP keyboard lights yet, they need the extra hp-wmi-fan-and-backlight-control module (see the README). White (single-color) backlights and per-key RGB keyboards aren't supported by it either; their light only changes with the Fn key."_s);
     return n;
@@ -723,7 +728,8 @@ QString KeyboardController::noPermissionText() const
 
 QString KeyboardController::statusText() const
 {
-    if (!available()) return m_i18n.t(u"No keyboard light found"_s);
+    // (a light no installed plugin takes: say which)
+    if (!available()) return m_notes.contains(u"no-plugin"_s) ? noteText(u"no-plugin"_s) : m_i18n.t(u"No keyboard light found"_s);
     const QString src = m_source == u"single"_s ? m_i18n.t(u"chosen color"_s)
                       : m_source == u"multi"_s ? m_i18n.t(u"%1 colors"_s).arg(m_colors.size())
                       : m_source == u"theme"_s ? m_i18n.t(u"Caelestia theme, %1 colors"_s).arg(m_themeCount)

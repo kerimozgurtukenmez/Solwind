@@ -1,0 +1,10 @@
+{
+    "id": "Test/empty-fan",
+    "brand": "Test",
+    "module": "none",
+    "kind": "fan",
+    "version": "1.0.0",
+    "priority": 1,
+    "description": "Makes no fan plugin",
+    "sdk": "@SOLWIND_SDK_ID@"
+}

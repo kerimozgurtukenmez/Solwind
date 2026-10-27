@@ -1,0 +1,10 @@
+{
+    "id": "HP/hp-wmi-rgb-zones",
+    "brand": "HP",
+    "module": "hp-wmi (older copies of hp-wmi-fan-and-backlight-control, e.g. victus-control's 0.0.2)",
+    "kind": "keyboard",
+    "version": "1.0.0",
+    "priority": 20,
+    "description": "HP four-zone keyboard color through rgb_zones (color only), not tested",
+    "sdk": "@SOLWIND_SDK_ID@"
+}

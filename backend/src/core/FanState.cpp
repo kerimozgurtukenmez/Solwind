@@ -279,6 +279,7 @@ QString FanState::statusText(double gpu) const
 {
     const QStringList modes{ m_i18n.t(u"Auto"_s), m_i18n.t(u"Fixed"_s), m_i18n.t(u"Curve"_s) };
     const auto mode = [&](int m) { return m >= 0 && m < modes.size() ? modes[m] : u"undefined"_s; };   // (modes[m])
+    if (m_plugin.id().isEmpty()) return m_plugin.blockedReason();   // (no fan plugin installed: NoFanPlugin says so)
     const QString active = activeName();
     const double t = m_plugin.temp();
     QStringList lines{

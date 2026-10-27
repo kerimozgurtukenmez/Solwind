@@ -90,6 +90,8 @@ done
 section "solwindd (the background service)"
 if dbus_up; then
     dtext "Status" /solwind solwind.Daemon Status
+    dprop "Plugins" /solwind solwind.Daemon Plugins
+    dprop "Plugin files not loaded" /solwind solwind.Daemon PluginFailures
     dtext "Fans" /solwind/Fans solwind.Fans StatusText
     dtext "Profiles" /solwind/Fans solwind.Fans ProfileList
     dprop "Fan settings" /solwind/Fans solwind.Fans FanSettings
@@ -101,6 +103,14 @@ if dbus_up; then
     dprop "Fan speeds of the first fan driver (RPM)" /solwind/Sensors solwind.Sensors Rpms
 else
     echo 'solwindd is not running.'
+fi
+
+section "Plugins installed in the home folder"
+pdir=${XDG_DATA_HOME:-$HOME/.local/share}/solwind/plugins
+if [ -d "$pdir" ]; then
+    run "$pdir (file, mode, owner)" find "$pdir" -name '*.so' -printf '%P %m %u\n'
+else
+    echo "none ($pdir doesn't exist)"
 fi
 
 section "Solwind windows (Quickshell instances)"

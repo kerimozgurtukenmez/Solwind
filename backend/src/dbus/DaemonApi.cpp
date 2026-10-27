@@ -3,6 +3,7 @@
 #include "ClientHints.h"
 
 #include "core/I18n.h"
+#include "core/PluginLoader.h"
 #include "core/Paths.h"
 #include "core/Settings.h"
 
@@ -24,6 +25,24 @@ QString DaemonApi::savedLanguage() const { return m_settings.uiLang(); }
 bool DaemonApi::notifyEnabled() const { return m_settings.notifyOn(u"enabled"_s); }
 bool DaemonApi::notifyProfile() const { return m_settings.notifyOn(u"profile"_s); }
 bool DaemonApi::trayEnabled() const { return m_settings.uiOn(u"tray"_s); }
+
+VariantMapList DaemonApi::plugins() const
+{
+    VariantMapList out;
+    if (loader)
+        for (const PluginLoader::Plugin &p : loader->plugins())
+            out.append({ { u"id"_s, p.id }, { u"brand"_s, p.brand }, { u"module"_s, p.module }, { u"kind"_s, p.kind },
+                         { u"version"_s, p.version }, { u"description"_s, p.description }, { u"file"_s, p.file },
+                         { u"used"_s, p.used } });
+    return out;
+}
+
+VariantMapList DaemonApi::pluginFailures() const
+{
+    VariantMapList out;
+    if (loader) for (const PluginLoader::Failure &f : loader->failures()) out.append({ { u"file"_s, f.file }, { u"why"_s, f.why } });
+    return out;
+}
 
 QVariantMap DaemonApi::Status() const
 {

@@ -2,8 +2,8 @@
 // hand-back first, holding, messages, quiet), L-2, L-3 (lost service), QT-3 (saved fixed speeds). Each test has its
 // own fake world; nothing real is run.
 #include "TestEnv.h"
-#include "core/I18n.h"
-#include "plugins/fan/nbfc/NbfcPlugin.h"
+#include "NbfcPlugin.h"
+#include "TestHost.h"
 
 #include <QRegularExpression>
 #include <QSignalSpy>
@@ -18,7 +18,7 @@ class TstNbfcPlugin : public QObject
     Q_OBJECT
 
     std::unique_ptr<FakeWorld> w;
-    std::unique_ptr<I18n> i18n;
+    std::unique_ptr<TestHost> host;
     std::unique_ptr<NbfcPlugin> p;
 
     Paths paths() const
@@ -30,7 +30,8 @@ class TstNbfcPlugin : public QObject
     }
     void startPlugin()
     {
-        p = std::make_unique<NbfcPlugin>(paths(), *i18n);
+        host->p = paths();
+        p = std::make_unique<NbfcPlugin>(*host);
         p->start();
         QTRY_VERIFY(p->statusSeq() >= 1);
     }
@@ -63,7 +64,7 @@ private slots:
         w->applyToThisProcess();
         QVERIFY(QStandardPaths::findExecutable(u"nbfc"_s).startsWith(QStringLiteral(FAKE_DIR)));
         QVERIFY(QStandardPaths::findExecutable(u"pkexec"_s).startsWith(QStringLiteral(FAKE_DIR)));
-        i18n = std::make_unique<I18n>();
+        host = std::make_unique<TestHost>();
     }
     void cleanup() { p.reset(); }
 

@@ -1,0 +1,10 @@
+{
+    "id": "HP/hp-wmi-keyboard",
+    "brand": "HP",
+    "module": "hp-wmi (hp-wmi-fan-and-backlight-control)",
+    "kind": "keyboard",
+    "version": "1.0.0",
+    "priority": 30,
+    "description": "HP single-zone RGB keyboard light (hp::kbd_backlight), with effects",
+    "sdk": "@SOLWIND_SDK_ID@"
+}

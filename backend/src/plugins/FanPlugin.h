@@ -8,6 +8,8 @@
 #include <functional>
 #include <limits>
 
+class FanService;
+
 // What a fan plugin offers the core (ARCH-PLAN.md "Plugin contracts"). A plugin only reads the fans' state and
 // carries out three kinds of command: a speed, "back to automatic", "everything back to automatic". Every decision -
 // curves, the safety limit, "did it take", handing fans back, max fan - is made by the core (FanController), never
@@ -32,8 +34,18 @@ public:
 
     using QObject::QObject;
 
-    virtual QString id() const = 0;
+    virtual QString id() const = 0;       // never empty ("" is the core's NoFanPlugin: no fan plugin installed)
     virtual Trust trust() const = 0;
+
+    // ---------- running ----------
+    virtual void start() = 0;             // begin reading (after the core connected to its signals)
+    // Read often (a window is open, or the core drives fans) or relaxed
+    virtual void setFast(bool fast) = 0;
+    virtual int interval() const = 0;     // how often it reads now (ms)
+    virtual void setQuitting(bool on) { Q_UNUSED(on) }   // the core is quitting (no new admin actions)
+    // What it offers beyond the fans (NBFC: its service, configs); nullptr if nothing
+    virtual FanService *service() { return nullptr; }
+    virtual const FanService *service() const { return nullptr; }
 
     // ---------- state (updated by reads; statusRead after each one) ----------
     virtual bool running() const = 0;     // the driver / service answers

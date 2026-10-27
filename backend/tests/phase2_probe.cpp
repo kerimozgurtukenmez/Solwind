@@ -11,7 +11,7 @@
 #include "core/JsCompat.h"
 #include "core/SensorReader.h"
 #include "core/Sensors.h"
-#include "plugins/fan/nbfc/NbfcParse.h"
+#include "NbfcParse.h"
 
 #include <QFile>
 #include <QJsonArray>

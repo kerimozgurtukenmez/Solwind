@@ -2,7 +2,11 @@
 // first, then brightness; turning a dark light on; the brightness read again after Fn; no permission, K-20..K-22),
 // effects only where tested (K-12, K-27), a write error stopping the effect and the recovery (K-24, K-26), the fix
 // after waking up (K-33), quitting (K-25), observe mode, the permission actions (K-34..K-36, never run: the fake pkexec
-// only logs), one read at a time (K-18), the theme's colours following Caelestia's scheme. Real threads and timers.
+// only logs), one read at a time (K-18), the theme's colours following Caelestia's scheme, a light no plugin takes.
+// The plugins: HP's three, and one of the tests' own. Real threads and timers.
+#include "HpWmiKeyboard.h"
+#include "HpWmiKeyboardZones.h"
+#include "HpWmiRgbZones.h"
 #include "TestEnv.h"
 #include "core/I18n.h"
 #include "core/KeyboardController.h"
@@ -25,9 +29,34 @@ struct KeyboardProbe {
     static void healthyMinuteSoon(KeyboardController &k) { k.m_healthy.setInterval(1); k.m_healthy.start(); }
 };
 
+// A light whose colour can't be read back (no installed plugin has one now; ASUS TUF's kbd_rgb_mode was one): the
+// core writes the saved colour once at start (AtStart::Always)
+class WriteOnlyColour : public KeyboardPlugin
+{
+public:
+    QString id() const override { return u"test-write-only"_s; }
+    bool rgb() const override { return true; }
+    QList<KbdLight> match(const KbdCandidates &c) const override
+    {
+        return c.single && c.single->driver == u"test-driver"_s && c.single->x.contains(u"kbd_rgb_mode"_s) ? QList<KbdLight>{ *c.single }
+                                                                                                         : QList<KbdLight>();
+    }
+    bool writable(const QList<KbdLight> &l) const override
+    {
+        return kbd::every(l, [](const KbdLight &x) { return x.w.contains(u"brightness"_s) && x.w.contains(u"kbd_rgb_mode"_s); });
+    }
+    AtStart atStart() const override { return AtStart::Always; }
+    QString colorPath(const QString &zone) const override { return zone + u"/kbd_rgb_mode"_s; }
+};
+
 class TstKeyboard : public QObject
 {
     Q_OBJECT
+
+    const HpWmiKeyboard hpSingle;
+    const HpWmiKeyboardZones hpZones;
+    const HpWmiRgbZones hpRgbZones;
+    const WriteOnlyColour writeOnly;
 
     std::unique_ptr<FakeWorld> w;
     std::unique_ptr<Settings> settings;
@@ -77,6 +106,7 @@ class TstKeyboard : public QObject
         p.home = w->cct() + u"/home"_s;
         p.appDir = QStringLiteral(SOLWIND_SOURCE_APP_DIR);
         k = std::make_unique<KeyboardController>(p, *settings, i18n, control);
+        k->setPlugins({ &hpZones, &hpRgbZones, &hpSingle, &writeOnly });   // (their priorities' order)
         k->start();
         QTRY_VERIFY(k->ready());
     }
@@ -112,15 +142,15 @@ private slots:
         QCOMPARE(content(d + u"/multi_intensity"_s), u"10 20 30"_s);   // turned off with Fn: writing must not turn it on
         QCOMPARE(Qml::hex(k->color()), u"#0A141E"_s);                   // the colour it shows
     }
-    void asusColourOnceAtStart()
+    void colourOnceAtStartWhenItCantBeReadBack()
     {
-        const QString d = light(u"asus::kbd_backlight"_s, u"asus-nb-wmi"_s, u"2"_s, QString(), true, u"3"_s);
+        const QString d = light(u"x::kbd_backlight"_s, u"test-driver"_s, u"2"_s, QString(), true, u"3"_s);
         FakeWorld::writeAt(d + u"/kbd_rgb_mode"_s, "");
         saved("{\"color\": \"#00ff00\"}");
         make();
-        QCOMPARE(k->backend(), u"asus-tuf"_s);
+        QCOMPARE(k->backend(), u"test-write-only"_s);
         QSignalSpy wrote(k.get(), &KeyboardController::wrote);
-        QTRY_COMPARE(content(d + u"/kbd_rgb_mode"_s), u"0 0 0 255 0 1"_s);   // cmd 0: never saved to the BIOS
+        QTRY_COMPARE(content(d + u"/kbd_rgb_mode"_s), u"0 255 0"_s);
         k->refresh();
         QTest::qWait(300);
         QCOMPARE(wrote.count(), 1);                              // only at the first read
@@ -194,6 +224,9 @@ private slots:
     {
         const QString z = w->sysRoot() + u"/sys/devices/platform/hp-wmi/rgb_zones/"_s;
         for (const char *n : { "zone00", "zone01" }) FakeWorld::writeAt(z + QString::fromLatin1(n), "FF0000\n");
+        // (the platform device's driver: hp-wmi, as on a real HP)
+        QDir().mkpath(w->sysRoot() + u"/sys/bus/platform/drivers/hp-wmi"_s);
+        QFile::link(w->sysRoot() + u"/sys/bus/platform/drivers/hp-wmi"_s, w->sysRoot() + u"/sys/devices/platform/hp-wmi/driver"_s);
         make();
         QCOMPARE(k->backend(), u"hp-rgbzones"_s);
         QVERIFY(!k->hasBrightness());
@@ -217,15 +250,33 @@ private slots:
     }
     void effectsOnlyWhereTested()
     {
-        light(u"x::kbd_backlight"_s, u"some-driver"_s, u"200"_s, u"10 20 30"_s);
+        light(u"hp::kbd_zoned_backlight-left"_s, u"hp-wmi"_s, u"200"_s, u"10 20 30"_s);
         saved("{\"effect\": \"breathing\"}");
         make();
-        QCOMPARE(k->backend(), u"led-rgb"_s);
+        QCOMPARE(k->backend(), u"hp-zoned"_s);
         QVERIFY(!k->effectsAllowed());
         QSignalSpy frames(k.get(), &KeyboardController::wroteFrame);
         QTest::qWait(500);
         QCOMPARE(frames.count(), 0);
         QVERIFY(k->statusText().contains(u"Effect: static"_s));
+    }
+    // An RGB light of another driver: HP's plugins don't take it (each brand has its own), nothing is written
+    void aLightNoPluginTakes()
+    {
+        const QString d = light(u"x::kbd_backlight"_s, u"some-driver"_s, u"200"_s, u"10 20 30"_s);
+        saved("{\"color\": \"#ff0000\"}");
+        make();
+        QCOMPARE(k->backend(), QString());
+        QVERIFY(!k->available());
+        QCOMPARE(k->notes(), QStringList{ u"no-plugin"_s });
+        const QString why = u"Found the keyboard light x::kbd_backlight (driver some-driver), but no installed plugin supports it."_s;
+        QCOMPARE(k->statusText(), why);
+        QVERIFY(k->infoText().contains(u"- "_s + why));
+        QSignalSpy wrote(k.get(), &KeyboardController::wrote);
+        k->setColor(QColor::fromString(u"#00ff00"));
+        QTest::qWait(300);
+        QCOMPARE(wrote.count(), 0);
+        QCOMPARE(content(d + u"/multi_intensity"_s), u"10 20 30"_s);
     }
 
     // ---------- a write error, recovery (K-24, K-26) ----------

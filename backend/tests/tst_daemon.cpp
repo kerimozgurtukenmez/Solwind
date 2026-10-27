@@ -12,6 +12,7 @@
 #include <QDBusMetaType>
 #include <QDBusReply>
 #include <QDir>
+#include <QMap>
 #include <QFile>
 #include <QProcess>
 #include <QTemporaryDir>
@@ -309,6 +310,147 @@ private slots:
         QCOMPARE(r.type(), QDBusMessage::ReplyMessage);
         QCOMPARE(r.arguments().value(0).toBool(), true);
         QCOMPARE(r.arguments().value(1).toStringList(), QStringList{ u"TestB"_s });
+        QVERIFY(signalProcess(*p, SIGTERM));
+        expectCleanExit(*p);
+    }
+
+    // ---------- plugins (PLUGIN-PLAN.md P1, P2) ----------
+    void pluginsOfThisBuild()
+    {
+        std::unique_ptr<QProcess> p;
+        startAndWait(p);
+        const VariantMapList list = qvariant_cast<VariantMapList>(getProperty(path, service, u"Plugins"_s));
+        QStringList ids;
+        for (const QVariantMap &m : list) ids << m.value(u"id"_s).toString();
+        // (by priority: HP's zone plugins are asked before the single light, as the old built-in order)
+        QCOMPARE(ids, (QStringList{ u"HP/hp-wmi-keyboard-zones"_s, u"HP/hp-wmi-rgb-zones"_s, u"HP/hp-wmi-keyboard"_s, u"NBFC/nbfc"_s }));
+        QCOMPARE(list[3].value(u"kind"_s).toString(), u"fan"_s);
+        QCOMPARE(list[3].value(u"brand"_s).toString(), u"NBFC"_s);
+        QCOMPARE(list[3].value(u"file"_s).toString(), QStringLiteral(PLUGINS_DIR) + u"/NBFC/nbfc.so"_s);
+        QCOMPARE(list[0].value(u"kind"_s).toString(), u"keyboard"_s);
+        for (const QVariantMap &m : list) QVERIFY(m.value(u"used"_s).toBool());
+        QCOMPARE(qvariant_cast<VariantMapList>(getProperty(path, service, u"PluginFailures"_s)).size(), 0);
+        QCOMPARE(getProperty(u"/solwind/Fans"_s, u"solwind.Fans"_s, u"Plugin"_s).toString(), u"NBFC/nbfc"_s);
+        QCOMPARE(getProperty(u"/solwind/Fans"_s, u"solwind.Fans"_s, u"HasService"_s).toBool(), true);
+        QVERIFY(signalProcess(*p, SIGTERM));
+        expectCleanExit(*p);
+    }
+
+    // No plugin installed: it runs, reads the sensors, refuses every fan change and says why; NBFC is never run
+    void withoutPlugins()
+    {
+        QTemporaryDir none;
+        const QString led = m_world.sysRoot() + u"/sys/class/leds/hp::kbd_backlight"_s;
+        FakeWorld::writeAt(led + u"/brightness"_s, "200\n");
+        FakeWorld::writeAt(led + u"/max_brightness"_s, "255\n");
+        FakeWorld::writeAt(led + u"/multi_index"_s, "red green blue\n");
+        FakeWorld::writeAt(led + u"/multi_intensity"_s, "10 20 30\n");
+        const QString drv = m_world.sysRoot() + u"/sys/bus/platform/drivers/hp-wmi"_s;
+        QDir().mkpath(drv);
+        QDir().mkpath(led + u"/device"_s);
+        QFile::link(drv, led + u"/device/driver"_s);
+        const qsizetype nbfcRuns = m_world.calls().count("nbfc ");
+
+        QProcessEnvironment env;
+        env.insert(u"SOLWIND_PLUGIN_PATH"_s, none.path());
+        auto p = start(env);
+        QVERIFY(p->waitForStarted(3000));
+        QTRY_VERIFY_WITH_TIMEOUT(nameOwned(), 5000);
+        const QString fansPath = u"/solwind/Fans"_s, fansIface = u"solwind.Fans"_s;
+        QCOMPARE(qvariant_cast<VariantMapList>(getProperty(path, service, u"Plugins"_s)).size(), 0);
+        QCOMPARE(getProperty(fansPath, fansIface, u"Plugin"_s).toString(), QString());
+        QCOMPARE(getProperty(fansPath, fansIface, u"HasService"_s).toBool(), false);
+        QCOMPARE(getProperty(fansPath, fansIface, u"Running"_s).toBool(), false);
+        QCOMPARE(qvariant_cast<VariantMapList>(getProperty(fansPath, fansIface, u"Fans"_s)).size(), 0);
+        QCOMPARE(getProperty(fansPath, fansIface, u"BoostBlocked"_s).toString(), u"No fan plugin is installed"_s);
+        QDBusInterface fans(service, fansPath, fansIface);
+        QDBusMessage r = fans.call(u"SetBoost"_s, qlonglong(5));
+        QCOMPARE(r.errorName(), u"solwind.Error.Failed"_s);
+        QCOMPARE(r.errorMessage(), u"No fan plugin is installed"_s);
+        r = fans.call(u"StartService"_s);
+        QCOMPARE(r.errorName(), u"solwind.Error.Failed"_s);
+        QCOMPARE(r.errorMessage(), u"This fan plugin has no service to control"_s);
+        r = fans.call(u"Recommend"_s);
+        QCOMPARE(r.type(), QDBusMessage::ReplyMessage);
+        QCOMPARE(r.arguments().value(0).toBool(), false);
+        r = fans.call(u"StatusText"_s);
+        QCOMPARE(r.arguments().value(0).toString(), u"No fan plugin is installed"_s);
+        // The light is there, but nothing takes it
+        const QString kbdPath = u"/solwind/Keyboard"_s, kbdIface = u"solwind.Keyboard"_s;
+        QTRY_VERIFY_WITH_TIMEOUT(getProperty(kbdPath, kbdIface, u"Ready"_s).toBool(), 5000);
+        QCOMPARE(getProperty(kbdPath, kbdIface, u"Available"_s).toBool(), false);
+        QCOMPARE(getProperty(kbdPath, kbdIface, u"Notes"_s).toStringList(), QStringList{ u"no-plugin"_s });
+        r = QDBusInterface(service, kbdPath, kbdIface).call(u"StatusText"_s);
+        QCOMPARE(r.arguments().value(0).toString(),
+                 u"Found the keyboard light hp::kbd_backlight (driver hp-wmi), but no installed plugin supports it."_s);
+        // (readings go on without a fan plugin)
+        QDBusInterface daemon(service, path, service);
+        QVERIFY(daemon.call(u"Watch"_s, u"fans"_s).type() == QDBusMessage::ReplyMessage);
+        QTRY_VERIFY_WITH_TIMEOUT(getProperty(u"/solwind/Sensors"_s, u"solwind.Sensors"_s, u"Cpu"_s).toDouble() == 52, 8000);
+
+        QCOMPARE(daemon.call(u"Quit"_s).type(), QDBusMessage::ReplyMessage);
+        expectCleanExit(*p);
+        QCOMPARE(m_world.calls().count("nbfc "), nbfcRuns);     // NBFC never run
+        QFile light(led + u"/multi_intensity"_s);
+        QVERIFY(light.open(QIODevice::ReadOnly));
+        QCOMPARE(light.readAll(), QByteArray("10 20 30\n"));    // nothing written to it
+        QVERIFY(QDir(m_world.sysRoot() + u"/sys/class/leds"_s).removeRecursively());
+    }
+
+    // What isn't loaded, and why: not a plugin, built for another SDK, no kind, a link, a file or a folder others can
+    // change, the same plugin a second time (the first folder wins); a fan plugin file that makes no fan plugin
+    void pluginFolderChecks()
+    {
+        QTemporaryDir d;
+        const QString root = d.path();
+        FakeWorld::writeAt(root + u"/HP/notes.so"_s, "hello\n");
+        QDir().mkpath(root + u"/Test"_s);
+        for (const QString &t : { u"oldsdk"_s, u"nokind"_s, u"emptyfan"_s })
+            QVERIFY(QFile::copy(QStringLiteral(TEST_PLUGINS) + u'/' + t + u".so"_s, root + u"/Test/"_s + t + u".so"_s));
+        QDir().mkpath(root + u"/Links"_s);
+        QVERIFY(QFile::link(QStringLiteral(PLUGINS_DIR) + u"/HP/hp-wmi-keyboard-zones.so"_s, root + u"/Links/zones.so"_s));
+        QDir().mkpath(root + u"/GW"_s);
+        QVERIFY(QFile::copy(QStringLiteral(PLUGINS_DIR) + u"/HP/hp-wmi-keyboard-zones.so"_s, root + u"/GW/zones.so"_s));
+        QVERIFY(QFile::setPermissions(root + u"/GW/zones.so"_s, QFile::ReadOwner | QFile::WriteOwner | QFile::ReadGroup | QFile::WriteGroup));
+        QDir().mkpath(root + u"/Open"_s);
+        QVERIFY(QFile::copy(QStringLiteral(PLUGINS_DIR) + u"/NBFC/nbfc.so"_s, root + u"/Open/nbfc.so"_s));
+        QVERIFY(QFile::setPermissions(root + u"/Open"_s, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner
+                                                         | QFile::ReadGroup | QFile::WriteGroup | QFile::ExeGroup));
+        // (a folder others can change, above the plugin's own folder)
+        QDir().mkpath(root + u"/Shared/HP"_s);
+        QVERIFY(QFile::copy(QStringLiteral(PLUGINS_DIR) + u"/HP/hp-wmi-rgb-zones.so"_s, root + u"/Shared/HP/hp-wmi-rgb-zones.so"_s));
+        QVERIFY(QFile::setPermissions(root + u"/Shared"_s, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner
+                                                           | QFile::ReadOther | QFile::WriteOther | QFile::ExeOther));
+        for (const QString &sub : { u"A"_s, u"B"_s }) {
+            QDir().mkpath(root + u'/' + sub);
+            QVERIFY(QFile::copy(QStringLiteral(PLUGINS_DIR) + u"/HP/hp-wmi-keyboard.so"_s, root + u'/' + sub + u"/hp-wmi-keyboard.so"_s));
+        }
+        QProcessEnvironment env;
+        env.insert(u"SOLWIND_PLUGIN_PATH"_s, root);
+        auto p = start(env);
+        QVERIFY(p->waitForStarted(3000));
+        QTRY_VERIFY_WITH_TIMEOUT(nameOwned(), 5000);
+        const VariantMapList list = qvariant_cast<VariantMapList>(getProperty(path, service, u"Plugins"_s));
+        QCOMPARE(list.size(), 2);
+        QCOMPARE(list[0].value(u"id"_s).toString(), u"Test/empty-fan"_s);       // (priority 1)
+        QCOMPARE(list[0].value(u"used"_s).toBool(), false);
+        QCOMPARE(list[1].value(u"id"_s).toString(), u"HP/hp-wmi-keyboard"_s);
+        QCOMPARE(list[1].value(u"file"_s).toString(), root + u"/A/hp-wmi-keyboard.so"_s);
+        QCOMPARE(list[1].value(u"used"_s).toBool(), true);
+        QMap<QString, QString> why;
+        for (const QVariantMap &m : qvariant_cast<VariantMapList>(getProperty(path, service, u"PluginFailures"_s)))
+            why.insert(m.value(u"file"_s).toString().mid(root.size() + 1), m.value(u"why"_s).toString());
+        QCOMPARE(why.value(u"HP/notes.so"_s), u"not a Solwind plugin"_s);
+        QCOMPARE(why.value(u"Test/oldsdk.so"_s), u"built for Solwind 0.0.0, this is "_s + QStringLiteral(SOLWIND_SDK_ID) + u": build it again"_s);
+        QVERIFY(QStringLiteral(SOLWIND_SDK_ID).startsWith(QStringLiteral(SOLWIND_VERSION) + u'+'));
+        QCOMPARE(why.value(u"Test/nokind.so"_s), u"no id or kind in its metadata"_s);
+        QCOMPARE(why.value(u"Open/nbfc.so"_s), u"others can change its folder "_s + root + u"/Open"_s);
+        QCOMPARE(why.value(u"B/hp-wmi-keyboard.so"_s), u"HP/hp-wmi-keyboard is loaded already from another folder"_s);
+        QCOMPARE(why.value(u"Shared/HP/hp-wmi-rgb-zones.so"_s), u"others can change its folder "_s + root + u"/Shared"_s);
+        QCOMPARE(why.value(u"Links/zones.so"_s), u"a link (install the file itself)"_s);
+        QCOMPARE(why.value(u"GW/zones.so"_s), u"others can change it"_s);
+        QCOMPARE(why.size(), 8);
+        QCOMPARE(getProperty(u"/solwind/Fans"_s, u"solwind.Fans"_s, u"Plugin"_s).toString(), QString());
         QVERIFY(signalProcess(*p, SIGTERM));
         expectCleanExit(*p);
     }

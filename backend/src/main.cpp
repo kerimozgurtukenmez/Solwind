@@ -4,12 +4,15 @@
 // (--observe): reads only - no fan command, no settings write, no notification - so it can run next to the QML app.
 #include "cli/CallClient.h"
 #include "core/Alerts.h"
+#include "core/CoreHost.h"
 #include "core/FanController.h"
 #include "core/FanState.h"
 #include "core/History.h"
 #include "core/I18n.h"
 #include "core/KeyboardController.h"
+#include "core/NoFanPlugin.h"
 #include "core/Notifier.h"
+#include "core/PluginLoader.h"
 #include "core/OldAppGuard.h"
 #include "core/Paths.h"
 #include "core/Sensors.h"
@@ -22,7 +25,6 @@
 #include "dbus/FansApi.h"
 #include "dbus/KeyboardApi.h"
 #include "dbus/SensorsApi.h"
-#include "plugins/fan/nbfc/NbfcPlugin.h"
 
 #include <QCommandLineParser>
 #include <QCoreApplication>
@@ -102,25 +104,40 @@ int main(int argc, char **argv)
     notifier.enabled = [&] { return settings.notifyOn(u"enabled"_s); };
     ClientHints hints(bus);
     Sensors sensors(paths);
-    NbfcPlugin nbfc(paths, i18n);
-    FanController fans(nbfc, i18n);
+    // The plugins (PLUGIN-PLAN.md): none is built in. Without a fan plugin the fan side runs on NoFanPlugin (no fans,
+    // every change refused with that reason); without a keyboard plugin no light is driven.
+    CoreHost host(i18n, paths);
+    PluginLoader plugins;
+    plugins.load(PluginLoader::defaultFolders());
+    for (const PluginLoader::Failure &f : plugins.failures())
+        std::fprintf(stderr, "solwindd: plugin %s not loaded: %s\n", qPrintable(f.file), qPrintable(f.why));
+    for (const PluginLoader::Plugin &p : plugins.plugins())
+        std::fprintf(stderr, "solwindd: plugin %s %s (%s)\n", qPrintable(p.id), qPrintable(p.version), qPrintable(p.file));
+    // (owned here, not by the application: destroyed in the reverse order of what it uses, as the built-in one was)
+    QString fanPluginId;
+    std::unique_ptr<FanPlugin> fanPlugin(plugins.createFan(host, nullptr, &fanPluginId));
+    std::optional<NoFanPlugin> noFan;
+    FanPlugin &fan = fanPlugin ? *fanPlugin : noFan.emplace(host);
+    FanController fans(fan, i18n);
     fans.gpuTemp = [&] { return sensors.state().gpu(); };
     fans.setSafety(std::isfinite(settings.safety()) ? settings.safety() : 90);
-    FanState fanState(nbfc, fans, settings, i18n, notifier);
+    FanState fanState(fan, fans, settings, i18n, notifier);
     // Notifications only in control mode: in observe mode the QML app next to it sends its own
     std::optional<Alerts> alerts;
     if (control) {
-        alerts.emplace(nbfc, fans, i18n, notifier);
+        alerts.emplace(fan, fans, i18n, notifier);
         alerts->sensorCpu = [&] { return sensors.state().cpu(); };
         alerts->sensorGpu = [&] { return sensors.state().gpu(); };
     }
     SampleHistory history;
     KeyboardController keyboard(paths, settings, i18n, control);
+    keyboard.setPlugins(plugins.keyboardPlugins());
     KeyboardApi keyboardApi(keyboard, i18n);
     DaemonApi api(paths, settings, i18n, loaded, &hints);
     api.controlMode = control;
+    api.loader = &plugins;
     SensorsApi sensorsApi(sensors);
-    FansApi fansApi(nbfc, sensors, history, fans, fanState, i18n, settings, control);
+    FansApi fansApi(fan, fanPluginId, sensors, history, fans, fanState, i18n, settings, control);
     // The objects first, then the name: a client that sees the name can call them right away
     const struct { const char *path; QObject *obj; } objects[] = {
         { DaemonApi::objectPath, &api }, { SensorsApi::path, &sensorsApi }, { FansApi::path, &fansApi },
@@ -166,7 +183,7 @@ int main(int argc, char **argv)
         if (quitting) return;
         quitting = true;
         exitCode = code;
-        nbfc.setQuitting(true);
+        fan.setQuitting(true);
         settings.flush();
         watchdog.start();
         // The keyboard back to its static colour and the fans back to automatic, side by side (deliberate: the QML
@@ -233,7 +250,7 @@ int main(int argc, char **argv)
     // notifications are on (the critical temperature warning needs them)
     auto pace = [&] {
         const bool window = hints.has(u"window"_s);
-        nbfc.monitor().setFast(window || fans.controlling());
+        fan.setFast(window || fans.controlling());
         sensors.setFast(window || fans.controlling());
         sensors.setActive(hints.has(u"fans"_s) || fans.needsSensors() || (control && settings.notifyOn(u"enabled"_s)));
     };
@@ -243,7 +260,7 @@ int main(int argc, char **argv)
         sensorsProps.publish();
         fansProps.publish();
     });
-    QObject::connect(&nbfc, &FanPlugin::changed, &app, [&] { fansProps.publish(); });
+    QObject::connect(&fan, &FanPlugin::changed, &app, [&] { fansProps.publish(); });
     QObject::connect(&fans, &FanController::changed, &app, [&] { pace(); fansProps.publish(); });
     QObject::connect(&fanState, &FanState::changed, &app, [&] { fansProps.publish(); });
     // (the language too: profile labels and keyboard texts are in it)
@@ -256,9 +273,9 @@ int main(int argc, char **argv)
     if (control) {
         // Another config: the old one's settings don't belong to these fans (CF-1); the new one's are restored on the
         // next read. Emitted inside the status read, before the fans are taken over (N-8, N-14).
-        QObject::connect(&nbfc, &FanPlugin::configIdChanged, &app, [&] { fans.forgetFans(); fanState.unrestore(); });
+        QObject::connect(&fan, &FanPlugin::configIdChanged, &app, [&] { fans.forgetFans(); fanState.unrestore(); });
     }
-    QObject::connect(&nbfc, &FanPlugin::statusRead, &app, [&](bool ok) {
+    QObject::connect(&fan, &FanPlugin::statusRead, &app, [&](bool ok) {
         if (ok) {
             // N-12: max fan's end, the loop, the graph; the saved settings right after (the QML's Qt.callLater)
             if (control) {
@@ -266,8 +283,8 @@ int main(int argc, char **argv)
                 fans.control();
             }
             QList<double> speeds;
-            for (const auto &f : nbfc.fans()) speeds << f.current;
-            const auto &s = history.record(QDateTime::currentMSecsSinceEpoch(), nbfc.temp(), sensors.state().gpu(), speeds);
+            for (const auto &f : fan.fans()) speeds << f.current;
+            const auto &s = history.record(QDateTime::currentMSecsSinceEpoch(), fan.temp(), sensors.state().gpu(), speeds);
             emit fansApi.Sampled(FansApi::sampleMap(s.t, s.cpu, s.gpu, s.fan));
             if (control) QTimer::singleShot(0, &fanState, [&] { if (!fans.quitting()) fanState.restore(); });
         }
@@ -275,12 +292,13 @@ int main(int argc, char **argv)
         fansProps.publish();
     });
     api.extraStatus = [&] {
-        return QVariantMap{ { u"nbfcPollMs"_s, nbfc.monitor().interval() }, { u"sensorsActive"_s, sensors.active() },
+        // (nbfcPollMs: the fan plugin's reading interval; the name of 1.0)
+        return QVariantMap{ { u"nbfcPollMs"_s, fan.interval() }, { u"sensorsActive"_s, sensors.active() },
                             { u"sensorsFast"_s, sensors.fast() } };
     };
     pace();
     sensors.start();                              // only now: a second copy that exits with 3 reads nothing
-    nbfc.start();
+    fan.start();
     keyboard.start();
 
     std::fprintf(stderr, "solwindd %s started, %s mode (settings: %s%s)\n", SOLWIND_VERSION, control ? "control" : "observe",

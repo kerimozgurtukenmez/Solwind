@@ -32,8 +32,13 @@ public:
         for (int i = 0; i < fans; ++i) fanList.append({ QStringLiteral("Fan %1").arg(i + 1), 50, true, false, 30, 30 });
     }
 
+    bool fast = false;
+
     QString id() const override { return QStringLiteral("fake"); }
     Trust trust() const override { return trustLevel; }
+    void start() override {}
+    void setFast(bool on) override { fast = on; }
+    int interval() const override { return fast ? 2000 : 5000; }
     bool running() const override { return isRunning; }
     bool readOnly() const override { return isReadOnly; }
     bool holding() const override { return isHolding; }

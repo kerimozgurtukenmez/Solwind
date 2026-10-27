@@ -100,7 +100,8 @@ ShellRoot {
                     Chip {
                         visible: Daemon.connected
                         dot: Nbfc.running ? Colours.success : Colours.outlineStrong
-                        text: Nbfc.running ? (Nbfc.readOnly ? I18n.t("Running (read-only)") : I18n.t("Running")) : I18n.t("Stopped")
+                        text: Nbfc.noPlugin ? I18n.t("No fan plugin")
+                            : Nbfc.running ? (Nbfc.readOnly ? I18n.t("Running (read-only)") : I18n.t("Running")) : I18n.t("Stopped")
                     }
                     Chip { visible: isFinite(Nbfc.temp); icon: "thermostat"; text: "CPU " + Math.round(Nbfc.temp) + "°C" }
                     Chip { visible: Nbfc.boosting; strong: true; icon: "air"; text: I18n.t("Max fan") }

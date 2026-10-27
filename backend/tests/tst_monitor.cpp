@@ -1,7 +1,7 @@
 // NbfcMonitor against the fake nbfc (tests/fake/nbfc): SPEC.md N-9..N-14 (which config the fans belong to - the
 // scenarios of the QML app's .dev/configtest.sh), A-8, A-10..A-12, L-1..L-3, P-2's pace. Each test has its own world.
 #include "TestEnv.h"
-#include "plugins/fan/nbfc/NbfcMonitor.h"
+#include "NbfcMonitor.h"
 
 #include <QSignalSpy>
 #include <QStandardPaths>

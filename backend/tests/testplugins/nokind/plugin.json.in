@@ -1,0 +1,6 @@
+{
+    "id": "Test/no-kind",
+    "brand": "Test",
+    "version": "1.0.0",
+    "sdk": "@SOLWIND_SDK_ID@"
+}

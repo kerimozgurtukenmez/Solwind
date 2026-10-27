@@ -8,6 +8,10 @@
 //   {"fn": "range", "min", "max", "steps": [[lo, hi], ...]}   {"fn": "speed", "t0", "now", "speed", "v"}
 // A colour is "#rrggbb" or [r, g, b] (Qt.rgba). Nothing is written to any light (a fresh controller per call, observe
 // mode, its settings in a temporary folder; HOME should point at a scratch folder for the theme's scheme.json).
+// The keyboard plugins: HP's three (since P2 the only ones; the harness gives the QML copy the same set).
+#include "HpWmiKeyboard.h"
+#include "HpWmiKeyboardZones.h"
+#include "HpWmiRgbZones.h"
 #include "core/I18n.h"
 #include "core/KeyboardController.h"
 #include "core/KeyboardScan.h"
@@ -68,6 +72,10 @@ struct KeyboardProbe {
             if (s.open(QIODevice::WriteOnly)) s.write(QJsonDocument(QJsonObject{ { u"colours"_s, scheme } }).toJson());
         }
         k = std::make_unique<KeyboardController>(p, *settings, i18n, false);
+        static const HpWmiKeyboard single;
+        static const HpWmiKeyboardZones zones;
+        static const HpWmiRgbZones rgbZones;
+        k->setPlugins({ &zones, &rgbZones, &single });    // (their priorities' order)
         k->now = [this] { return clock; };
     }
     QJsonObject state() const
