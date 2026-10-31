@@ -268,7 +268,10 @@ void KeyboardController::sendColor(const QString &value, bool frame)
 
 void KeyboardController::writeFailed(const QString &why)
 {
-    m_error = m_i18n.t(u"Could not write to the keyboard light"_s) + (why.isEmpty() ? QString() : u": "_s + why);
+    // ("path: why"; the why of a plugin's light outside /sys has its translation too)
+    const qsizetype cut = why.lastIndexOf(u": "_s);
+    const QString said = cut < 0 ? why : why.left(cut + 2) + m_i18n.t(why.mid(cut + 2));
+    m_error = m_i18n.t(u"Could not write to the keyboard light"_s) + (why.isEmpty() ? QString() : u": "_s + said);
     if (m_effect != u"static"_s) m_lostEffect = true;
     m_effect = u"static"_s;                               // the effect stops (not saved to settings)
     m_healthy.stop();

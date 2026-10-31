@@ -15,14 +15,14 @@
             "kind": "fan",
             "description": "HP Victus and Omen fans through the hp-wmi driver's pwm1 and pwm2, without NBFC",
             "tested": "HP Victus 16-r0xxx (8BBD, driver patched for the board)",
-            "commit": "271ab204d4b4b830101986ac50685d5f7dcdf5a6",
+            "commit": "d43fca552d8223af816bb2cd354553334f189284",
             "fits": { "paths": ["/sys/devices/platform/hp-wmi/hwmon"], "vendors": ["HP"] }
         },
         {
             "id": "MSI/msi-fan",
             "kind": "fan",
             "description": "MSI fans: speeds through msi-wmi-platform's fan curves where the kernel has them, else readings and max fan through msi-ec",
-            "commit": "99b90b80c58576ce54776d5d64dab13c042c4cdd",
+            "commit": "d43fca552d8223af816bb2cd354553334f189284",
             "fits": { "vendors": ["Micro-Star"] }
         },
         {
@@ -36,7 +36,7 @@
             "id": "OpenRGB/openrgb",
             "kind": "keyboard",
             "description": "RGB keyboards the kernel doesn't expose (MSI's SteelSeries keyboards and others), through OpenRGB",
-            "commit": "7378dbcd372b207d19afbf965af0fc9d9e5dfc15",
+            "commit": "d43fca552d8223af816bb2cd354553334f189284",
             "fits": { "programs": ["openrgb"] }
         },
         {

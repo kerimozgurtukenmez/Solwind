@@ -201,6 +201,10 @@ private slots:
         plugin();
         QVERIFY(!p->canSetSpeeds());
         QVERIFY(p->running());
+        put(ec + u"/cooler_boost"_s, "on");                    // the Fn key's: not ours to turn off
+        QCOMPARE(wait([&](FanPlugin::Done dn) { p->setAuto(-1, dn); }), QString());
+        QCOMPARE(read(ec + u"/cooler_boost"_s), QByteArray("on"));
+        put(ec + u"/cooler_boost"_s, "off");
         QCOMPARE(p->configId(), u"MSI MS-1591 (msi-ec)"_s);   // not the settings of a kernel with fan curves
         QCOMPARE(p->temp(), 61.0);
         QCOMPARE(p->fans()[0].current, 45.0);

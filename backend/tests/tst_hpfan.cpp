@@ -191,7 +191,7 @@ private slots:
         QVERIFY(!wait([&](FanPlugin::Done dn) { p->setAuto(-1, dn); }).isEmpty());
         QVERIFY(spy.wait(4000));
         QVERIFY(!p->fans()[0].autoControl);                   // still manual: the core keeps asking and then reports it
-        QVERIFY(!p->fans()[1].autoControl);
+        QVERIFY(p->fans()[1].autoControl);                    // as it was: the refused change wasn't kept
     }
     void handBack()
     {

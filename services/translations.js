@@ -404,6 +404,13 @@ var dict = {
         "No MSI fan driver here": "Burada MSI fan sürücüsü yok",
         "This fan driver can only do automatic and max fan": "Bu fan sürücüsü yalnızca otomatik ve maks. fan yapabilir",
         "The fan curves couldn't be read": "Fan eğrileri okunamadı",
+        "No fan plugin is working": "Çalışan fan eklentisi yok",
+        "Solwind shows the temperatures, but can't control the fans. No fan plugin is installed, or the installed one found no driver here or was built for another Solwind: see the Plugins page, then restart Solwind.": "Solwind sıcaklıkları gösterir ama fanları kontrol edemiyor. Fan eklentisi kurulu değil ya da kurulu olan burada sürücü bulamadı veya başka bir Solwind için derlendi: Eklentiler sayfasına bak, sonra Solwind'i yeniden başlat.",
+        "An RGB keyboard on USB can work through the OpenRGB plugin, if OpenRGB sees it itself (openrgb --list-devices).": "USB'deki RGB klavye, OpenRGB'nin kendisi görüyorsa OpenRGB eklentisiyle çalışabilir (openrgb --list-devices).",
+        "OpenRGB has no keyboard now": "OpenRGB şu an klavye görmüyor",
+        "OpenRGB's server doesn't answer": "OpenRGB sunucusu yanıt vermiyor",
+        "not a brightness": "geçersiz parlaklık",
+        "not a color": "geçersiz renk",
         "Global": "Global"
     }
 }

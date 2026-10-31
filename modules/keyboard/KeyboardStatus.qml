@@ -38,7 +38,7 @@ Card {
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
                 text: !Keyboard.available ? (Keyboard.notes.indexOf("no-plugin") >= 0 ? I18n.t("A keyboard light was found, but no installed plugin supports it.")
-                                                                                       : I18n.t("This computer has no keyboard light the kernel recognizes."))
+                                                                                       : I18n.t("This computer has no keyboard light the kernel recognizes.") + " " + I18n.t("An RGB keyboard on USB can work through the OpenRGB plugin, if OpenRGB sees it itself (openrgb --list-devices)."))
                     : Keyboard.kindText() + (Keyboard.effectsAllowed ? " · " + I18n.t("effect: %1").arg(status.effectName) : "")
                 color: Colours.fgDim
                 font: Tokens.font.label.small

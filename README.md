@@ -11,8 +11,8 @@ It has two parts: **solwindd**, a small background service (C++/Qt) that drives 
 > **This is an early project, use it at your own risk.**
 >
 > - I've only tested it on my own **HP Victus 16-r0xxx** (Arch Linux, Hyprland). Other models and brands may not work.
-> - The fan part **writes fan speeds to your hardware**, through NBFC or the HP driver. A bad setting can make your laptop run hot, so keep an eye on the temperatures.
-> - If solwindd crashes, its systemd service hands the fans back to automatic control and starts it again. By hand: `nbfc set -a` with NBFC, `solwind fan-permission off` with the HP plugin.
+> - The fan part **writes fan speeds to your hardware**, through NBFC, the HP driver or MSI's drivers. A bad setting can make your laptop run hot, so keep an eye on the temperatures. Only the NBFC and HP fan plugins were tested on my laptop; the MSI and OpenRGB plugins never ran on real hardware.
+> - If solwindd crashes, its systemd service hands the fans back to automatic control and starts it again. By hand: `nbfc set -a` with NBFC, `solwind fan-permission off` with the HP or MSI plugin.
 
 ## Screenshots
 
@@ -24,21 +24,21 @@ Colors follow your Caelestia theme. A narrow window shows everything in one colu
 
 ## Features
 
-**Fans** (through [NBFC-Linux](https://github.com/nbfc-linux/nbfc-linux) with the `NBFC/nbfc` plugin, or the HP driver with `HP/hp-wmi-fan`):
+**Fans** (through [NBFC-Linux](https://github.com/nbfc-linux/nbfc-linux) with the `NBFC/nbfc` plugin, the HP driver with `HP/hp-wmi-fan`, or MSI's drivers with `MSI/msi-fan`, which is not tested on hardware):
 - Per fan: **Auto** (NBFC or the firmware decides), **Fixed** or **Curve** (following the CPU, the GPU or the hotter one)
 - Curve editor, profiles (Quiet, Balanced, Performance and your own), max fan button, a 10 minute graph
 - Speeds up right away, slows down gently. Above the safety limit (90 °C unless you change it) every fan it controls goes to 100%
 - NBFC service controls and config picker, notifications, tray icon
 
 **Keyboard** (a plugin per kind of light):
-- Color, brightness, breathing and color cycle effects (also with your Caelestia theme colors)
+- Color, brightness, breathing and color cycle effects (also with your Caelestia theme colors); the effects only on the HP single-zone keyboard
 - Detects your laptop and light, and only shows what your keyboard can do (`solwind kbd info`)
 
 English and Turkish. Colors, rounding and fonts come from your Caelestia setup; Solwind only reads Caelestia's files.
 
 ### Supported keyboards
 
-Each kind of light has its own plugin (see [Plugins](#plugins)). Solwind only uses the files a kernel driver offers in `/sys`, never the firmware or USB directly. Only the first row is tested on real hardware.
+Each kind of light has its own plugin (see [Plugins](#plugins)). Solwind itself only uses the files a kernel driver offers in `/sys`, never the firmware or USB directly. The one exception is the `OpenRGB/openrgb` plugin, which sends a color to OpenRGB's server on this computer and lets OpenRGB do the USB side. Only the first row is tested on real hardware.
 
 | Laptop | Plugin | Kernel light | What works |
 |---|---|---|---|
@@ -47,8 +47,8 @@ Each kind of light has its own plugin (see [Plugins](#plugins)). Solwind only us
 | HP OMEN / Victus, four-zone RGB | `HP/hp-wmi-rgb-zones` | `rgb_zones/zone00`–`zone03` (older copies of the module) | Color only, same on all zones |
 | ASUS, Lenovo, Chromebooks and others | none yet | | Earlier versions had built-in support for ASUS TUF colors and other brands' brightness (only tried with a fake `/sys`). They'll come back as plugins once I've looked into each driver again. |
 | ASUS ROG, Lenovo Legion RGB | — | colors go through USB | Not through the kernel; use [asusctl](https://gitlab.com/asus-linux/asusctl) / [L5P-Keyboard-RGB](https://github.com/4JX/L5P-Keyboard-RGB) for colors |
-| MSI, single color | `MSI/msi-ec-keyboard` | `msiacpi::kbd_backlight` (needs the [msi-ec](https://github.com/BeardOverflow/msi-ec) module, the one in the official kernel doesn't have it) | Brightness, not tested |
-| MSI RGB (SteelSeries) and other RGB keyboards [OpenRGB](https://openrgb.org) supports | `OpenRGB/openrgb` | none, through OpenRGB | One color and brightness, no software effects, not tested on hardware. Install OpenRGB; Solwind starts its server on 127.0.0.1 if it isn't running |
+| MSI, single color | `MSI/msi-ec-keyboard` | `msiacpi::kbd_backlight` (needs the out-of-tree [msi-ec](https://github.com/BeardOverflow/msi-ec) module and a laptop on its firmware list; the one in the official kernel doesn't have it) | Brightness, not tested |
+| MSI RGB (SteelSeries) and other RGB keyboards [OpenRGB](https://openrgb.org) supports | `OpenRGB/openrgb` | none, through OpenRGB | One color; brightness dims the color in software and isn't kept when Solwind restarts; no effects; not tested on hardware. OpenRGB must be installed and see the keyboard itself (`openrgb --list-devices`; its udev rules give your user wide hardware access). If nothing answers, Solwind starts its server on 127.0.0.1 (port 6742). That server has no password, so any program on this computer can use it |
 | HP per-key RGB, HP white backlight, other OMEN modules | — | not offered by the kernel or the module | — |
 
 Effects are only on for the HP single-zone keyboard, the one I could test them on.
@@ -96,9 +96,9 @@ sudo nbfc restart && sudo systemctl enable nbfc_service
 
 If no config fits, don't force one. The keyboard part works without NBFC.
 
-**MSI fans (`MSI/msi-fan`):** with the `msi-wmi-platform` fan curve patches in your kernel, which aren't in the official kernel yet, you get Fixed, Curve and profiles. Without them, with the [msi-ec](https://github.com/BeardOverflow/msi-ec) module, you get readings, Auto and max fan, because `msi-ec` can't set a speed. Solwind never writes the embedded controller directly. Not tested on hardware. One person reported hard resets on one MSI with custom curves outside the high performance profile, cause not confirmed, so go carefully. Same steps as below with `solwind plugin install MSI/msi-fan`.
+**MSI fans (`MSI/msi-fan`):** not tested on hardware. It needs one of two things. With the out-of-tree [msi-ec](https://github.com/BeardOverflow/msi-ec) module, on a laptop on its firmware list, you get readings, Auto and max fan, because `msi-ec` can't set a speed; the `msi-ec` in the official kernel only has battery limits. With a kernel that has the `msi-wmi-platform` fan curve patches you get Fixed, Curve and profiles; those patches aren't in the official kernel, and the plugin was written from their 2025 version, so they may have changed. A speed never goes below 30%. With neither, the plugin does nothing. Solwind never writes the embedded controller itself. One person reported hard resets on one MSI with custom curves outside the high performance profile, cause not confirmed, so go carefully. The steps are the same as below, with `solwind plugin install MSI/msi-fan`.
 
-**HP fans without NBFC:** `HP/hp-wmi-fan` drives the fans through the same module's `pwm1` and `pwm2`, on the boards the module opens those files on. No NBFC, no config, and the two fans really run at their own speeds. I tested it on one board only (8BBD, with the module patched for that board, since the board isn't on its list). If your firmware ignores the command the fans just stay on automatic.
+**HP fans without NBFC:** `HP/hp-wmi-fan` drives the fans through the same module's `pwm1` and `pwm2`, on the boards the module opens those files on. No NBFC, no config, and the two fans really run at their own speeds. I tested it on one board only (8BBD, with the module patched for that board, since the board isn't on its list). If your firmware ignores the command the fans just stay on automatic. On a board that isn't on the module's list the module has no `pwm1` and `pwm2`, and the plugin stays idle.
 
 ```sh
 solwind plugin disable NBFC/nbfc           # if you had it: the NBFC plugin comes first
@@ -205,16 +205,16 @@ Run `solwind report` (or **Create report** in Settings) and attach the file to a
 
 ## Undoing things
 
-- Fans back to automatic: `nbfc set -a` with NBFC; with the HP plugin quit Solwind
+- Fans back to automatic: `nbfc set -a` with NBFC; with the HP or MSI plugin quit Solwind
 - Solwind never edits NBFC config files, it only selects one. To go back: `sudo nbfc config --set "<config name>"` and `sudo nbfc restart`
 - Keyboard permission: **Remove permission** in the app, or `sudo make uninstall-udev`
-- HP fan permission: `solwind fan-permission off`, or `sudo make uninstall-udev`
+- HP and MSI fan permission: `solwind quit`, then `solwind fan-permission off`, or `sudo make uninstall-udev`
 
 ## Security
 
-- Day-to-day use needs no admin rights: solwindd runs as your user, fan speeds go through `nbfc set` or, with the HP plugin, the driver's files your user was given.
+- Day-to-day use needs no admin rights: solwindd runs as your user, fan speeds go through `nbfc set` or, with the HP and MSI plugins, the driver's files your user was given.
 - Admin actions only happen when you click them, through your system's password dialog. Solwind never sees your password.
-- The keyboard is only touched through the kernel. The keyboard permission is for your user only, and the rule is checked line by line before it's installed.
+- The keyboard is touched through the kernel's LED files, except with the `OpenRGB/openrgb` plugin, which talks to OpenRGB's server on 127.0.0.1. The keyboard permission is for your user only, and the rule is checked line by line before it's installed.
 - Plugins are code that runs inside solwindd, as your user, and building one runs its build steps on your computer; solwindd skips one that someone else could have changed (see [Plugins](#plugins)).
 - NBFC config files and Caelestia's files are never changed.
 

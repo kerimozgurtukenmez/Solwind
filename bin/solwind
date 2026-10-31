@@ -418,8 +418,12 @@ case "${1:-}" in
                 udevadm trigger --action=change --subsystem-match=hwmon --attr-match=name=hp &&
                 udevadm trigger --action=change --subsystem-match=hwmon --attr-match=name=msi_wmi_platform &&
                 udevadm trigger --action=change --subsystem-match=platform --sysname-match=msi-ec && udevadm settle' sh "$rule" ;;
-            # (automatic first: without the permission nothing else could hand the fans back)
-            off) exec pkexec sh -c 'rm -f "$1" && udevadm control --reload-rules || exit 1
+            # (automatic first: without the permission nothing else could hand the fans back. Not while solwindd runs:
+            # it has to put its curves away itself)
+            off) if pgrep -x -u "$(id -u)" solwindd >/dev/null; then
+                    usage_error "solwind fan-permission off: quit first: solwind quit" "solwind fan-permission off: önce kapat: solwind quit"
+                 fi
+                 exec pkexec sh -c 'rm -f "$1" && udevadm control --reload-rules || exit 1
                 for h in /sys/class/hwmon/hwmon*; do
                     case "$(cat "$h/name" 2>/dev/null)" in
                         hp) [ -e "$h/pwm1_enable" ] && { echo 2 > "$h/pwm1_enable"; chown 0 "$h/pwm1" "$h/pwm2" "$h/pwm1_enable" || exit 1; } ;;

@@ -30,8 +30,8 @@ PageBase {
         visible: Nbfc.noPlugin
         InfoRow {
             icon: "extension_off"
-            label: I18n.t("No fan plugin is installed")
-            sub: I18n.t("Solwind shows the temperatures, but can't control the fans without one. Install the one for your fans from the Plugins page, then restart Solwind.")
+            label: I18n.t("No fan plugin is working")
+            sub: I18n.t("Solwind shows the temperatures, but can't control the fans. No fan plugin is installed, or the installed one found no driver here or was built for another Solwind: see the Plugins page, then restart Solwind.")
         }
     }
 
