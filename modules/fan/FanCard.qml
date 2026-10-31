@@ -89,6 +89,7 @@ Card {
         Behavior on opacity { Anim {} }
 
         Segment {
+            visible: Nbfc.canSetSpeeds
             model: [I18n.t("Auto"), I18n.t("Fixed"), I18n.t("Curve")]
             controlled: true
             current: fan.mode

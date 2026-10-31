@@ -37,6 +37,8 @@ public:
 
     virtual QString id() const = 0;       // never empty ("" is the core's NoFanPlugin: no fan plugin installed)
     virtual Trust trust() const = 0;
+    // false: only automatic and full speed exist (setPercent's 100 and the rest); no Fixed, no Curve, no fan profiles
+    virtual bool canSetSpeeds() const { return true; }
 
     // ---------- running ----------
     virtual void start() = 0;             // begin reading (after the core connected to its signals)

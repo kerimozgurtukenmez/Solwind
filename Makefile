@@ -68,10 +68,14 @@ APPS_NEW := $(if $(wildcard $(APPSDIR)),,1)
 APP_FILES = shell.qml VERSION plugin-catalog.json
 APP_DIRS  = components modules services utils scripts assets
 
-# The HP fan permission (solwind fan-permission), if it was given: the fans on automatic, the files back to root
+# The HP and MSI fan permission (solwind fan-permission), if it was given: the fans on automatic, the files back to root
 RESET_FAN_PERMS = for h in /sys/class/hwmon/hwmon*; do \
 		if [ "$$(cat "$$h/name" 2>/dev/null)" = hp ] && [ -e "$$h/pwm1_enable" ]; then \
-			echo 2 > "$$h/pwm1_enable"; chown 0 "$$h/pwm1" "$$h/pwm2" "$$h/pwm1_enable" || true; fi; done
+			echo 2 > "$$h/pwm1_enable"; chown 0 "$$h/pwm1" "$$h/pwm2" "$$h/pwm1_enable" || true; fi; \
+		if [ "$$(cat "$$h/name" 2>/dev/null)" = msi_wmi_platform ]; then \
+			for f in "$$h"/pwm[12]_enable; do [ -e "$$f" ] && { echo 2 > "$$f"; chown 0 "$$f" || true; }; done; \
+			for f in "$$h"/pwm[12]_auto_point*_pwm; do [ -e "$$f" ] && { chown 0 "$$f" || true; }; done; fi; done; \
+	e=/sys/devices/platform/msi-ec/cooler_boost; if [ -e "$$e" ]; then echo off > "$$e"; chown 0 "$$e" || true; fi
 
 # The light files back to root (owner root, 0644; kbd_rgb_mode keeps its write-only mode); only as root, for a real
 # system (no DESTDIR). Only files our rule (owner changed) or an older one (0666) touched: a permission another rule

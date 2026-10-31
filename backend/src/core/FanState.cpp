@@ -203,6 +203,8 @@ QStringList FanState::namesOf(const ProfileEntry &p) const
     if (!p.builtin) return { lower(p.name) };
     QStringList n{ p.name, p.label };
     for (const QString &l : I18n::languages()) n << m_i18n.tIn(l, p.label);
+    if (p.name == u"auto"_s)              // (its name without NBFC: displayName)
+        for (const QString &l : I18n::languages()) n << m_i18n.tIn(l, u"Auto"_s);
     for (QString &x : n) x = lower(x);
     return n;
 }
@@ -211,6 +213,13 @@ bool FanState::reservedName(const QString &name) const
 {
     const QString k = lower(js::trim(name));
     for (const ProfileEntry &p : builtins()) if (namesOf(p).contains(k)) return true;
+    return false;
+}
+
+bool FanState::isAutoProfile(const QString &name) const
+{
+    const QString k = lower(name);
+    for (const ProfileEntry &p : builtins()) if (p.name == u"auto"_s) return namesOf(p).contains(k);
     return false;
 }
 

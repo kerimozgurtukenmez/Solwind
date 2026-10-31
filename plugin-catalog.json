@@ -19,6 +19,13 @@
             "fits": { "paths": ["/sys/devices/platform/hp-wmi/hwmon"], "vendors": ["HP"] }
         },
         {
+            "id": "MSI/msi-fan",
+            "kind": "fan",
+            "description": "MSI fans: speeds through msi-wmi-platform's fan curves where the kernel has them, else readings and max fan through msi-ec",
+            "commit": "99b90b80c58576ce54776d5d64dab13c042c4cdd",
+            "fits": { "vendors": ["Micro-Star"] }
+        },
+        {
             "id": "MSI/msi-ec-keyboard",
             "kind": "keyboard",
             "description": "MSI single-color keyboard light (msiacpi::kbd_backlight of the msi-ec module), brightness only",

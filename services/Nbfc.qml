@@ -15,6 +15,7 @@ Singleton {
     // The fan plugin solwindd loaded (none is installed with Solwind); NBFC's service and configs only with one that has them
     readonly property bool noPlugin: up && f.Plugin === ""
     readonly property bool hasService: up && f.HasService === true
+    readonly property bool canSetSpeeds: !up || f.CanSetSpeeds !== false
     readonly property bool running: up && f.Running === true
     readonly property bool readOnly: up && f.ReadOnly === true
     readonly property string configId: up ? (f.ConfigId ?? "") : ""

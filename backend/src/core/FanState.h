@@ -62,6 +62,7 @@ public:
     QString activeId() const;
     QString activeName() const;
     QStringList namesOf(const ProfileEntry &p) const;
+    bool isAutoProfile(const QString &name) const;
     bool reservedName(const QString &name) const;
     QStringList reservedNames() const;                          // every name the built-ins answer to (lower case)
     Profile snapshot(const QString &name) const;

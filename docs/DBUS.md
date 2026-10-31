@@ -48,6 +48,7 @@ The fans of the fan plugin solwindd loaded (one at a time; with none, there are 
 | Property | Type | |
 |---|---|---|
 | `Plugin` | s | The fan plugin's id (`NBFC/nbfc`); `""` = none is installed |
+| `CanSetSpeeds` | b | False: the fan plugin only does automatic and max fan (no Fixed, Curve or fan profiles) |
 | `HasService` | b | It has a service and configs (NBFC) |
 | `Running`, `ReadOnly` | b | NBFC's service runs; it's in read-only mode |
 | `Temp` | d | NBFC's temperature (°C) |

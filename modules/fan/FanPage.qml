@@ -81,7 +81,7 @@ PageBase {
         }
 
         Group {
-            visible: Nbfc.fans.length > 0
+            visible: Nbfc.fans.length > 0 && Nbfc.canSetSpeeds
             ToggleRow {
                 icon: "mode_fan"
                 label: "Global"
@@ -147,8 +147,9 @@ PageBase {
                 enabled: Nbfc.running && !Nbfc.readOnly
                 opacity: enabled ? 1 : 0.4
             }
-            // Every fan plugin's: the core applies it, whatever drives the fans
+            // Every fan plugin's that can set speeds: the core applies it, whatever drives the fans
             Group {
+                visible: Nbfc.canSetSpeeds
                 SliderRow {
                     id: safetyRow
                     icon: "local_fire_department"

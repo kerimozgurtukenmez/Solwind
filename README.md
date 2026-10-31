@@ -96,6 +96,8 @@ sudo nbfc restart && sudo systemctl enable nbfc_service
 
 If no config fits, don't force one. The keyboard part works without NBFC.
 
+**MSI fans (`MSI/msi-fan`):** with the `msi-wmi-platform` fan curve patches in your kernel, which aren't in the official kernel yet, you get Fixed, Curve and profiles. Without them, with the [msi-ec](https://github.com/BeardOverflow/msi-ec) module, you get readings, Auto and max fan, because `msi-ec` can't set a speed. Solwind never writes the embedded controller directly. Not tested on hardware. One person reported hard resets on one MSI with custom curves outside the high performance profile, cause not confirmed, so go carefully. Same steps as below with `solwind plugin install MSI/msi-fan`.
+
 **HP fans without NBFC:** `HP/hp-wmi-fan` drives the fans through the same module's `pwm1` and `pwm2`, on the boards the module opens those files on. No NBFC, no config, and the two fans really run at their own speeds. I tested it on one board only (8BBD, with the module patched for that board, since the board isn't on its list). If your firmware ignores the command the fans just stay on automatic.
 
 ```sh
@@ -165,7 +167,7 @@ solwind quit; solwind                      # solwindd loads plugins when it star
 ### Permissions
 
 - **Keyboard light (optional):** your user needs write access to the light's files. Use **Grant permission** on the Keyboard page (or `sudo make udev`); **Remove permission** undoes it. Only your user gets access.
-- **HP fans (only with `HP/hp-wmi-fan`):** `solwind fan-permission` adds `/etc/udev/rules.d/91-solwind-fans.rules`, which gives your user the driver's three fan files. Any program of yours can then set the fan speed. `solwind fan-permission off` removes it and puts the fans on automatic.
+- **HP and MSI fans (only with `HP/hp-wmi-fan` or `MSI/msi-fan`):** `solwind fan-permission` adds `/etc/udev/rules.d/91-solwind-fans.rules`, which gives your user the fan files of the HP and MSI drivers. Any program of yours can then set the fan speed. `solwind fan-permission off` removes it and puts the fans on automatic.
 - **NBFC service actions** (start, stop, applying a config) ask for your password every time. Setting fan speeds doesn't.
 
 ## Usage

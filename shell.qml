@@ -236,7 +236,7 @@ ShellRoot {
 
     // Tray (Caelestia bar): left click shows/hides the window, the menu has profiles and max fan
     Binding { target: Tray; property: "windowVisible"; value: root.shown }
-    Binding { target: Tray; property: "profiles"; value: FanState.allProfiles().map(p => FanState.displayName(p)) }
+    Binding { target: Tray; property: "profiles"; value: Nbfc.canSetSpeeds ? FanState.allProfiles().map(p => FanState.displayName(p)) : [] }
     Binding { target: Tray; property: "active"; value: FanState.activeName() }
     Binding {
         target: Tray; property: "labels"

@@ -401,6 +401,9 @@ var dict = {
         "No plugin found": "Eklenti bulunamadı",
         "RGB, one color on the whole keyboard": "RGB, tüm klavyede tek renk",
         "%1: installed from a local folder for another Solwind, so it isn't loaded. Install it from its folder again, or: solwind plugin update %1": "%1: yerel klasörden başka bir Solwind için kurulmuş, bu yüzden yüklenmiyor. Klasöründen yeniden kur ya da: solwind plugin update %1",
+        "No MSI fan driver here": "Burada MSI fan sürücüsü yok",
+        "This fan driver can only do automatic and max fan": "Bu fan sürücüsü yalnızca otomatik ve maks. fan yapabilir",
+        "The fan curves couldn't be read": "Fan eğrileri okunamadı",
         "Global": "Global"
     }
 }

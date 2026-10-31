@@ -82,6 +82,14 @@ FansApi::FansApi(FanPlugin &fan, const QString &pluginId, const Sensors &sensors
 
 FanService *FansApi::svc() const { return m_fan.service(); }
 bool FansApi::hasService() const { return svc() != nullptr; }
+bool FansApi::canSetSpeeds() const { return m_fan.canSetSpeeds(); }
+
+bool FansApi::speedsRefused(int mode)
+{
+    if (mode == 0 || m_fan.canSetSpeeds()) return false;
+    failed(m_i18n.t(u"This fan driver can only do automatic and max fan"_s));
+    return true;
+}
 bool FansApi::noService()
 {
     if (svc()) return false;
@@ -298,6 +306,7 @@ void FansApi::SetFan(int fan, const QVariantMap &raw)
     QString why;
     const auto st = stFromClient(raw, &why);
     if (!st) return usage(why);
+    if (speedsRefused(st->mode)) return;
     if (!m_state.restored()) return failed(m_state.notReadYet());
     if (fan < 0 || fan >= m_state.fanSt().size()) return usage(u"no fan %1"_s.arg(fan));
     if (const QString b = m_fan.blockedReason(false); !b.isEmpty()) return failed(b);
@@ -310,6 +319,7 @@ void FansApi::SetGlobal(const QVariantMap &raw)
     QString why;
     const auto st = stFromClient(raw, &why);
     if (!st) return usage(why);
+    if (speedsRefused(st->mode)) return;
     if (!m_state.restored()) return failed(m_state.notReadYet());
     if (const QString b = m_fan.blockedReason(false); !b.isEmpty()) return failed(b);
     m_state.setGlobal(*st);
@@ -326,6 +336,7 @@ void FansApi::SetGlobalOn(bool on)
 QString FansApi::ApplyProfile(const QString &name, bool notify)
 {
     if (changeRefused()) return QString();
+    if (!m_state.isAutoProfile(name) && speedsRefused(1)) return QString();
     const FanState::Result r = m_state.applyByName(name, notify);
     if (r.usage) { usage(r.text); return QString(); }
     if (!r.ok) { failed(r.text); return QString(); }

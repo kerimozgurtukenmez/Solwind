@@ -24,6 +24,7 @@ class FansApi : public QObject, protected QDBusContext
     Q_OBJECT
     Q_CLASSINFO("D-Bus Interface", "solwind.Fans")
     Q_PROPERTY(QString Plugin READ plugin)                    // the fan plugin's id ("" = no fan plugin installed)
+    Q_PROPERTY(bool CanSetSpeeds READ canSetSpeeds)          // false: only automatic and max fan
     Q_PROPERTY(bool HasService READ hasService)              // it has a service (NBFC): the service / config parts below
     Q_PROPERTY(bool Running READ running)
     Q_PROPERTY(bool ReadOnly READ readOnly)
@@ -71,6 +72,8 @@ public:
 
     QString plugin() const { return m_pluginId; }
     bool hasService() const;
+    bool canSetSpeeds() const;
+    bool speedsRefused(int mode);
     bool running() const;
     bool readOnly() const;
     double temp() const;

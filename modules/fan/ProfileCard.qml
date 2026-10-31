@@ -7,7 +7,7 @@ import qs.services
 // Fan profiles: built-in + the user's own (kept separately per NBFC config)
 Card {
     id: card
-    title: I18n.t("Profiles")
+    title: Nbfc.canSetSpeeds ? I18n.t("Profiles") : ""
 
     readonly property string cfgId: Nbfc.configId
     readonly property var custom: Settings.profilesOf(cfgId)
@@ -19,6 +19,7 @@ Card {
     property string confirmDelete: ""        // second click needed to delete
 
     StyledText {
+        visible: Nbfc.canSetSpeeds
         Layout.fillWidth: true
         text: card.active !== "" ? I18n.t("Active: %1").arg(FanState.activeName()) : I18n.t("Custom settings (no profile selected)")
         color: Colours.fgDim
@@ -26,6 +27,7 @@ Card {
     }
 
     Flow {
+        visible: Nbfc.canSetSpeeds
         Layout.fillWidth: true
         spacing: 8
 
@@ -142,6 +144,7 @@ Card {
 
     // Save the current settings as a profile
     RowLayout {
+        visible: Nbfc.canSetSpeeds
         Layout.fillWidth: true
         spacing: 8
 
