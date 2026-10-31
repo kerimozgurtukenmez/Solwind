@@ -297,7 +297,7 @@ QString FanState::statusText(double gpu) const
     for (qsizetype i = 0; i < fans.size(); ++i) {
         const FanPlugin::Fan &f = fans[i];
         const int m = m_globalOn ? m_globalSt.mode : (i < m_fanSt.size() ? m_fanSt[i].mode : 0);
-        lines << m_i18n.t(u"Fan %1 (%2): %3 · NBFC %4 · current %5% · target %6%"_s)
+        lines << m_i18n.t(u"Fan %1 (%2): %3 · driver %4 · current %5% · target %6%"_s)
                      .arg(QString::number(i + 1), f.name, mode(m),
                           f.autoControl ? m_i18n.t(u"auto"_s) : m_i18n.t(u"manual"_s),
                           js::toString(QJsonValue(js::round(f.current))), js::toString(QJsonValue(js::round(f.target))));

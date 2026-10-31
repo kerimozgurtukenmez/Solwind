@@ -346,8 +346,8 @@ private slots:
         QCOMPARE(lines.size(), 7);
         QCOMPARE(lines.mid(0, 3), (QStringList{ u"Service: running"_s, u"Config: TestA"_s, u"Profile: custom settings"_s }));
         QVERIFY2(lines[3].startsWith(u"CPU: 50.0°C   GPU: "_s), qPrintable(lines[3]));
-        QCOMPARE(lines.mid(4), (QStringList{ u"Global: off"_s, u"Fan 1 (CPU Fan): Auto · NBFC auto · current 30% · target 30%"_s,
-                                             u"Fan 2 (GPU Fan): Auto · NBFC auto · current 30% · target 30%"_s }));
+        QCOMPARE(lines.mid(4), (QStringList{ u"Global: off"_s, u"Fan 1 (CPU Fan): Auto · driver auto · current 30% · target 30%"_s,
+                                             u"Fan 2 (GPU Fan): Auto · driver auto · current 30% · target 30%"_s }));
         QCOMPARE(call(u"CurrentProfile"_s).arguments().value(0).toString(), u"custom settings"_s);
         QCOMPARE(call(u"BoostStatus"_s).arguments().value(0).toString(), u"Max fan off"_s);
         QCOMPARE(call(u"SetBoost"_s, { qlonglong(15) }).type(), QDBusMessage::ReplyMessage);
@@ -369,7 +369,7 @@ private slots:
         QCOMPARE(call(u"SetFan"_s, { 0, st(1, 0.01) }).type(), QDBusMessage::ReplyMessage);
         QTRY_VERIFY_WITH_TIMEOUT(fanIs(0, false, 1), 6000);
         QTRY_VERIFY_WITH_TIMEOUT(call(u"StatusText"_s).arguments().value(0).toString().split(u'\n').value(5)
-                                     == u"Fan 1 (CPU Fan): Sabit · NBFC elle · anlık %1 · hedef %1"_s, 6000);
+                                     == u"Fan 1 (CPU Fan): Sabit · sürücü elle · anlık %1 · hedef %1"_s, 6000);
         QCOMPARE(call(u"StatusText"_s).arguments().value(0).toString().split(u'\n').value(0), u"Servis: çalışıyor"_s);
         // Profile labels follow the language
         const auto labels = [&] {

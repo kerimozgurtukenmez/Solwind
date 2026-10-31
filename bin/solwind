@@ -85,6 +85,8 @@ Kullanım: solwind [komut]
   plugin update [ad] Kurulu eklentileri katalogdaki commit'e ve bu Solwind'e göre yeniden kur
   plugin remove <ad> Eklentiyi kaldır
   plugin disable <ad> Eklentiyi kapat (silinmez; solwindd yeniden başlayınca yüklemez), enable ile açılır
+  fan-permission [off]
+                     HP fan eklentisi: fan hızını yazma izni (senin kullanıcın için udev kuralı; off kaldırır)
   report             Hata bildirmek için tanı raporu oluştur (ev klasörüne bir metin dosyası)
   quit               Tamamen kapat: pencere ve arka plan servisi (Solwind'in kontrol ettiği fanlar NBFC'ye döner,
                      klavye ışığı seçilen renginde kalır); çalışmıyorsa bir şey yapmaz
@@ -126,6 +128,8 @@ Usage: solwind [command]
                      Remove a plugin
   plugin disable <name>
                      Turn a plugin off without removing it (solwindd doesn't load it when it starts again); enable: on
+  fan-permission [off]
+                     HP fan plugin: permission to write the fan speed (a udev rule for your user; off removes it)
   report             Create a diagnostic report for bug reports (a text file in your home folder)
   quit               Quit completely: the window and the background service (fans driven by Solwind go back to
                      NBFC, the keyboard light stays on its chosen color); does nothing if it isn't running
@@ -399,6 +403,25 @@ case "${1:-}" in
             source) dcall keyboard SetSource s "$3" ;;
             range) dcall keyboard SetRange ii "$3" "$4" ;;
             speed) dcall keyboard SetSpeed i "$3" ;;
+        esac ;;
+    fan-permission)
+        # Only the owner of the hp-wmi driver's three fan files changes, to the user who authenticated (no silent
+        # permissions: nothing runs this but you). Any program of yours can then set the fan speed.
+        rule=/etc/udev/rules.d/91-solwind-fans.rules
+        case "${2:-}" in
+            "") exec pkexec sh -c 'uid=$PKEXEC_UID; case "$uid" in ""|*[!0-9]*) echo "unknown user" >&2; exit 1 ;; esac
+                printf "# Solwind: lets one user set the speed of the hp-wmi fans. Remove it: solwind fan-permission off\n" > "$1.new" &&
+                printf "SUBSYSTEM==\"hwmon\", ACTION==\"add|change\", ATTR{name}==\"hp\", TEST==\"pwm1_enable\", RUN+=\"/bin/chown %s /sys%%p/pwm1 /sys%%p/pwm2 /sys%%p/pwm1_enable\"\n" "$uid" >> "$1.new" &&
+                chmod 644 "$1.new" && mv "$1.new" "$1" && udevadm control --reload-rules &&
+                udevadm trigger --action=change --subsystem-match=hwmon --attr-match=name=hp && udevadm settle' sh "$rule" ;;
+            # (automatic first: without the permission nothing else could hand the fans back)
+            off) exec pkexec sh -c 'rm -f "$1" && udevadm control --reload-rules || exit 1
+                for h in /sys/class/hwmon/hwmon*; do
+                    if [ "$(cat "$h/name" 2>/dev/null)" = hp ] && [ -e "$h/pwm1_enable" ]; then
+                        echo 2 > "$h/pwm1_enable"; chown 0 "$h/pwm1" "$h/pwm2" "$h/pwm1_enable" || exit 1
+                    fi
+                done' sh "$rule" ;;
+            *) usage_error "Usage: solwind fan-permission [off]" "Kullanım: solwind fan-permission [off]" ;;
         esac ;;
     report)
         # Diagnostic report (works without Solwind running): one text file in your home folder

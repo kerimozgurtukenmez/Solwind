@@ -35,6 +35,16 @@ PageBase {
         }
     }
 
+    // A fan plugin without a service (HP) that can't write now says why
+    Group {
+        visible: !Nbfc.noPlugin && !Nbfc.hasService && (!Nbfc.running || Nbfc.readOnly)
+        InfoRow {
+            icon: "error"
+            label: I18n.t("Fan speeds can't be changed now")
+            sub: Nbfc.boostBlocked()
+        }
+    }
+
     // NBFC isn't running: say so first, with the way to start it
     Group {
         visible: Nbfc.hasService && !Nbfc.running

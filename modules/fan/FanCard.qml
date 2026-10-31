@@ -103,6 +103,7 @@ Card {
             wrapMode: Text.WordWrap
             text: parent.cfgCurve
                 ? I18n.t("Uses the NBFC config's curve") + (fan.isGlobal ? " " + I18n.t("(showing Fan 1's)") : "") + " · " + I18n.t("slow-down ~%1°C").arg(parent.cfgCurve.hyst)
+                : !Nbfc.hasService ? I18n.t("The firmware decides the speed.")
                 : (Nbfc.configCurves.length > 0 ? I18n.t("The config defines no threshold table; NBFC uses its own default.") : I18n.t("Uses the curve from the config."))
             color: Colours.fgDim
             font: Tokens.font.label.small

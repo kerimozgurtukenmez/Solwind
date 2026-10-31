@@ -122,7 +122,7 @@ var dict = {
         "on (%1)": "açık (%1)",
         "off": "kapalı",
         "Max fan: on": "Maksimum fan: açık",
-        "Fan %1 (%2): %3 · NBFC %4 · current %5% · target %6%": "Fan %1 (%2): %3 · NBFC %4 · anlık %%5 · hedef %%6",
+        "Fan %1 (%2): %3 · driver %4 · current %5% · target %6%": "Fan %1 (%2): %3 · sürücü %4 · anlık %%5 · hedef %%6",
         "auto": "oto",
         "manual": "elle",
         "Could not write to the keyboard light": "Klavye ışığına yazılamadı",
@@ -380,6 +380,12 @@ var dict = {
         "Can't change %1": "%1 değiştirilemedi",
         "Turned %1 on.": "%1 açıldı.",
         "Turned %1 off.": "%1 kapatıldı.",
+        "Fan speeds can't be changed now": "Fan hızları şu an değiştirilemiyor",
+        "The firmware decides the speed.": "Hızı firmware belirler.",
+        "The hp-wmi driver has no fans here": "hp-wmi sürücüsünde burada fan yok",
+        "The NBFC service is running and drives these fans too. Stop it first: sudo nbfc stop": "NBFC servisi çalışıyor ve bu fanları o da sürüyor. Önce durdur: sudo nbfc stop",
+        "Solwind can't write the fan speed yet. In a terminal: solwind fan-permission": "Solwind fan hızını henüz yazamıyor. Terminalde: solwind fan-permission",
+        "No such fan": "Böyle bir fan yok",
         "Global": "Global"
     }
 }

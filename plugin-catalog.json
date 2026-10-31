@@ -11,6 +11,14 @@
             "fits": { "programs": ["nbfc"] }
         },
         {
+            "id": "HP/hp-wmi-fan",
+            "kind": "fan",
+            "description": "HP Victus and Omen fans through the hp-wmi driver's pwm1 and pwm2, without NBFC",
+            "tested": "HP Victus 16-r0xxx (8BBD, driver patched for the board)",
+            "commit": "271ab204d4b4b830101986ac50685d5f7dcdf5a6",
+            "fits": { "paths": ["/sys/devices/platform/hp-wmi/hwmon"], "vendors": ["HP"] }
+        },
+        {
             "id": "HP/hp-wmi-keyboard",
             "kind": "keyboard",
             "description": "HP single-zone RGB keyboard light (hp::kbd_backlight of the hp-wmi-fan-and-backlight-control module), with effects",
