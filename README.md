@@ -199,6 +199,8 @@ solwind
 
 A plugin installed from a local folder isn't updated by `solwind plugin update`: install it from its folder again.
 
+**Coming from Solwind 0.5 or older:** nothing is built in any more, so `solwind plugin update` has nothing to do the first time: install the [plugins for your laptop](#supported-laptops) instead (`solwind plugin install NBFC/nbfc` for fans through NBFC). Your settings stay. If you had **Start in the background on login** on, run `systemctl --user daemon-reload` once; `make install` reminds you.
+
 **Uninstall:** turn **Start in the background on login** off, then:
 
 ```sh
