@@ -11,7 +11,7 @@ A small background service, **solwindd**, drives the fans and the keyboard light
 > [!WARNING]
 > **This is an early project, use it at your own risk.** It writes fan speeds to your hardware, and a bad setting can make your laptop run hot. I only tested it on my own HP Victus 16-r0xxx (Arch Linux, Hyprland). The MSI and OpenRGB plugins have never run on real hardware.
 >
-> **I accept no responsibility for any damage** to your laptop, your data or anything else, whatever the cause. Solwind comes without any warranty (see sections 15 and 16 of the [license](LICENSE)). If you're not comfortable with that, don't use it.
+> I did everything I could to keep your laptop safe: a safety limit, fans handed back if anything goes wrong, and nothing is written without a reason. But that's still no guarantee. If something breaks, that's on you, not me. Solwind comes without any warranty (see sections 15 and 16 of the [license](LICENSE)).
 
 > [!NOTE]
 > I used AI assistance while building this project. I reviewed parts of the code myself and tested the features my own laptop has before publishing it.
