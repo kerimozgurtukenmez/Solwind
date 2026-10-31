@@ -69,6 +69,20 @@ private slots:
         r.temp(90);
         QTRY_COMPARE(r.sent.count(), 2);
     }
+    void noServiceNoNbfcInTheText()
+    {
+        Rig r;
+        r.p.hasService = false;
+        r.temp(91);
+        QTRY_COMPARE(r.sent.count(), 1);
+        QCOMPARE(r.body(0), u"Safety limit (90°C) exceeded; the fans are on automatic control."_s);
+        Rig ro;
+        ro.p.hasService = false;
+        ro.p.isReadOnly = true;
+        ro.temp(91);
+        QTRY_COMPARE(ro.sent.count(), 1);
+        QCOMPARE(ro.body(0), u"Safety limit (90°C) exceeded; Solwind can't change the fan speed now."_s);
+    }
     void criticalSaysWhatHappens()
     {
         Rig r;

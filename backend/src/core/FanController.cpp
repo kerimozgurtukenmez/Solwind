@@ -31,7 +31,9 @@ double FanController::tempOf(int i) const
 {
     const auto &f = m_plugin.fans();
     const double t = i >= 0 && i < f.size() ? f[i].temp : NaN;
-    return std::isfinite(t) ? t : m_plugin.temp();
+    if (std::isfinite(t)) return t;
+    const double p = m_plugin.temp();
+    return std::isfinite(p) || !cpuTemp ? p : cpuTemp();
 }
 
 double FanController::sourceTemp(int i, const QString &src) const
@@ -80,7 +82,8 @@ void FanController::applyTarget(int idx, const FanSt &st)
         m_lastSent.remove(i);
         m_sentSeq.insert(i, 0);
         m_level.remove(i);                                // the new setting applies immediately
-        if (st.mode == 0) { m_targets.remove(i); markReleasing(i); }
+        m_noTempSince.remove(i);
+        if (st.mode == 0) { m_targets.remove(i); m_hot.remove(i); markReleasing(i); }
         else { m_targets.insert(i, st); m_releasing.remove(i); }
     }
     emit changed();
@@ -103,7 +106,8 @@ void FanController::checkRelease(int i, qint64 t)
     if (r->tries >= 5) {
         if (m_plugin.quiet()) return;                     // an admin action may explain it: wait until it's over
         m_releasing.erase(r);
-        emit releaseFailed(m_i18n.t(u"Fan %1 could not be handed back to NBFC's automatic control"_s).arg(i + 1));
+        emit releaseFailed(m_i18n.t(m_plugin.service() ? u"Fan %1 could not be handed back to NBFC's automatic control"_s
+                                                       : u"Fan %1 could not be handed back to automatic control"_s).arg(i + 1));
         return;
     }
     r->at = t;
@@ -147,8 +151,16 @@ void FanController::control()
         if (m_hot.value(i, false) != wasHot) hotChanged = true;
         if (m_hot.value(i, false)) { pct = 100; m_level.insert(i, 100); }
         else if (st.mode == 1) { pct = st.fixed * 100; m_level.remove(i); }
-        else if (std::isfinite(T)) { pct = curveLevel(i, st, T); m_level.insert(i, pct); }
-        else continue;
+        else if (std::isfinite(T)) { pct = curveLevel(i, st, T); m_level.insert(i, pct); m_noTempSince.remove(i); }
+        else {
+            // No temperature for a curve: a moment is normal (a read in between), for longer the fan can't follow the
+            // heat, so it runs at full speed rather than stay at its last level
+            const qint64 since = m_noTempSince.value(i, -1);
+            if (since < 0 || t < since) { m_noTempSince.insert(i, t); continue; }
+            if (t - since < noTempMs) continue;
+            pct = 100;
+            m_level.insert(i, 100);
+        }
         if (!std::isfinite(pct)) continue;
         const int p = int(std::max(0.0, std::min(100.0, js::round(pct))));
         const auto sent = m_lastSent.constFind(i);
@@ -230,6 +242,7 @@ void FanController::forgetFans()
     m_sentSeq.clear();
     m_level.clear();
     m_hot.clear();
+    m_noTempSince.clear();
     m_releasing.clear();
     for (int k : owned) markReleasing(k);
     if (m_plugin.running() && !boosting()) for (int k : owned) sendAuto(k);

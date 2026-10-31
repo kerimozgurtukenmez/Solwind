@@ -44,6 +44,7 @@ public:
     const FanSt &globalSt() const { return m_globalSt; }
     bool globalOn() const { return m_globalOn; }
     bool restored() const { return m_restored; }
+    QString notReadYet() const;           // the answer while the fans weren't read yet
 
     // Startup and every status read (deferred): the saved settings of the config the fans belong to (F-1..F-4)
     void restore();

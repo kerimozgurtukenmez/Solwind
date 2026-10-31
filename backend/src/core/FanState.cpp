@@ -170,7 +170,16 @@ QList<FanState::ProfileEntry> FanState::allProfiles() const
     return all;
 }
 
-QString FanState::displayName(const ProfileEntry &p) const { return p.builtin ? m_i18n.t(p.label) : p.name; }
+QString FanState::notReadYet() const
+{
+    return m_i18n.t(m_plugin.service() ? u"Fans not read yet (is NBFC running?), try again"_s : u"Fans not read yet, try again"_s);
+}
+
+QString FanState::displayName(const ProfileEntry &p) const
+{
+    if (p.builtin && p.name == u"auto"_s && !m_plugin.service()) return m_i18n.t(u"Auto"_s);   // NBFC's only with NBFC
+    return p.builtin ? m_i18n.t(p.label) : p.name;
+}
 
 // Older versions saved the built-in profiles by their Turkish names (PR-3)
 QString FanState::activeId() const
@@ -256,7 +265,7 @@ FanState::Result FanState::applyByName(const QString &name, bool fromClient)
         for (const ProfileEntry &x : all) if (!x.builtin && x.name == js::trim(name)) { p = &x; break; }
     if (!p) for (const ProfileEntry &x : all) if (namesOf(x).contains(key)) { p = &x; break; }
     if (!p) return { false, true, m_i18n.t(u"Profile not found: %1"_s).arg(name) + u'\n' + profileList() };
-    if (!m_restored) return { false, false, m_i18n.t(u"Fans not read yet (is NBFC running?), try again"_s) };
+    if (!m_restored) return { false, false, notReadYet() };
     if (const QString why = m_plugin.blockedReason(false); !why.isEmpty()) return { false, false, why };
     applyProfile(*p);
     if (fromClient && m_settings.notifyOn(u"profile"_s))
@@ -311,7 +320,7 @@ QString FanState::saveProfile(const QString &raw)
     if (name.isEmpty()) return m_i18n.t(u"A profile needs a name"_s);
     if (name.size() > 32) return m_i18n.t(u"A profile name can have at most 32 characters"_s);   // (UTF-16 units, as cleanName)
     if (reservedName(name)) return m_i18n.t(u"This name belongs to a built-in profile, pick another one."_s);
-    if (!m_restored) return m_i18n.t(u"Fans not read yet (is NBFC running?), try again"_s);
+    if (!m_restored) return notReadYet();
     m_settings.saveProfile(m_plugin.configId(), snapshot(name));
     m_settings.setActive(m_plugin.configId(), name);
     emit changed();

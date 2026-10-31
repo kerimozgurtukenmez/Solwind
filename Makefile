@@ -68,6 +68,11 @@ APPS_NEW := $(if $(wildcard $(APPSDIR)),,1)
 APP_FILES = shell.qml VERSION plugin-catalog.json
 APP_DIRS  = components modules services utils scripts assets
 
+# The HP fan permission (solwind fan-permission), if it was given: the fans on automatic, the files back to root
+RESET_FAN_PERMS = for h in /sys/class/hwmon/hwmon*; do \
+		if [ "$$(cat "$$h/name" 2>/dev/null)" = hp ] && [ -e "$$h/pwm1_enable" ]; then \
+			echo 2 > "$$h/pwm1_enable"; chown 0 "$$h/pwm1" "$$h/pwm2" "$$h/pwm1_enable" || true; fi; done
+
 # The light files back to root (owner root, 0644; kbd_rgb_mode keeps its write-only mode); only as root, for a real
 # system (no DESTDIR). Only files our rule (owner changed) or an older one (0666) touched: a permission another rule
 # gave (a group, root-owned) stays.
@@ -200,7 +205,8 @@ udev:
 
 uninstall-udev:
 	@$(CHECK_PATHS)
-	rm -f $(UDEVDIR)/90-solwind.rules $(UDEVDIR)/90-ccenter.rules
+	@if $(LIVE) && [ -f $(UDEVDIR)/91-solwind-fans.rules ]; then $(RESET_FAN_PERMS); fi
+	rm -f $(UDEVDIR)/90-solwind.rules $(UDEVDIR)/90-ccenter.rules $(UDEVDIR)/91-solwind-fans.rules
 	@if $(LIVE); then for f in $(OLD_RULES); do \
 		if [ -f "$$f" ] && head -n 1 "$$f" | grep -q '^# Ccenter: '; then echo "rm -f $$f"; rm -f "$$f"; fi; done; fi
 	@if $(LIVE); then command -v udevadm >/dev/null && udevadm control --reload-rules; $(RESET_PERMS); fi

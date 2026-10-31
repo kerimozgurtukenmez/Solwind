@@ -4,7 +4,7 @@ import Caelestia.Config
 import qs.components
 import qs.services
 
-// The NBFC service: state with start/stop/restart, start on boot, read-only mode, the safety limit
+// The NBFC service: state with start/stop/restart, start on boot, read-only mode
 Group {
     id: svc
     title: I18n.t("NBFC service")
@@ -57,12 +57,5 @@ Group {
         controlled: true
         checked: Nbfc.readOnly
         onToggled: v => Nbfc.setReadOnly(v)
-    }
-    SliderRow {
-        icon: "local_fire_department"
-        label: I18n.t("Safety limit (Fixed/Curve fans go to 100% above it)")
-        value: (Nbfc.safety - 70) / 30
-        readout: Math.round(Nbfc.safety) + "°C"
-        onMoved: v => { Nbfc.safety = Math.round(70 + v * 30); Settings.setSafety(Nbfc.safety) }
     }
 }

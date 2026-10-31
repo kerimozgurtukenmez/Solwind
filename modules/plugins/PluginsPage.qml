@@ -13,7 +13,7 @@ PageBase {
 
     // Each time the page is opened: `solwind plugin` may have changed something meanwhile
     onVisibleChanged: if (visible) Plugins.refresh()
-    Component.onCompleted: Plugins.refresh()
+    Component.onCompleted: if (visible) Plugins.refresh()
 
     readonly property string query: search.text.trim().toLowerCase()
     function matches(...texts) { return query === "" || texts.some(t => t.toLowerCase().includes(query)) }
@@ -22,7 +22,7 @@ PageBase {
         InfoRow {
             icon: "extension"
             label: I18n.t("Only the plugins you install are downloaded")
-            sub: I18n.t("Each comes from Solwind's catalog at a fixed version (a commit of the Solwind-plugins repository, checked by git), is built on this computer and goes into your home folder. No password is needed.")
+            sub: I18n.t("Each comes from Solwind's catalog at a fixed version (a commit of the Solwind-plugins repository, checked by git), is built on this computer (its build steps run here, as you) and goes into your home folder. No password is needed.")
         }
     }
 
@@ -36,6 +36,7 @@ PageBase {
             label: I18n.t("Restart Solwind to load them")
             sub: I18n.t("The background service starts again; this window closes and opens again")
             trailing: "play_arrow"
+            enabled: !Plugins.restarting
             onClicked: Plugins.restart()
         }
         InfoRow {
@@ -101,7 +102,7 @@ PageBase {
                 required property var modelData
                 visible: page.matches(modelData.id, modelData.description)
                 readonly property string st: modelData.state
-                readonly property bool mine: Plugins.busyId === modelData.id || (Plugins.busyId === "*" && st !== "none")
+                readonly property bool mine: Plugins.busyId === modelData.id
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: Tokens.spacing.medium
@@ -146,7 +147,7 @@ PageBase {
                         }
                         StyledText {
                             Layout.alignment: Qt.AlignHCenter
-                            text: row.modelData.enabled ? I18n.t("Active") : I18n.t("Turned off")
+                            text: !row.modelData.enabled ? I18n.t("Turned off") : row.st === "sdk" ? I18n.t("Not loaded") : I18n.t("Active")
                             color: Colours.fgDim
                             font: Tokens.font.label.small
                         }
@@ -168,6 +169,10 @@ PageBase {
                     }
                 }
             }
+        }
+        GroupItem {
+            visible: Plugins.loaded && page.query !== "" && !Plugins.plugins.concat(Plugins.others).some(p => page.matches(p.id ?? p, p.description ?? ""))
+            StyledText { text: I18n.t("No plugin found"); color: Colours.fgDim; font: Tokens.font.body.medium }
         }
         Repeater {
             model: Plugins.others

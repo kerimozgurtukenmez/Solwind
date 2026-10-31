@@ -298,7 +298,7 @@ void FansApi::SetFan(int fan, const QVariantMap &raw)
     QString why;
     const auto st = stFromClient(raw, &why);
     if (!st) return usage(why);
-    if (!m_state.restored()) return failed(m_i18n.t(u"Fans not read yet (is NBFC running?), try again"_s));
+    if (!m_state.restored()) return failed(m_state.notReadYet());
     if (fan < 0 || fan >= m_state.fanSt().size()) return usage(u"no fan %1"_s.arg(fan));
     if (const QString b = m_fan.blockedReason(false); !b.isEmpty()) return failed(b);
     m_state.setFan(fan, *st);
@@ -310,7 +310,7 @@ void FansApi::SetGlobal(const QVariantMap &raw)
     QString why;
     const auto st = stFromClient(raw, &why);
     if (!st) return usage(why);
-    if (!m_state.restored()) return failed(m_i18n.t(u"Fans not read yet (is NBFC running?), try again"_s));
+    if (!m_state.restored()) return failed(m_state.notReadYet());
     if (const QString b = m_fan.blockedReason(false); !b.isEmpty()) return failed(b);
     m_state.setGlobal(*st);
 }
@@ -318,7 +318,7 @@ void FansApi::SetGlobal(const QVariantMap &raw)
 void FansApi::SetGlobalOn(bool on)
 {
     if (changeRefused()) return;
-    if (!m_state.restored()) return failed(m_i18n.t(u"Fans not read yet (is NBFC running?), try again"_s));
+    if (!m_state.restored()) return failed(m_state.notReadYet());
     if (const QString b = m_fan.blockedReason(false); !b.isEmpty()) return failed(b);
     m_state.setGlobalOn(on);
 }
@@ -335,7 +335,7 @@ QString FansApi::ApplyProfile(const QString &name, bool notify)
 void FansApi::SaveProfile(const QString &name)
 {
     if (changeRefused()) return;
-    if (!m_state.restored()) return failed(m_i18n.t(u"Fans not read yet (is NBFC running?), try again"_s));
+    if (!m_state.restored()) return failed(m_state.notReadYet());
     if (const QString why = m_state.saveProfile(name); !why.isEmpty()) usage(why);
 }
 

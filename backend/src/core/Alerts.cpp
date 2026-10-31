@@ -25,12 +25,14 @@ Alerts::Alerts(FanPlugin &plugin, FanController &control, const I18n &i18n, Noti
         const bool owned = !m_control.targets().isEmpty();
         const QString what = m_plugin.id().isEmpty()
             ? m_i18n.t(u"Safety limit (%1°C) exceeded; no fan plugin is installed, so Solwind can't change the fan speed."_s)
+            : !m_plugin.running() || m_plugin.readOnly() ? (!m_plugin.service()
+                ? m_i18n.t(u"Safety limit (%1°C) exceeded; Solwind can't change the fan speed now."_s)
             : !m_plugin.running()
-            ? m_i18n.t(u"Safety limit (%1°C) exceeded; NBFC isn't running, so Solwind can't change the fan speed."_s)
-            : m_plugin.readOnly()
-            ? m_i18n.t(u"Safety limit (%1°C) exceeded; NBFC is in read-only mode, so fan speeds can't be set."_s)
+                ? m_i18n.t(u"Safety limit (%1°C) exceeded; NBFC isn't running, so Solwind can't change the fan speed."_s)
+                : m_i18n.t(u"Safety limit (%1°C) exceeded; NBFC is in read-only mode, so fan speeds can't be set."_s))
             : owned ? m_i18n.t(u"Safety limit (%1°C) exceeded; fans driven by Solwind were set to 100%."_s)
-                    : m_i18n.t(u"Safety limit (%1°C) exceeded; the fans are under NBFC control."_s);
+            : m_plugin.service() ? m_i18n.t(u"Safety limit (%1°C) exceeded; the fans are under NBFC control."_s)
+                                 : m_i18n.t(u"Safety limit (%1°C) exceeded; the fans are on automatic control."_s);
         m_notifier.send(m_i18n.t(u"Critical temperature: %1°C (%2)"_s).arg(qint64(js::round(m_critTemp))).arg(m_critWho),
                         what.arg(m_control.safety()), Notifier::Critical, u"dialog-warning"_s);
     });
@@ -51,7 +53,7 @@ Alerts::Alerts(FanPlugin &plugin, FanController &control, const I18n &i18n, Noti
         const qint64 t = now();
         if (t >= m_lastRelease && t - m_lastRelease < 300000) return;
         m_lastRelease = t;
-        m_notifier.send(m_i18n.t(u"Could not hand a fan back to NBFC"_s), msg, Notifier::Critical, u"dialog-error"_s);
+        m_notifier.send(m_i18n.t(m_plugin.service() ? u"Could not hand a fan back to NBFC"_s : u"Could not hand a fan back to automatic control"_s), msg, Notifier::Critical, u"dialog-error"_s);
     });
     connect(&m_control, &FanController::boostEnded, this, [this] {
         m_notifier.send(m_i18n.t(u"Max fan ended"_s), m_i18n.t(u"The fans went back to their previous settings."_s),

@@ -14,7 +14,7 @@ Singleton {
     property var others: []                  // installed, not in the catalog
     property bool loaded: false
     property string loadError: ""
-    property string busyId: ""               // the plugin an action runs for ("*" = update all)
+    property string busyId: ""               // the plugin an action runs for
     readonly property bool busy: busyId !== ""
     property string message: ""              // the last action's result (its last lines)
     property bool messageError: false
@@ -24,7 +24,7 @@ Singleton {
         cmd.go(["env", "SOLWIND_LANG=" + I18n.lang, root.tool, "--catalog", root.catalog].concat(args), done)
     }
     function refresh() {
-        if (!tool) { loadError = I18n.t("solwind-plugin isn't there (start Solwind with the solwind command)"); return }
+        if (!tool) { loaded = true; loadError = I18n.t("solwind-plugin isn't there (start Solwind with the solwind command)"); return }
         lister.go(["env", "SOLWIND_LANG=" + I18n.lang, root.tool, "--catalog", root.catalog, "list", "--json"], (code, out, err) => {
             root.loaded = true
             try {
@@ -51,17 +51,18 @@ Singleton {
         })
     }
     function install(id) { act(id, ["install", id]) }
-    function update() { act("*", ["update"]) }
     function remove(id) { act(id, ["remove", id]) }
     function setEnabled(id, on) { act(id, [on ? "enable" : "disable", id]) }
     // solwindd loads plugins when it starts: the service again, and this window back once it is up (both go: the
     // window app is part of the service). Run outside the service, so it isn't stopped with it.
     readonly property bool canRestart: Autostart.ours
+    property bool restarting: false
     function restart() {
-        if (!canRestart) return
+        if (!canRestart || restarting) return
+        restarting = true
         restarter.go(["systemd-run", "--user", "--quiet", "--collect", "sh", "-c",
                       'systemctl --user restart solwind.service && sleep 2 && exec "$0" open',
-                      Quickshell.env("SOLWIND_SELF") || "solwind"], () => {})
+                      Quickshell.env("SOLWIND_SELF") || "solwind"], code => { if (code !== 0) root.restarting = false })
     }
 
     Cmd { id: cmd; timeout: 1800000 }

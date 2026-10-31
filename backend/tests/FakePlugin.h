@@ -4,6 +4,7 @@
 // pending until the test finishes it (or `autoFinish` answers it at once), reads are simulated with read().
 
 #include "plugins/FanPlugin.h"
+#include "plugins/FanService.h"
 
 #include <QStringList>
 
@@ -15,6 +16,31 @@ public:
         QString what;            // "spd 0 40", "auto 1", "auto all", "release"
         Done done;
     };
+
+    // NBFC's kind of plugin, with a service; off: a plugin without one (HP's), and the core's texts don't name NBFC
+    struct FakeService : FanService {
+        bool bootEnabled() const override { return false; }
+        QString message() const override { return QString(); }
+        bool messageError() const override { return false; }
+        bool adminBusy() const override { return false; }
+        void startService() override {}
+        void stopService() override {}
+        void restartService(bool) override {}
+        void setReadOnly(bool) override {}
+        void setBoot(bool) override {}
+        QString fileConfigId() const override { return QString(); }
+        bool noConfig() const override { return false; }
+        bool configPending() const override { return false; }
+        QStringList configs() const override { return {}; }
+        QVariantMap configList() const override { return {}; }
+        QList<std::optional<Curve>> configCurves() const override { return {}; }
+        QStringList recommended() const override { return {}; }
+        void recommend(std::function<void(bool, const QStringList &)>) override {}
+        void applyConfig(const QString &) override {}
+    } fakeService;
+    bool hasService = true;
+    FanService *service() override { return hasService ? &fakeService : nullptr; }
+    const FanService *service() const override { return hasService ? &fakeService : nullptr; }
 
     Trust trustLevel = Trust::WriteTested;
     bool isRunning = true, isReadOnly = false, isHolding = false, isQuiet = false;

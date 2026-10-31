@@ -5,6 +5,7 @@
 #include "Settings.h"
 
 #include <QDateTime>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonObject>
 
@@ -601,9 +602,27 @@ const QString resetPerms =
     u"for f in /sys/devices/platform/hp-wmi/rgb_zones/zone*; do rp \"$f\" m; done; "_s;
 } // namespace
 
+// The grant runs the checker and reads the rule as root: from root's files only, not from a source folder any program
+// of the user can change. (Tests: their fake pkexec runs as the user, on a fake udev root.)
+bool KeyboardController::permissionFilesSafe() const
+{
+    if (!m_paths.udevRoot.isEmpty()) return true;
+    const QFile::Permissions others = QFile::WriteGroup | QFile::WriteOther;
+    for (const QString &f : { m_paths.appDir + u"/dist/90-solwind.rules"_s, m_paths.appDir + u"/scripts/kbd-rule-check.sh"_s }) {
+        for (const QFileInfo &i : { QFileInfo(f), QFileInfo(QFileInfo(f).path()), QFileInfo(m_paths.appDir) })
+            if (!i.exists() || i.isSymLink() || i.ownerId() != 0 || (i.permissions() & others)) return false;
+    }
+    return true;
+}
+
 void KeyboardController::grantPermission()
 {
     if (!m_control || m_perm.busy()) return;
+    if (!permissionFilesSafe()) {
+        m_error = m_i18n.t(u"Permission can only be given from an installed Solwind. From a source folder: sudo make udev"_s);
+        emit changed();
+        return;
+    }
     // While the files change hands a running effect must not write, or it hits "Permission denied" in between.
     // Pause it; permDone() resumes it once the new state has been read.
     if (effectActive()) m_paused = true;

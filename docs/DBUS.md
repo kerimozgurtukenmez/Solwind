@@ -39,7 +39,7 @@ Signatures below are D-Bus types: `s` string, `b` boolean, `i` int32, `x` int64,
 | `SetNotify` | s key, b on | key: `enabled` or `profile` |
 | `SetLanguage` | s | `tr`, `en`, or `""` |
 | `SetUi` | s key, b on | key: `tray` |
-| `Quit` | | Quits cleanly: fans back to NBFC's automatic control, the keyboard light on its static color. The answer comes first. |
+| `Quit` | | Quits cleanly: fans back to automatic control, the keyboard light on its static color. The answer comes first. |
 
 ## `/solwind/Fans` — `solwind.Fans`
 

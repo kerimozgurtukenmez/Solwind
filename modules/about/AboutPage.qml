@@ -25,7 +25,7 @@ PageBase {
         InfoRow {
             icon: "smart_toy"
             label: I18n.t("Built with AI assistance")
-            sub: I18n.t("I reviewed parts of the code myself and tested every feature on my own laptop before publishing it.")
+            sub: I18n.t("I reviewed parts of the code myself and tested the features my own laptop has before publishing it.")
         }
     }
     Group {

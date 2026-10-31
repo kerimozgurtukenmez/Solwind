@@ -27,7 +27,7 @@ Singleton {
     function uiLang() { const l = up ? (d.SavedLanguage ?? "") : ""; return ["tr", "en"].indexOf(l) >= 0 ? l : "" }
     function setUiLang(l) { Daemon.send("daemon", "SetLanguage", "s", [l]) }
 
-    // The safety limit (°C), NaN if unknown; ServiceCard sets it while its slider moves
+    // The safety limit (°C), NaN if unknown; the Fan page sets it while its slider moves
     function safety() { return up && typeof Solwind.fans.Safety === "number" ? Solwind.fans.Safety : NaN }
     function setSafety(v) {
         Nbfc.holdSafety()

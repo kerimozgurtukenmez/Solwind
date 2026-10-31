@@ -74,7 +74,8 @@ PageBase {
             Layout.fillWidth: true
             horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.WordWrap
-            text: I18n.t("No fan information. The service may not be running or no config is selected.")
+            text: Nbfc.hasService ? I18n.t("No fan information. The service may not be running or no config is selected.")
+                                  : I18n.t("No fan information.")
             color: Colours.fgDim
             font: Tokens.font.body.small
         }
@@ -135,11 +136,33 @@ PageBase {
             ServiceCard {}
             ConfigCard {}
         }
-        ProfileCard {
-            visible: Nbfc.fans.length > 0
+        ColumnLayout {
+            visible: !Nbfc.noPlugin
             Layout.alignment: Qt.AlignTop
-            enabled: Nbfc.running && !Nbfc.readOnly
-            opacity: enabled ? 1 : 0.4
+            Layout.fillWidth: true
+            Layout.preferredWidth: 1
+            spacing: Tokens.spacing.largeIncreased
+            ProfileCard {
+                visible: Nbfc.fans.length > 0
+                enabled: Nbfc.running && !Nbfc.readOnly
+                opacity: enabled ? 1 : 0.4
+            }
+            // Every fan plugin's: the core applies it, whatever drives the fans
+            Group {
+                SliderRow {
+                    id: safetyRow
+                    icon: "local_fire_department"
+                    label: I18n.t("Safety limit (Fixed/Curve fans go to 100% above it)")
+                    value: (Nbfc.safety - 70) / 30
+                    readout: Math.round(70 + value * 30) + "°C"
+                    onMoved: v => { Nbfc.safety = Math.round(70 + v * 30); Settings.setSafety(Nbfc.safety) }
+                }
+                // The slider loses its binding once dragged
+                Connections {
+                    target: Nbfc
+                    function onSafetyChanged() { safetyRow.value = (Nbfc.safety - 70) / 30 }
+                }
+            }
         }
     }
 }

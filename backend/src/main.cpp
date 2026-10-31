@@ -128,6 +128,7 @@ int main(int argc, char **argv)
     FanPlugin &fan = fanPlugin ? *fanPlugin : noFan.emplace(host);
     FanController fans(fan, i18n);
     fans.gpuTemp = [&] { return sensors.state().gpu(); };
+    fans.cpuTemp = [&] { return sensors.state().cpu(); };
     fans.setSafety(std::isfinite(settings.safety()) ? settings.safety() : 90);
     FanState fanState(fan, fans, settings, i18n, notifier);
     // Notifications only in control mode: in observe mode the QML app next to it sends its own
@@ -210,10 +211,13 @@ int main(int argc, char **argv)
             if (r.handBackFailed) {
                 // Nothing watches the temperature after this but the config's critical limit: said even with
                 // notifications off, and in the log
-                std::fprintf(stderr, "[solwind] the fans could not be handed back to NBFC's automatic control (%s); they may "
-                                     "stay at a fixed speed. Run `nbfc set -a` or open Solwind.\n", qPrintable(r.error));
+                const bool nbfc = fan.service() != nullptr;
+                std::fprintf(stderr, "[solwind] the fans could not be handed back to automatic control (%s); they may "
+                                     "stay at a fixed speed. %s\n", qPrintable(r.error),
+                             nbfc ? "Run `nbfc set -a` or open Solwind." : "Open Solwind, or restart the computer.");
                 notifier.send(i18n.t(u"Fans may stay at a fixed speed"_s),
-                              i18n.t(u"Solwind could not hand the fans back to NBFC's automatic control (%1). Run `nbfc set -a` or open Solwind."_s).arg(r.error),
+                              i18n.t(nbfc ? u"Solwind could not hand the fans back to NBFC's automatic control (%1). Run `nbfc set -a` or open Solwind."_s
+                                   : u"Solwind could not hand the fans back to automatic control (%1). Open Solwind, or restart the computer."_s).arg(r.error),
                               Notifier::Critical, u"dialog-warning"_s, true, true);
             }
             if (r.fixedSpeedsSaved) {

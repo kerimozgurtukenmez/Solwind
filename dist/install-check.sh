@@ -241,8 +241,8 @@ installed)
     ;;
 removed)
     echo
-    t "Solwind removed. Your settings stay in $config/solwind; delete it by hand if you want." \
-      "Solwind kaldırıldı. Ayarların $config/solwind klasöründe duruyor; istersen elle sil."
+    t "Solwind removed. Your settings stay in $config/solwind, your plugins in ~/.local/share/solwind; delete them by hand if you want." \
+      "Solwind kaldırıldı. Ayarların $config/solwind, eklentilerin ~/.local/share/solwind klasöründe duruyor; istersen elle sil."
     ;;
 esac
 exit 0

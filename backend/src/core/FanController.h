@@ -22,6 +22,7 @@ public:
     FanController(FanPlugin &plugin, const I18n &i18n, QObject *parent = nullptr);
 
     std::function<double()> gpuTemp;      // the discrete GPU's temperature (NaN while asleep / absent)
+    std::function<double()> cpuTemp;      // the kernel's CPU temperature, when the plugin reports none (NaN if unknown)
     std::function<qint64()> now;          // the clock (tests)
 
     // ---------- settings ----------
@@ -99,6 +100,8 @@ private:
     QMap<int, double> m_sentSeq;          // poll number when the driver took the last speed; +inf while on the way
     QMap<int, double> m_level;            // current level of a Curve fan (%)
     QMap<int, bool> m_hot;
+    QMap<int, qint64> m_noTempSince;      // since when a Curve fan has no temperature
+    static constexpr qint64 noTempMs = 15000;
     QMap<int, Release> m_releasing;       // handed back, not confirmed yet
     qint64 m_boostUntil = 0;
     bool m_quitting = false;

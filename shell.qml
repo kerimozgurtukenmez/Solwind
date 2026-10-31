@@ -43,7 +43,7 @@ ShellRoot {
             readonly property bool narrow: width < 720
             readonly property bool compact: narrow || root.navFolded
             readonly property var pages: [
-                { icon: "mode_fan", label: I18n.t("Fan control"), sub: I18n.t("NBFC · speed and curves") },
+                { icon: "mode_fan", label: I18n.t("Fan control"), sub: Nbfc.hasService ? I18n.t("NBFC · speed and curves") : I18n.t("Speed and curves") },
                 { icon: "keyboard", label: I18n.t("Keyboard"), sub: I18n.t("RGB · color and brightness") },
                 { icon: "settings", label: I18n.t("Settings"), sub: I18n.t("Language and notifications") },
                 { icon: "extension", label: I18n.t("Plugins"), sub: I18n.t("Install and update") }
@@ -141,8 +141,27 @@ ShellRoot {
                 radius: Tokens.rounding.large
                 color: Colours.surfaceLow
 
+                // The navigation's chips don't fit a folded navigation: what must not go unseen is said here then
+                Rectangle {
+                    id: notice
+                    visible: win.compact && (Daemon.versionMismatch || Daemon.observe)
+                    anchors { top: parent.top; left: parent.left; right: parent.right; margins: Tokens.padding.medium }
+                    height: noticeText.implicitHeight + Tokens.padding.medium * 2
+                    radius: Tokens.rounding.medium
+                    color: Colours.surfaceHigh
+                    StyledText {
+                        id: noticeText
+                        anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; margins: Tokens.padding.large }
+                        wrapMode: Text.WordWrap
+                        text: [Daemon.observe ? I18n.t("Observe mode (read only)") : "", Daemon.versionMismatch ? I18n.t("Updated: restart Solwind") : ""]
+                            .filter(x => x !== "").join(" · ")
+                        color: Colours.warning
+                        font: Tokens.font.label.medium
+                    }
+                }
                 StackLayout {
-                    anchors { fill: parent; margins: Tokens.padding.extraLarge; bottomMargin: 0 }
+                    anchors { fill: parent; margins: Tokens.padding.extraLarge; bottomMargin: 0
+                              topMargin: notice.visible ? notice.height + Tokens.padding.large : Tokens.padding.extraLarge }
                     // Without solwindd there is nothing to show or change (only the settings page's quit / report,
                     // the plugins and About, which don't need it)
                     visible: Daemon.connected || root.tab >= 2

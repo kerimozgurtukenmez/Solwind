@@ -13,6 +13,8 @@ PageBase {
     Group {
         title: I18n.t("Language")
         GroupItem {
+            enabled: Daemon.connected
+            opacity: enabled ? 1 : 0.5
             RowLayout {
                 Layout.fillWidth: true
                 spacing: Tokens.spacing.medium
@@ -55,11 +57,12 @@ PageBase {
             sub: I18n.t("Icon in the bar: click to show/hide, hover for profiles, max fan, quit")
             controlled: true
             checked: Tray.enabled
+            enabled: Daemon.connected
             onToggled: v => Settings.setUi("tray", v)
         }
         ButtonRow {
             icon: "power_settings_new"
-            label: I18n.t("Quit (fans go back to NBFC)")
+            label: Nbfc.hasService || Nbfc.noPlugin ? I18n.t("Quit (fans go back to NBFC)") : I18n.t("Quit (fans go back to automatic)")
             sub: I18n.t("Closing the window keeps Solwind's background service running (it drives the fans). To open the window again: the app menu or solwind")
             trailing: ""
             onClicked: Nbfc.releaseAndQuit()
@@ -78,9 +81,11 @@ PageBase {
         ToggleRow {
             icon: "notifications"
             label: I18n.t("Notifications")
-            sub: I18n.t("Critical temperature, NBFC service stopped, fan speed could not be set, max fan ended")
+            sub: Nbfc.hasService ? I18n.t("Critical temperature, NBFC service stopped, fan speed could not be set, max fan ended")
+                                 : I18n.t("Critical temperature, fan speed could not be set, max fan ended")
             controlled: true
             checked: Notify.enabled
+            enabled: Daemon.connected
             onToggled: v => Settings.setNotify("enabled", v)
         }
         ToggleRow {
@@ -89,7 +94,7 @@ PageBase {
             sub: I18n.t("When the profile is changed from the terminal or a keybind")
             controlled: true
             checked: Notify.profiles
-            enabled: Notify.enabled
+            enabled: Notify.enabled && Daemon.connected
             onToggled: v => Settings.setNotify("profile", v)
         }
         ButtonRow {

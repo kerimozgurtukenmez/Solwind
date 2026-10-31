@@ -94,6 +94,7 @@ public:
     void setRange(double lo, double hi);
     void grantPermission();                               // K-34, K-36
     void revokePermission();                              // K-35, K-36
+    bool permissionFilesSafe() const;                     // grant only runs files nobody else can have changed
     QStringList permissionCommand(bool grant) const;      // the pkexec command line (also compared with the QML's)
     void flushSaves();
     // Before quitting: back to the chosen static colour, pending writes done (K-25); then done (also at once).

@@ -5,33 +5,29 @@ A small control center for laptops: **fan control** and **keyboard lighting**, w
 It has two parts: **solwindd**, a small background service (C++/Qt) that drives the fans and the keyboard light, and the **window**, which only shows and changes what solwindd does. The fans don't need the window; the terminal commands and [your own tools](docs/DBUS.md) talk to solwindd too.
 
 > [!NOTE]
-> I used AI assistance while building this project. I reviewed parts of the code myself and tested every feature on my own laptop before publishing it.
+> I used AI assistance while building this project. I reviewed parts of the code myself and tested the features my own laptop has before publishing it.
 
 > [!WARNING]
 > **This is an early project, use it at your own risk.**
 >
 > - I've only tested it on my own **HP Victus 16-r0xxx** (Arch Linux, Hyprland). Other models and brands may not work.
-> - The fan part **writes fan speeds to your hardware** through NBFC. A bad setting can make your laptop run hot, so keep an eye on the temperatures.
-> - If solwindd crashes, its systemd service hands the fans back (with the NBFC plugin: to NBFC) and starts it again. `nbfc set -a` gives the fans back by hand.
+> - The fan part **writes fan speeds to your hardware**, through NBFC or the HP driver. A bad setting can make your laptop run hot, so keep an eye on the temperatures.
+> - If solwindd crashes, its systemd service hands the fans back to automatic control and starts it again. By hand: `nbfc set -a` with NBFC, `solwind fan-permission off` with the HP plugin.
 
 ## Screenshots
 
-| Fan control | Curve editor | Keyboard |
+| Fan control | Keyboard | Plugins |
 |---|---|---|
-| ![Fan control](docs/screenshots/fan.png) | ![Curve editor](docs/screenshots/curve.png) | ![Keyboard lighting](docs/screenshots/keyboard.png) |
+| ![Fan control](docs/screenshots/fan.png) | ![Keyboard lighting](docs/screenshots/keyboard.png) | ![Plugins](docs/screenshots/plugins.png) |
 
-Colors follow your Caelestia theme:
-
-| Fan control | Keyboard |
-|---|---|
-| ![Fan control, another theme](docs/screenshots/fan-theme2.png) | ![Keyboard, another theme](docs/screenshots/keyboard-theme2.png) |
+Colors follow your Caelestia theme. A narrow window shows everything in one column.
 
 ## Features
 
-**Fans** (through [NBFC-Linux](https://github.com/nbfc-linux/nbfc-linux), the `NBFC/nbfc` plugin):
-- Per fan: **Auto** (NBFC decides), **Fixed** or **Curve** (following the CPU, the GPU or the hotter one)
+**Fans** (through [NBFC-Linux](https://github.com/nbfc-linux/nbfc-linux) with the `NBFC/nbfc` plugin, or the HP driver with `HP/hp-wmi-fan`):
+- Per fan: **Auto** (NBFC or the firmware decides), **Fixed** or **Curve** (following the CPU, the GPU or the hotter one)
 - Curve editor, profiles (Quiet, Balanced, Performance and your own), max fan button, a 10 minute graph
-- Speeds up right away, slows down gently. Above 90 °C every fan it controls goes to 100%
+- Speeds up right away, slows down gently. Above the safety limit (90 °C unless you change it) every fan it controls goes to 100%
 - NBFC service controls and config picker, notifications, tray icon
 
 **Keyboard** (a plugin per kind of light):
@@ -66,7 +62,7 @@ cd hp-wmi-fan-and-backlight-control
 make install-arch          # Arch (DKMS package); other distros: make && sudo make install-dkms
 ```
 
-Reboot, then `ls /sys/class/leds | grep hp::` should list the light. Remove older copies of the module first (`dkms status`). Undo on Arch: `sudo pacman -R hp-wmi-fan-and-backlight-control-dkms`. Solwind never uses the module's fan controls.
+Reboot, then `ls /sys/class/leds | grep hp::` should list the light. Remove older copies of the module first (`dkms status`). Undo on Arch: `sudo pacman -R hp-wmi-fan-and-backlight-control-dkms`. Only the `HP/hp-wmi-fan` plugin uses the module's fan controls.
 
 ## Installation
 
@@ -77,7 +73,7 @@ Reboot, then `ls /sys/class/leds | grep hp::` should list the light. Remove olde
 | [Quickshell](https://quickshell.org) 0.3.x | `quickshell` / `quickshell-git` (AUR) |
 | [Caelestia shell](https://github.com/caelestia-dots/shell) (Solwind won't start without it) | `caelestia-shell` (AUR) |
 | Material Symbols font | `ttf-material-symbols-variable` |
-| [NBFC-Linux](https://github.com/nbfc-linux/nbfc-linux) with a config for your laptop (fans) | `nbfc-linux` (AUR) |
+| [NBFC-Linux](https://github.com/nbfc-linux/nbfc-linux) with a config for your laptop (fans, unless you use the HP fan plugin) | `nbfc-linux` (AUR) |
 | A polkit agent (password dialogs) | e.g. `hyprpolkitagent` |
 | Optional: tray icon, NVIDIA temperature, GPU names | `python-gobject`, `nvidia-utils`, `pciutils` |
 | To build solwindd and its plugins: CMake, Qt 6 (base and declarative, 6.5 or newer; I use 6.12), a C++20 compiler; git (plugins are downloaded with it) | `cmake`, `qt6-base`, `qt6-declarative`, `base-devel`, `git` |
@@ -97,6 +93,24 @@ sudo nbfc restart && sudo systemctl enable nbfc_service
 ```
 
 If no config fits, don't force one. The keyboard part works without NBFC.
+
+**HP fans without NBFC:** `HP/hp-wmi-fan` drives the fans through the same module's `pwm1` and `pwm2`, on the boards the module opens those files on. No NBFC, no config, and the two fans really run at their own speeds. I tested it on one board only (8BBD, with the module patched for that board, since the board isn't on its list). If your firmware ignores the command the fans just stay on automatic.
+
+```sh
+solwind plugin disable NBFC/nbfc           # if you had it: the NBFC plugin comes first
+solwind quit                               # hands the fans back while NBFC still runs
+sudo nbfc stop                             # both can't drive the same fans
+sudo systemctl disable nbfc_service
+solwind plugin install HP/hp-wmi-fan
+solwind fan-permission                     # lets your user write the fan speed
+solwind
+```
+
+Things that work differently from NBFC:
+
+- The driver has one mode for both fans. A fan on Auto next to a Fixed or Curve fan runs at that fan's speed; real automatic control needs both on Auto.
+- The lowest speed is about 2000 RPM, so 0% doesn't stop the fans. Only automatic control can.
+- Fan settings are kept apart from NBFC's. Back to NBFC: `solwind quit`, `solwind fan-permission off`, `solwind plugin remove HP/hp-wmi-fan`, `solwind plugin enable NBFC/nbfc`, `sudo systemctl enable --now nbfc_service`, `solwind`.
 
 ### Install
 
@@ -135,6 +149,7 @@ Solwind itself only reads the temperatures. What it drives comes from plugins, a
 solwind plugins                            # every plugin, which are installed, which fit this computer
 solwind plugin install NBFC/nbfc           # fans through NBFC
 solwind plugin install HP/hp-wmi-keyboard  # an HP single-zone RGB keyboard (see the table above for the others)
+solwind plugin install HP/hp-wmi-fan       # HP fans without NBFC (see HP laptops)
 solwind quit; solwind                      # solwindd loads plugins when it starts
 ```
 
@@ -147,12 +162,13 @@ solwind quit; solwind                      # solwindd loads plugins when it star
 ### Permissions
 
 - **Keyboard light (optional):** your user needs write access to the light's files. Use **Grant permission** on the Keyboard page (or `sudo make udev`); **Remove permission** undoes it. Only your user gets access.
+- **HP fans (only with `HP/hp-wmi-fan`):** `solwind fan-permission` adds `/etc/udev/rules.d/91-solwind-fans.rules`, which gives your user the driver's three fan files. Any program of yours can then set the fan speed. `solwind fan-permission off` removes it and puts the fans on automatic.
 - **NBFC service actions** (start, stop, applying a config) ask for your password every time. Setting fan speeds doesn't.
 
 ## Usage
 
 - `solwind` (or the menu entry) starts solwindd if it isn't running and opens the window.
-- Closing the window doesn't stop solwindd, it keeps controlling the fans. Quit everything with **Quit** in Settings, the tray menu or `solwind quit`; the fans go back to NBFC and the keyboard stays on its chosen color.
+- Closing the window doesn't stop solwindd, it keeps controlling the fans. Quit everything with **Quit** in Settings, the tray menu or `solwind quit`; the fans go back to automatic control and the keyboard stays on its chosen color.
 - **Start in the background on login** is a switch in the app (it turns the systemd user service `solwind.service` on). If solwindd crashes, systemd hands the fans back the way the fan plugin in use said when it started (NBFC: `nbfc set -a`; without a fan plugin nothing is done, the firmware keeps the fans) and starts solwindd again. The tray icon comes with it (it ends by itself if you turn the tray off).
 - The terminal commands work without the window.
 
@@ -184,16 +200,17 @@ Run `solwind report` (or **Create report** in Settings) and attach the file to a
 
 ## Undoing things
 
-- Fans back to NBFC: `nbfc set -a`
+- Fans back to automatic: `nbfc set -a` with NBFC; with the HP plugin quit Solwind
 - Solwind never edits NBFC config files, it only selects one. To go back: `sudo nbfc config --set "<config name>"` and `sudo nbfc restart`
 - Keyboard permission: **Remove permission** in the app, or `sudo make uninstall-udev`
+- HP fan permission: `solwind fan-permission off`, or `sudo make uninstall-udev`
 
 ## Security
 
-- Day-to-day use needs no admin rights: solwindd runs as your user, fan speeds go through `nbfc set`.
+- Day-to-day use needs no admin rights: solwindd runs as your user, fan speeds go through `nbfc set` or, with the HP plugin, the driver's files your user was given.
 - Admin actions only happen when you click them, through your system's password dialog. Solwind never sees your password.
 - The keyboard is only touched through the kernel. The keyboard permission is for your user only, and the rule is checked line by line before it's installed.
-- Plugins are code that runs inside solwindd, as your user; solwindd skips one that someone else could have changed (see [Plugins](#plugins)).
+- Plugins are code that runs inside solwindd, as your user, and building one runs its build steps on your computer; solwindd skips one that someone else could have changed (see [Plugins](#plugins)).
 - NBFC config files and Caelestia's files are never changed.
 
 ## Development

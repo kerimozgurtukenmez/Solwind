@@ -362,7 +362,7 @@ QJsonObject runOne(const QJsonObject &sc)
         else if (op == u"safety") { fans.setSafety(s.value(u"v"_s).toDouble()); settings.setSafety(s.value(u"v"_s).toDouble()); }
         else if (op == u"save") {
             const QString why = state.saveProfile(s.value(u"name"_s).toString());
-            return why.isEmpty() ? u""_s : why == i18n.t(u"Fans not read yet (is NBFC running?), try again"_s) ? u"refused"_s : why;
+            return why.isEmpty() ? u""_s : why == state.notReadYet() ? u"refused"_s : why;
         }
         else if (op == u"remove") {
             const QString why = state.removeProfile(s.value(u"name"_s).toString());

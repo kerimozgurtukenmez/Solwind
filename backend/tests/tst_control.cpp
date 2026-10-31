@@ -231,6 +231,24 @@ private slots:
     }
 
     // ---------- C-6 ----------
+    void noTemperatureForACurve()
+    {
+        Rig r(1);
+        r.temp(50);
+        r.c.applyTarget(0, curveSt({ { 40, 20 }, { 80, 100 } }));
+        r.p.finishAll();
+        r.temp(NaN);
+        r.round();
+        r.t += 14000;
+        r.round();
+        QVERIFY(r.p.pending().isEmpty());                     // a moment without one: the last level stays
+        r.t += 2000;
+        r.round();
+        QCOMPARE(r.p.pending(), QStringList{ u"spd 0 100"_s });   // longer: full speed
+        // The kernel's CPU temperature takes over when the driver has none
+        r.c.cpuTemp = [] { return 60.0; };
+        QCOMPARE(r.c.sourceTemp(0, u"cpu"_s), 60.0);
+    }
     void sourceTemperatures()
     {
         Rig r(1);
