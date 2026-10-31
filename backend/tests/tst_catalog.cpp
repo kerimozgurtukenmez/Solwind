@@ -150,6 +150,10 @@ private slots:
         QCOMPARE(l[0].source, u"catalog"_s);
         QCOMPARE(l[1].id, u"NBFC/nbfc"_s);
         QCOMPARE(l[1].source, QString());
+        QVERIFY(l[0].enabled);
+        FakeWorld::writeAt(root + u"/HP/a.disabled"_s, "");       // turned off
+        QVERIFY(!installed(root)[0].enabled);
+        QVERIFY(installed(root)[1].enabled);
     }
 };
 

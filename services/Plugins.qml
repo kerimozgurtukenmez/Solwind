@@ -10,7 +10,7 @@ Singleton {
     id: root
     readonly property string tool: Quickshell.env("SOLWIND_LIB") ? Quickshell.env("SOLWIND_LIB") + "/solwind-plugin" : ""
     readonly property string catalog: Quickshell.shellPath("plugin-catalog.json")
-    property var plugins: []                 // [{ id, kind, description, tested, state, fits }] (solwind-plugin list --json)
+    property var plugins: []                 // [{ id, kind, description, tested, state, enabled, fits }] (solwind-plugin list --json)
     property var others: []                  // installed, not in the catalog
     property bool loaded: false
     property string loadError: ""
@@ -53,6 +53,7 @@ Singleton {
     function install(id) { act(id, ["install", id]) }
     function update() { act("*", ["update"]) }
     function remove(id) { act(id, ["remove", id]) }
+    function setEnabled(id, on) { act(id, [on ? "enable" : "disable", id]) }
     // solwindd loads plugins when it starts: the service again, and this window back once it is up (both go: the
     // window app is part of the service). Run outside the service, so it isn't stopped with it.
     readonly property bool canRestart: Autostart.ours

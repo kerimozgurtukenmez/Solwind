@@ -11,7 +11,12 @@ PageBase {
     title: I18n.t("Plugins")
     sub: I18n.t("What drives your fans and keyboard light")
 
+    // Each time the page is opened: `solwind plugin` may have changed something meanwhile
+    onVisibleChanged: if (visible) Plugins.refresh()
     Component.onCompleted: Plugins.refresh()
+
+    readonly property string query: search.text.trim().toLowerCase()
+    function matches(...texts) { return query === "" || texts.some(t => t.toLowerCase().includes(query)) }
 
     Group {
         InfoRow {
@@ -51,6 +56,38 @@ PageBase {
         }
     }
 
+    Rectangle {
+        Layout.fillWidth: true
+        implicitHeight: 44
+        radius: height / 2
+        color: Colours.surfaceContainer
+        RowLayout {
+            anchors { fill: parent; leftMargin: Tokens.padding.large; rightMargin: Tokens.padding.large }
+            spacing: Tokens.spacing.small
+            MaterialIcon { text: "search"; color: Colours.fgDim; size: Tokens.font.icon.medium }
+            Item {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                StyledText {
+                    visible: search.text === ""
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: I18n.t("Search plugins…")
+                    color: Colours.fgDim
+                    font: Tokens.font.body.small
+                }
+                TextInput {
+                    id: search
+                    anchors.fill: parent
+                    verticalAlignment: TextInput.AlignVCenter
+                    color: Colours.fg
+                    selectByMouse: true
+                    clip: true
+                    font: Tokens.font.body.medium
+                }
+            }
+        }
+    }
+
     Group {
         title: I18n.t("Catalog")
         GroupItem {
@@ -62,6 +99,7 @@ PageBase {
             GroupItem {
                 id: row
                 required property var modelData
+                visible: page.matches(modelData.id, modelData.description)
                 readonly property string st: modelData.state
                 readonly property bool mine: Plugins.busyId === modelData.id || (Plugins.busyId === "*" && st !== "none")
                 RowLayout {
@@ -96,6 +134,23 @@ PageBase {
                             ].filter(x => x !== "").join(" · ")
                         }
                     }
+                    ColumnLayout {
+                        visible: row.st !== "none"
+                        spacing: 0
+                        Toggle {
+                            Layout.alignment: Qt.AlignHCenter
+                            enabled: !Plugins.busy
+                            controlled: true
+                            checked: row.modelData.enabled
+                            onToggled: v => Plugins.setEnabled(row.modelData.id, v)
+                        }
+                        StyledText {
+                            Layout.alignment: Qt.AlignHCenter
+                            text: row.modelData.enabled ? I18n.t("Active") : I18n.t("Turned off")
+                            color: Colours.fgDim
+                            font: Tokens.font.label.small
+                        }
+                    }
                     Btn {
                         visible: row.st !== "current" && row.st !== "local"
                         enabled: !Plugins.busy
@@ -118,6 +173,7 @@ PageBase {
             model: Plugins.others
             InfoRow {
                 required property string modelData
+                visible: page.matches(modelData)
                 icon: "help"
                 label: modelData
                 sub: I18n.t("installed, not in the catalog (solwind plugin remove %1)").arg(modelData)

@@ -117,6 +117,8 @@ int main(int argc, char **argv)
     plugins.load(PluginLoader::defaultFolders());
     for (const PluginLoader::Failure &f : plugins.failures())
         std::fprintf(stderr, "solwindd: plugin %s not loaded: %s\n", qPrintable(f.file), qPrintable(f.why));
+    for (const QString &f : plugins.turnedOff())
+        std::fprintf(stderr, "solwindd: plugin %s is turned off\n", qPrintable(f));
     for (const PluginLoader::Plugin &p : plugins.plugins())
         std::fprintf(stderr, "solwindd: plugin %s %s (%s)\n", qPrintable(p.id), qPrintable(p.version), qPrintable(p.file));
     // (owned here, not by the application: destroyed in the reverse order of what it uses, as the built-in one was)

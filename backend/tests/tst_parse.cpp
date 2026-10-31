@@ -152,6 +152,22 @@ private slots:
         QVERIFY(p.rpmWorks);
         QCOMPARE(p.rpm(1, 2), 3400.0);
         QVERIFY(std::isnan(p.rpm(1, 3)));                     // NBFC has another number of fans
+        // Usage: the CPU's from what /proc/stat's counters did since the round before, the GPU's as nvidia-smi says
+        QVERIFY(std::isnan(p.readings[0].usage));
+        p.parse(u"usage|cpu|1000|800\nnvidia||50000\nusage|gpu|13\n"_s, 1500);
+        QVERIFY(std::isnan(p.readings[0].usage));             // nothing to compare with yet
+        QCOMPARE(p.readings[1].usage, 13.0);
+        p.parse(u"usage|cpu|1100|875\nnvidia||skip\n"_s, 1600);
+        QCOMPARE(p.readings[0].usage, 25.0);
+        QCOMPARE(p.readings[1].usage, 13.0);                  // not read this round: the last value
+        p.parse(u"usage|cpu|1100|875\nnvidia||asleep\n"_s, 1700);
+        QVERIFY(std::isnan(p.readings[0].usage));             // the counters didn't move
+        QVERIFY(std::isnan(p.readings[1].usage));
+        p.parse(u"usage|gpu|[N/A]\nnvidia||50000\n"_s, 1800);
+        QVERIFY(std::isnan(p.readings[1].usage));
+        p.deactivate();
+        p.parse(u"usage|cpu|1200|900\n"_s, 1900);
+        QVERIFY(std::isnan(p.readings[0].usage));             // off in between: not compared
         // CPU fallbacks: k10temp Tctl, then the hottest core, then the first acpitz
         p.parse(u"k10temp|Tccd1|60000\nk10temp|Tctl|65000\n"_s, 2000);
         QCOMPARE(p.cpu(), 65.0);

@@ -124,6 +124,14 @@ const QByteArrayList tempDrivers = { "coretemp", "k10temp", "zenpower", "acpitz"
 QString round(const Paths &paths, bool gpu, const Options &opt)
 {
     QByteArray out;
+    // The first line of /proc/stat: cpu user nice system idle iowait irq softirq steal (guest time is part of user)
+    const QByteArray stat = slurp("/proc/stat", 4096).bytes;
+    const QList<QByteArray> f = stat.left(stat.indexOf('\n')).simplified().split(' ');
+    if (f.size() >= 9 && f[0] == "cpu") {
+        qulonglong total = 0;
+        for (int i = 1; i <= 8; ++i) total += f[i].toULongLong();
+        out += "usage|cpu|" + QByteArray::number(total) + '|' + QByteArray::number(f[4].toULongLong() + f[5].toULongLong()) + '\n';
+    }
     const QByteArray hwmon = paths.sys(u"/class/hwmon"_s).toLocal8Bit();
     for (const QByteArray &e : glob(hwmon, "hwmon")) {
         const QByteArray h = hwmon + '/' + e;
@@ -153,7 +161,7 @@ QString round(const Paths &paths, bool gpu, const Options &opt)
     // sensors.sh ran the same command once per awake card, which gives the same first temperature.
     const QByteArray pci = paths.sys(u"/bus/pci/devices"_s).toLocal8Bit();
     bool smiDone = false;
-    QByteArray smiTemp;
+    QByteArray smiTemp, smiUsage;
     QString smi;
     bool smiLooked = false;
     for (const QByteArray &e : glob(pci, "")) {
@@ -171,13 +179,16 @@ QString round(const Paths &paths, bool gpu, const Options &opt)
         if (smi.isEmpty()) continue;                             // not installed: no line
         if (!smiDone) {
             smiDone = true;
-            const QByteArray o = run(smi, { u"--query-gpu=temperature.gpu"_s, u"--format=csv,noheader,nounits"_s },
+            const QByteArray o = run(smi, { u"--query-gpu=temperature.gpu,utilization.gpu"_s, u"--format=csv,noheader,nounits"_s },
                                      opt.smiTimeoutMs, opt.smiKillMs, opt.stop);
             qsizetype k = 0;                                     // ${t%%[!0-9]*}: the leading digits
             while (k < o.size() && o[k] >= '0' && o[k] <= '9') ++k;
             smiTemp = o.left(k);
+            const QByteArray u = o.mid(k).left(o.mid(k).indexOf('\n')).trimmed();      // ", 13" (or ", [N/A]")
+            if (u.startsWith(',')) smiUsage = u.mid(1).trimmed();
         }
         out += smiTemp.isEmpty() ? QByteArray("nvidia||fail\n") : "nvidia||" + smiTemp + "000\n";
+        if (!smiTemp.isEmpty() && !smiUsage.isEmpty()) out += "usage|gpu|" + smiUsage + '\n';
     }
     return QString::fromUtf8(out);
 }

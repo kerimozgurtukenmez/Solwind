@@ -4,12 +4,19 @@ import Caelestia.Config
 import qs.components
 import qs.services
 
+// A row of tiles, or with `vertical` a column of them (one per chip) that fills the height it is given
 Card {
-    title: I18n.t("Hardware and temperatures")
+    id: card
+    property bool vertical: false
+    title: vertical ? "" : I18n.t("Hardware and temperatures")
+    pad: vertical ? 0 : Tokens.padding.largeIncreased
+    fillHeight: vertical
 
     GridLayout {
         Layout.fillWidth: true
-        columns: Math.max(1, Sensors.readings.length)
+        Layout.fillHeight: card.vertical
+        columns: card.vertical ? 1 : Math.max(1, Sensors.readings.length)
+        rowSpacing: Tokens.spacing.small
         columnSpacing: Tokens.spacing.small
         Repeater {
             model: Sensors.readings.length
@@ -56,6 +63,12 @@ Card {
                     StyledText {
                         visible: r && r.extra !== ""
                         text: r ? r.extra : ""
+                        color: Colours.fgDim
+                        font: Tokens.font.label.small
+                    }
+                    StyledText {
+                        visible: r && isFinite(r.usage)
+                        text: r ? I18n.t("Usage: %1").arg(I18n.t("%1%").arg(Math.round(r.usage))) : ""
                         color: Colours.fgDim
                         font: Tokens.font.label.small
                     }

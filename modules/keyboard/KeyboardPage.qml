@@ -6,20 +6,21 @@ import qs.services
 
 // Keyboard light. solwindd finds and drives the light; services/Keyboard.qml passes its state and the changes on;
 // this is only the view.
-// The page adapts to what was detected: a detection summary on top, then (if the light has colour) the settings of
-// the selected effect on the left and the effect list on the right (effects only on tested drivers), brightness below
-// (a slider, or level buttons when the light has only a few levels).
+// The page adapts to what was detected. Wide window: the settings of the selected effect with the brightness below
+// (a slider, or level buttons when the light has only a few levels), the effect list next to them (effects only on
+// tested drivers), and the detection summary in a panel on the right that folds away. Narrow window: all of it in one
+// column, the summary on top.
 PageBase {
     id: page
-    title: I18n.t("Keyboard")
-    sub: Keyboard.available ? Keyboard.name : ""
+    adaptive: true
+    title: wide ? "" : I18n.t("Keyboard")
+    sub: !wide && Keyboard.available ? Keyboard.name : ""
 
     readonly property bool canWrite: Keyboard.available && Keyboard.writable
     readonly property bool breathing: Keyboard.effect === "breathing"
     readonly property bool animated: Keyboard.effectsAllowed && Keyboard.effect !== "static"     // breathing or colour cycle
-    // Colour source options: no "chosen colour" for the colour cycle (a cycle needs more than one colour)
-    readonly property var sources: breathing ? [{ id: "single", t: I18n.t("Chosen color") }, { id: "multi", t: I18n.t("Several") }, { id: "theme", t: "Caelestia" }]
-                                             : [{ id: "multi", t: I18n.t("Several") }, { id: "theme", t: "Caelestia" }]
+    // Colour source options (Caelestia has its own switch). A colour cycle needs more than one colour: no choice there.
+    readonly property var sources: [{ id: "single", t: I18n.t("Chosen color") }, { id: "multi", t: I18n.t("Several") }]
     // Effect list (new effects are added here)
     readonly property var effects: [
         { id: "static", name: I18n.t("Static"), icon: "lightbulb", sub: I18n.t("One color, always on") },
@@ -49,6 +50,54 @@ PageBase {
     }
     function pct(v) { return I18n.t("%1%").arg(Math.round(v * 100)) }
 
+    // The Caelestia switch: off goes back to a colour of your own
+    function setTheme(on) { Keyboard.setSource(on ? "theme" : breathing ? "single" : "multi") }
+
+    // The summary panel: open if there is room, unless folded or opened by hand. What needs you stays in sight.
+    property var infoChoice: null
+    readonly property bool infoNeeded: Keyboard.ready && (!page.canWrite || Keyboard.error !== "")
+    readonly property bool infoRoom: width >= 840
+    readonly property bool infoOpen: infoNeeded || (infoChoice ?? infoRoom)
+    // No room for it next to the settings while it has to stay open: it goes above them
+    readonly property bool infoInSide: wide && (infoRoom || !infoNeeded)
+
+    side: [
+        ColumnLayout {
+            visible: Keyboard.rgb && Keyboard.effectsAllowed
+            enabled: page.canWrite
+            opacity: enabled ? 1 : 0.4
+            Layout.fillWidth: false
+            Layout.preferredWidth: 240
+            Layout.fillHeight: true
+            spacing: Tokens.spacing.large
+            EffectsPanel { page: page; pushCaelestiaDown: true }
+        },
+        ColumnLayout {
+            visible: page.infoInSide
+            Layout.fillWidth: false
+            Layout.preferredWidth: page.infoOpen ? 270 : implicitWidth
+            Layout.fillHeight: true
+            spacing: Tokens.spacing.small
+            IconBtn {
+                visible: !page.infoNeeded
+                Layout.alignment: page.infoOpen ? Qt.AlignRight : Qt.AlignHCenter
+                icon: page.infoOpen ? "arrow_forward" : "arrow_back"
+                onClicked: page.infoChoice = !page.infoOpen
+            }
+            Flickable {
+                visible: page.infoOpen
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
+                contentWidth: width
+                contentHeight: info.implicitHeight
+                boundsBehavior: Flickable.StopAtBounds
+                KeyboardStatus { id: info; width: parent.width; effectName: page.current.name }
+            }
+            Item { visible: !page.infoOpen; Layout.fillHeight: true }
+        }
+    ]
+
     // Read the current state when the window opens (may have changed via Fn keys)
     Component.onCompleted: Keyboard.refresh()
 
@@ -58,174 +107,7 @@ PageBase {
         spacing: Tokens.spacing.largeIncreased
 
         // ---------- status ----------
-        Card {
-            title: I18n.t("Keyboard light")
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 12
-                Rectangle {
-                    implicitWidth: 44; implicitHeight: 44; radius: 14
-                    color: Keyboard.rgb ? Keyboard.color : Colours.surfaceHigh
-                    opacity: Keyboard.maxBrightness > 0 ? 0.35 + 0.65 * Keyboard.brightness / Keyboard.maxBrightness : 1
-                    border { width: 2; color: Colours.outline }
-                    MaterialIcon {
-                        anchors.centerIn: parent
-                        visible: !Keyboard.rgb
-                        text: "keyboard"
-                        color: Colours.primary
-                        size: Tokens.font.icon.medium
-                    }
-                }
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 2
-                    StyledText {
-                        text: !Keyboard.ready ? I18n.t("Reading…") : Keyboard.available ? Keyboard.name
-                            : Keyboard.notes.indexOf("no-plugin") >= 0 ? I18n.t("No plugin for this keyboard light") : I18n.t("No keyboard light found")
-                        color: Colours.fg
-                        font: Tokens.font.title.small
-                    }
-                    StyledText {
-                        Layout.fillWidth: true
-                        wrapMode: Text.WordWrap
-                        text: !Keyboard.available ? (Keyboard.notes.indexOf("no-plugin") >= 0 ? I18n.t("A keyboard light was found, but no installed plugin supports it.")
-                                                                                               : I18n.t("This computer has no keyboard light the kernel recognizes."))
-                            : Keyboard.kindText() + (Keyboard.effectsAllowed ? " · " + I18n.t("effect: %1").arg(page.current.name) : "")
-                        color: Colours.fgDim
-                        font: Tokens.font.label.small
-                    }
-                }
-            }
-            // Detection, step by step: laptop -> driver -> light -> permission -> support level
-            ColumnLayout {
-                visible: Keyboard.ready
-                Layout.fillWidth: true
-                spacing: 4
-                Repeater {
-                    model: [
-                        { ok: Keyboard.dmi.vendor !== "", label: I18n.t("Laptop"),
-                          value: [Keyboard.dmi.vendor, Keyboard.dmi.product].filter(x => x).join(" · ") || "?" },
-                        { ok: Keyboard.driver !== "", label: I18n.t("Driver"), value: Keyboard.driver || I18n.t("none found") },
-                        { ok: Keyboard.available, label: I18n.t("Light"),
-                          value: Keyboard.available ? Keyboard.name : I18n.t("none found") },
-                        { ok: Keyboard.available && Keyboard.writable, label: I18n.t("Permission"),
-                          value: !Keyboard.available ? "—" : Keyboard.writable ? I18n.t("yes") : I18n.t("needed") },
-                        { ok: Keyboard.available, label: I18n.t("Support"), value: Keyboard.supportText() }
-                    ]
-                    RowLayout {
-                        required property var modelData
-                        Layout.fillWidth: true
-                        spacing: 8
-                        MaterialIcon {
-                            text: modelData.ok ? "check_circle" : "cancel"
-                            color: modelData.ok ? Colours.success : Colours.fgDim
-                            size: Tokens.font.icon.small
-                        }
-                        StyledText { text: modelData.label; color: Colours.fgDim; font: Tokens.font.label.small; Layout.preferredWidth: 90 }
-                        StyledText {
-                            Layout.fillWidth: true
-                            text: modelData.value
-                            elide: Text.ElideRight
-                            color: Colours.fg
-                            font: Tokens.font.label.small
-                        }
-                    }
-                }
-                // Findings (e.g. an RGB keyboard the kernel doesn't expose) and what to use instead
-                Repeater {
-                    model: Keyboard.notes
-                    StyledText {
-                        required property string modelData
-                        Layout.fillWidth: true
-                        wrapMode: Text.WordWrap
-                        text: Keyboard.noteText(modelData)
-                        color: Colours.warning
-                        font: Tokens.font.label.small
-                    }
-                }
-            }
-            // No permission: explain what will be done, grant if the user wants
-            ColumnLayout {
-                visible: Keyboard.available && !Keyboard.writable && Keyboard.ready
-                Layout.fillWidth: true
-                spacing: 8
-                StyledText {
-                    Layout.fillWidth: true
-                    wrapMode: Text.WordWrap
-                    text: I18n.t("Permission is needed to change the keyboard light.")
-                    color: Colours.warning
-                    font: Tokens.font.label.large
-                }
-                StyledText {
-                    Layout.fillWidth: true
-                    wrapMode: Text.WordWrap
-                    text: (Keyboard.hasBrightness
-                           ? I18n.t("What is done: /etc/udev/rules.d/90-solwind.rules is added; only the color and brightness files of the %1 light become writable (what you do by hand with 'sudo tee').").arg(Keyboard.name)
-                           : I18n.t("What is done: /etc/udev/rules.d/90-solwind.rules is added; only the color files of the %1 light become writable (what you do by hand with 'sudo tee').").arg(Keyboard.name)) + "\n"
-                        + (Keyboard.hasBrightness ? I18n.t("What changes: only your user can change the keyboard light's color and brightness; it gives no access to the fans, files or the system, and nothing to other users.")
-                                                  : I18n.t("What changes: only your user can change the keyboard light's color; it gives no access to the fans, files or the system, and nothing to other users.")) + "\n"
-                        + (Keyboard.ruleOld ? I18n.t("The old rule of Ccenter (Solwind's old name), 90-ccenter.rules, is removed.") + "\n" : "")
-                        + I18n.t("Undo: 'Remove permission' here. Your password is asked in the system's own window; Solwind never sees it.")
-                    color: Colours.fgDim
-                    font: Tokens.font.label.small
-                }
-                Btn {
-                    icon: "key"
-                    text: Keyboard.permBusy ? I18n.t("Waiting for the password…") : I18n.t("Grant permission")
-                    filled: true
-                    enabled: !Keyboard.permBusy
-                    onClicked: Keyboard.grantPermission()
-                }
-            }
-            // The old rule (earlier versions) let every user write, or has the old name (Ccenter): offer the current one
-            RowLayout {
-                visible: Keyboard.writable && (Keyboard.ruleLegacy || Keyboard.ruleOld)
-                Layout.fillWidth: true
-                spacing: 8
-                StyledText {
-                    Layout.fillWidth: true
-                    wrapMode: Text.WordWrap
-                    text: Keyboard.ruleLegacy ? I18n.t("The installed permission is from an older, less strict version. The new version allows only your user.")
-                                              : I18n.t("The installed permission was added by Ccenter, Solwind's old name (/etc/udev/rules.d/90-ccenter.rules). Updating it moves it to 90-solwind.rules.")
-                    color: Colours.warning
-                    font: Tokens.font.label.small
-                }
-                Btn {
-                    icon: "shield"
-                    text: Keyboard.permBusy ? I18n.t("Waiting for the password…") : I18n.t("Update permission")
-                    filled: true
-                    enabled: !Keyboard.permBusy
-                    onClicked: Keyboard.grantPermission()
-                }
-            }
-            // If the permission comes from the rule the app added, it can be removed here
-            RowLayout {
-                visible: Keyboard.writable && Keyboard.ruleAt === "etc" && !Keyboard.ruleLegacy && !Keyboard.ruleOld
-                Layout.fillWidth: true
-                spacing: 8
-                StyledText {
-                    Layout.fillWidth: true
-                    wrapMode: Text.WordWrap
-                    text: I18n.t("Keyboard light permission is on (/etc/udev/rules.d/90-solwind.rules).")
-                    color: Colours.fgDim
-                    font: Tokens.font.label.small
-                }
-                Btn {
-                    icon: "key_off"
-                    text: Keyboard.permBusy ? I18n.t("Waiting for the password…") : I18n.t("Remove permission")
-                    enabled: !Keyboard.permBusy
-                    onClicked: Keyboard.revokePermission()
-                }
-            }
-            StyledText {
-                visible: Keyboard.error !== ""
-                Layout.fillWidth: true
-                wrapMode: Text.WordWrap
-                text: Keyboard.error
-                color: Colours.error
-                font: Tokens.font.body.small
-            }
-        }
+        KeyboardStatus { visible: !page.infoInSide; effectName: page.current.name }
 
         // ---------- effect: the list, then the settings of the selected one ----------
         ColumnLayout {
@@ -235,25 +117,7 @@ PageBase {
             enabled: page.canWrite
             opacity: enabled ? 1 : 0.4
 
-            // Effect list: clicking an effect activates it
-            Group {
-                title: I18n.t("Effects")
-                visible: Keyboard.effectsAllowed
-                Repeater {
-                    model: page.effects
-                    NavItem {
-                        required property var modelData
-                        required property int index
-                        icon: modelData.icon
-                        label: modelData.name
-                        sub: modelData.sub
-                        selected: Keyboard.effect === modelData.id
-                        first: index === 0
-                        last: index === page.effects.length - 1
-                        onClicked: Keyboard.setEffect(modelData.id)
-                    }
-                }
-            }
+            EffectsPanel { visible: !page.wide && Keyboard.effectsAllowed; page: page }
 
             // Settings of the selected effect
             Card {
@@ -268,6 +132,7 @@ PageBase {
 
                     StyledText { text: I18n.t("Colors"); color: Colours.fg; font: Tokens.font.body.small }
                     Segment {
+                        visible: page.breathing && Keyboard.source !== "theme"
                         model: page.sources.map(x => x.t)
                         controlled: true
                         current: page.sources.findIndex(x => x.id === Keyboard.source)

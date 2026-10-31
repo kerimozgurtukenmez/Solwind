@@ -99,7 +99,7 @@ Read while a client watches `fans`, while Solwind drives fans, or while notifica
 
 | Property | Type | |
 |---|---|---|
-| `Readings` | aa{sv} | One per tile: `label` (CPU, GPU, iGPU), `model`, `threads`, `value` (°C), `note` (`asleep`, `error`, `nosensor` or `""`) |
+| `Readings` | aa{sv} | One per tile: `label` (CPU, GPU, iGPU), `model`, `threads`, `value` (°C), `note` (`asleep`, `error`, `nosensor` or `""`), `usage` (%, NaN if not known) |
 | `Cpu`, `Gpu`, `HasGpu` | d, d, b | |
 | `Hardware` | a{sv} | `cpu`, `cores`, `gpu`, `igpu` (names) |
 | `Rpms`, `RpmWorks` | ad, b | The first fan driver's fan speeds; it has reported one above 0 |

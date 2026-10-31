@@ -19,7 +19,8 @@ QRegularExpression jsRe(const QString &pattern, bool caseless = false)
 
 bool Reading::operator==(const Reading &o) const
 {
-    return label == o.label && model == o.model && threads == o.threads && same(value, o.value) && note == o.note;
+    return label == o.label && model == o.model && threads == o.threads && same(value, o.value) && note == o.note
+        && same(usage, o.usage);
 }
 
 // ---------- names (Sensors.qml cleanCpu / cleanGpu / parseHw) ----------
@@ -84,6 +85,7 @@ void SensorParser::parse(const QString &txt, qint64 nowMs)
     double nv = NaN, amdGpu = NaN, igpu = NaN;
     QString nvNote;
     bool hasNv = false, nvFailed = false;
+    double cpuUsage = NaN, nvUsage = NaN;
     QString fanDrv;
     QList<double> fanRpm;                          // a JS array with holes: unset entries are NaN
     for (const QString &line : txt.split(u'\n')) {
@@ -101,13 +103,27 @@ void SensorParser::parse(const QString &txt, qint64 nowMs)
             }
             continue;
         }
+        if (p[0] == u"usage"_s) {
+            if (p.size() == 4 && p[1] == u"cpu"_s) {
+                const double total = p[2].toDouble(), idle = p[3].toDouble();
+                const double dt = total - lastCpuTotal, di = idle - lastCpuIdle;
+                if (lastCpuTotal > 0 && dt > 0 && di >= 0 && di <= dt) cpuUsage = 100 * (1 - di / dt);
+                lastCpuTotal = total;
+                lastCpuIdle = idle;
+            } else if (p.size() == 3 && p[1] == u"gpu"_s) {
+                bool ok = false;
+                const double v = p[2].toDouble(&ok);
+                if (ok && v >= 0 && v <= 100) nvUsage = v;
+            }
+            continue;
+        }
         if (p.size() != 3) continue;
         const QString &n = p[0], &raw = p[2];
         const QString l = p[1].toLower();
         if (n == u"nvidia"_s || n == u"nouveau"_s) {
             hasNv = true;
             // not read this round: the last value (while backing off: the error, not an older "asleep")
-            if (raw == u"skip"_s) { nv = lastNv; nvNote = nvFails > 0 ? u"error"_s : lastNvNote; }
+            if (raw == u"skip"_s) { nv = lastNv; nvUsage = lastNvUsage; nvNote = nvFails > 0 ? u"error"_s : lastNvNote; }
             else if (raw == u"asleep"_s) nvNote = u"asleep"_s;
             else if (raw == u"fail"_s) { nvFailed = true; nvNote = u"error"_s; }
             else nv = js::max(std::isfinite(nv) ? nv : -1, js::parseInt(raw) / 1000);
@@ -129,13 +145,13 @@ void SensorParser::parse(const QString &txt, qint64 nowMs)
         }
     }
     const double cpu = std::isfinite(pkg) ? pkg : (std::isfinite(amdCpu) ? amdCpu : (std::isfinite(coreMax) ? coreMax : acpi));
-    QList<Reading> out{ { u"CPU"_s, hw.cpu, hw.cores, cpu, QString() } };
+    QList<Reading> out{ { u"CPU"_s, hw.cpu, hw.cores, cpu, QString(), cpuUsage } };
     double gpu = nv;
     if (std::isfinite(amdGpu)) { if (hasNv) igpu = amdGpu; else gpu = amdGpu; }
-    if (hasNv || std::isfinite(gpu) || !hw.gpu.isEmpty()) out.append({ u"GPU"_s, hw.gpu, QString(), gpu, nvNote });
+    if (hasNv || std::isfinite(gpu) || !hw.gpu.isEmpty()) out.append({ u"GPU"_s, hw.gpu, QString(), gpu, nvNote, std::isfinite(nv) ? nvUsage : NaN });
     if (std::isfinite(igpu) || !hw.igpu.isEmpty())
         out.append({ u"iGPU"_s, hw.igpu, QString(), igpu, std::isfinite(igpu) ? QString() : u"nosensor"_s });
-    if (hasNv) { lastNv = nv; lastNvNote = nvNote; }   // used on rounds where the GPU is skipped
+    if (hasNv) { lastNv = nv; lastNvUsage = nvUsage; lastNvNote = nvNote; }   // used on rounds where the GPU is skipped
     if (nvFailed && !std::isfinite(nv)) {
         nvFails++;
         const double wait = nvFails < 2 ? 0 : std::min(600000.0, 30000 * std::pow(2.0, nvFails - 2));
@@ -155,7 +171,8 @@ void SensorParser::parse(const QString &txt, qint64 nowMs)
 
 void SensorParser::deactivate()
 {
-    for (Reading &r : readings) r.value = NaN;
+    for (Reading &r : readings) { r.value = NaN; r.usage = NaN; }
+    lastCpuTotal = lastCpuIdle = 0;                // the next round has nothing to compare with
     rpms.clear();
 }
 

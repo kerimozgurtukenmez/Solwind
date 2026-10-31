@@ -11,7 +11,7 @@ class SensorsApi : public QObject
 {
     Q_OBJECT
     Q_CLASSINFO("D-Bus Interface", "solwind.Sensors")
-    // [{ label: CPU|GPU|iGPU, model, threads (CPU), value: °C or NaN, note: ""|asleep|error|nosensor }]
+    // [{ label: CPU|GPU|iGPU, model, threads (CPU), value: °C or NaN, note: ""|asleep|error|nosensor, usage: % or NaN }]
     Q_PROPERTY(VariantMapList Readings READ readings)
     Q_PROPERTY(QVariantMap Hardware READ hardware)           // { cpu, cores, gpu, igpu }
     Q_PROPERTY(double Cpu READ cpu)

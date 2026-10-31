@@ -49,7 +49,9 @@ private slots:
     void hwmonLines()
     {
         const QString out = SensorReader::round(paths(), false);
-        const QString hw = out.left(out.indexOf(u"nvidia"_s));
+        // (first /proc/stat's counters: the real ones, usage|cpu|total|idle)
+        QVERIFY2(out.startsWith(u"usage|cpu|"_s) && out.section(u'\n', 0, 0).split(u'|').size() == 4, qPrintable(out));
+        const QString hw = out.mid(out.indexOf(u'\n') + 1).section(u"nvidia"_s, 0, 0);
         QCOMPARE(hw, u"acpitz||27800\nacpitz||10000\n"
                      "coretemp|Core 8|49000\ncoretemp|Package id 0|52000\ncoretemp|Core 0|50000\n"
                      "fan|hp|1|3100\nfan|hp|2|3400\n"
@@ -70,7 +72,7 @@ private slots:
         w.write(u"smi-temp"_s, "50\n48\n");                      // two cards: the first one's, like ${t%%[!0-9]*}
         const QString out = SensorReader::round(paths(), true);
         QVERIFY2(out.endsWith(u"nvidia||50000\nnvidia||asleep\n"_s), qPrintable(out));
-        QCOMPARE(w.count("nvidia-smi --query-gpu=temperature.gpu --format=csv,noheader,nounits"), 1);
+        QCOMPARE(w.count("nvidia-smi --query-gpu=temperature.gpu,utilization.gpu --format=csv,noheader,nounits"), 1);
         QFile::remove(w.cct() + u"/smi-temp"_s);
     }
     void nvidiaFails()

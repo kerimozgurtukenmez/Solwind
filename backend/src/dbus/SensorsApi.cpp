@@ -11,7 +11,7 @@ VariantMapList SensorsApi::readings() const
     VariantMapList out;
     for (const Reading &r : m_s.state().readings)
         out.append({ { u"label"_s, r.label }, { u"model"_s, r.model }, { u"threads"_s, r.threads },
-                     { u"value"_s, r.value }, { u"note"_s, r.note } });
+                     { u"value"_s, r.value }, { u"note"_s, r.note }, { u"usage"_s, r.usage } });
     return out;
 }
 

@@ -6,13 +6,24 @@ import qs.components
 
 // View only: solwindd keeps the fan settings and profiles and restores them; services/FanState.qml and Nbfc.qml pass
 // them on.
-// The temperatures stay pinned at the top; everything below them scrolls.
+// Wide window: the chart on top, the fans below it, NBFC and the profiles side by side at the bottom, the CPU / GPU /
+// iGPU tiles in a column on the right. Narrow window: one column, the temperatures pinned at the top.
 PageBase {
     id: page
-    title: I18n.t("Fan control")
-    sub: Nbfc.configId !== "" ? Nbfc.configId : ""
+    adaptive: true
+    title: wide ? "" : I18n.t("Fan control")
+    sub: !wide && Nbfc.configId !== "" ? Nbfc.configId : ""
+    showPinned: !wide
 
     pinnedContent: TempCard {}
+    side: TempCard {
+        vertical: true
+        Layout.preferredWidth: 220
+        Layout.fillWidth: false
+        Layout.fillHeight: true
+    }
+
+    HistoryCard { stepPx: page.wide ? 16 : 22 }
 
     // No fan plugin installed: the temperatures only (PLUGIN-PLAN.md)
     Group {
@@ -20,7 +31,7 @@ PageBase {
         InfoRow {
             icon: "extension_off"
             label: I18n.t("No fan plugin is installed")
-            sub: I18n.t("Solwind shows the temperatures, but can't control the fans without one. Install the one for your fans from Solwind's source folder: make plugins lists them, make plugin P=<name> installs one; then restart Solwind.")
+            sub: I18n.t("Solwind shows the temperatures, but can't control the fans without one. Install the one for your fans from the Plugins page, then restart Solwind.")
         }
     }
 
@@ -43,7 +54,7 @@ PageBase {
     ColumnLayout {
         visible: !Nbfc.noPlugin
         Layout.fillWidth: true
-        spacing: Tokens.spacing.largeIncreased
+        spacing: Tokens.spacing.large
         enabled: Nbfc.running && !Nbfc.readOnly
         opacity: enabled ? 1 : 0.4
         Behavior on opacity { Anim { type: Anim.DefaultEffects } }
@@ -58,15 +69,27 @@ PageBase {
             font: Tokens.font.body.small
         }
 
-        ProfileCard { visible: Nbfc.fans.length > 0 }
+        Group {
+            visible: Nbfc.fans.length > 0
+            ToggleRow {
+                icon: "mode_fan"
+                label: "Global"
+                sub: I18n.t("When on, the same settings are written to every fan")
+                controlled: true
+                checked: FanState.globalOn
+                onToggled: v => FanState.setGlobalOn(v)
+            }
+        }
 
+        // Global on: one card for all the fans. Off: one card per fan.
         GridLayout {
             id: fansGrid
+            visible: !FanState.globalOn
             Layout.fillWidth: true
             // side by side only when each fan still gets room for its curve
-            columns: Math.max(1, Math.min(Nbfc.fans.length, fansGrid.width > 1000 ? 2 : 1))
+            columns: Math.max(1, Math.min(Nbfc.fans.length, fansGrid.width >= 560 ? 2 : 1))
             columnSpacing: Tokens.spacing.large
-            rowSpacing: Tokens.spacing.largeIncreased
+            rowSpacing: Tokens.spacing.large
             Repeater {
                 model: Nbfc.fans.length
                 FanCard {
@@ -79,16 +102,34 @@ PageBase {
                 }
             }
         }
-
         FanCard {
-            visible: Nbfc.fans.length > 0
+            visible: Nbfc.fans.length > 0 && FanState.globalOn
             isGlobal: true
             name: "Global"
             subtitle: I18n.t("When on, the same settings are written to every fan")
         }
     }
 
-    HistoryCard {}
-    ServiceCard { visible: Nbfc.hasService }
-    ConfigCard { visible: Nbfc.hasService }
+    // NBFC's settings only exist with its plugin (Nbfc.hasService)
+    GridLayout {
+        Layout.fillWidth: true
+        columns: page.wide && Nbfc.hasService ? 2 : 1
+        columnSpacing: Tokens.spacing.large
+        rowSpacing: Tokens.spacing.largeIncreased
+        ColumnLayout {
+            visible: Nbfc.hasService
+            Layout.alignment: Qt.AlignTop
+            Layout.fillWidth: true
+            Layout.preferredWidth: 1
+            spacing: Tokens.spacing.largeIncreased
+            ServiceCard {}
+            ConfigCard {}
+        }
+        ProfileCard {
+            visible: Nbfc.fans.length > 0
+            Layout.alignment: Qt.AlignTop
+            enabled: Nbfc.running && !Nbfc.readOnly
+            opacity: enabled ? 1 : 0.4
+        }
+    }
 }

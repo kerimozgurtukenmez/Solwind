@@ -79,12 +79,6 @@ Card {
                 font: Tokens.font.label.small
             }
         }
-        Toggle {
-            visible: fan.isGlobal
-            controlled: true
-            checked: FanState.globalOn
-            onToggled: v => FanState.setGlobalOn(v)
-        }
     }
 
     ColumnLayout {

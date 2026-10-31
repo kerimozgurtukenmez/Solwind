@@ -84,6 +84,7 @@ Kullanım: solwind [komut]
                      Eklentiyi indir, derle, kur (ev klasörüne, sudo'suz); --source <klasör> <ad>: yerel kopyadan
   plugin update [ad] Kurulu eklentileri katalogdaki commit'e ve bu Solwind'e göre yeniden kur
   plugin remove <ad> Eklentiyi kaldır
+  plugin disable <ad> Eklentiyi kapat (silinmez; solwindd yeniden başlayınca yüklemez), enable ile açılır
   report             Hata bildirmek için tanı raporu oluştur (ev klasörüne bir metin dosyası)
   quit               Tamamen kapat: pencere ve arka plan servisi (Solwind'in kontrol ettiği fanlar NBFC'ye döner,
                      klavye ışığı seçilen renginde kalır); çalışmıyorsa bir şey yapmaz
@@ -123,6 +124,8 @@ Usage: solwind [command]
                      Install the installed plugins again for the catalog's commit and this Solwind
   plugin remove <name>
                      Remove a plugin
+  plugin disable <name>
+                     Turn a plugin off without removing it (solwindd doesn't load it when it starts again); enable: on
   report             Create a diagnostic report for bug reports (a text file in your home folder)
   quit               Quit completely: the window and the background service (fans driven by Solwind go back to
                      NBFC, the keyboard light stays on its chosen color); does nothing if it isn't running

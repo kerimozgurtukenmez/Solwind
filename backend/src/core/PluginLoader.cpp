@@ -56,6 +56,11 @@ void PluginLoader::load(const QStringList &folders)
         while (it.hasNext()) files << it.next();
         files.sort();
         for (const QString &file : files) {
+            if (QFileInfo::exists(file.chopped(3) + u".disabled"_s)) {
+                m_turnedOff << file;
+                seen << QDir(root).relativeFilePath(file).chopped(3);   // (its id: not from another folder either)
+                continue;
+            }
             // the file, its folder and every folder above it up to the plugin folder
             QString why = isLink(file) ? u"a link (install the file itself)"_s : unsafe(file, u"it"_s);
             for (QString dir = QFileInfo(file).absolutePath(); why.isEmpty() && dir.startsWith(root); dir = QFileInfo(dir).path()) {

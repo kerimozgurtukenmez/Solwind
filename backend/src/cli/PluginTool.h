@@ -47,6 +47,7 @@ Fit fits(const Fits &f, const QString &sysRoot);
 // A plugin file in the plugin folder, with what solwind-plugin recorded when it installed it (<id>.json next to it)
 struct Installed {
     QString id, commit, repository, sdk, source;   // source: catalog | local | "" (no record: installed by hand)
+    bool enabled = true;                           // false: <id>.disabled next to it, solwindd doesn't load it
 };
 QList<Installed> installed(const QString &pluginDir);
 
@@ -58,7 +59,8 @@ struct Options {
     QString sysRoot;                      // SOLWIND_SYS (tests)
     QString lang;                         // tr | en
 };
-// The command line: list | install [--source <dir>] <id> | update [<id>...] | remove <id>. Exit: 0 done, 1 failed,
+// The command line: list | install [--source <dir>] <id> | update [<id>...] | remove <id> | enable <id> | disable <id>.
+// Exit: 0 done, 1 failed,
 // 2 wrong usage.
 int run(const QStringList &args, const Options &options, const I18n &i18n, QTextStream &out, QTextStream &err);
 }

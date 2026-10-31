@@ -234,6 +234,7 @@ private slots:
         const auto r = getProperty(sens, u"solwind.Sensors"_s, u"Readings"_s, &sig).value<VariantMapList>();
         QCOMPARE(sig, u"aa{sv}"_s);
         QCOMPARE(r[0].value(u"label"_s).toString(), u"CPU"_s);
+        QVERIFY(r[0].contains(u"usage"_s));
         QCOMPARE(getProperty(sens, u"solwind.Sensors"_s, u"Rpms"_s, &sig).value<DoubleList>(), (DoubleList{ 3100, 3400 }));
         QCOMPARE(sig, u"ad"_s);
         // RPM next to NBFC's fans (the driver has as many fans as NBFC)

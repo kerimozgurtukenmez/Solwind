@@ -6,6 +6,7 @@ import QtQuick
 import QtQuick.Layouts
 import Caelestia.Config
 import qs.components
+import qs.modules.about
 import qs.modules.fan
 import qs.modules.keyboard
 import qs.modules.plugins
@@ -19,6 +20,7 @@ ShellRoot {
     // Started by the service (SOLWIND_BACKGROUND=1) it runs in the background without opening the window
     property bool shown: Quickshell.env("SOLWIND_BACKGROUND") !== "1"
     property int tab: 0
+    property bool navFolded: false           // the navigation as icons only, by the arrow next to the name
 
     LazyLoader {
         active: root.shown
@@ -29,35 +31,49 @@ ShellRoot {
             visible: true
             // Closing the window doesn't quit the app; it keeps running in the background (reopen with `solwind`)
             onClosed: root.shown = false
-            implicitWidth: 900
-            implicitHeight: 780
+            implicitWidth: 1240
+            implicitHeight: 760
             color: Colours.surface
             // Caelestia's tokens are per screen (rounding, spacing etc.)
             contentItem.Tokens.screen: screen?.name ?? ""
 
             // The layout of Caelestia's settings app (modules/nexus/Nexus.qml, GPL-3.0): navigation on the left,
-            // the page on a panel next to it. A narrow window shows the navigation as icons only.
-            readonly property bool compact: width < 720
+            // the page on a panel next to it. A narrow window shows the navigation as icons only; the arrow does it in
+            // a wider one.
+            readonly property bool narrow: width < 720
+            readonly property bool compact: narrow || root.navFolded
             readonly property var pages: [
                 { icon: "mode_fan", label: I18n.t("Fan control"), sub: I18n.t("NBFC · speed and curves") },
                 { icon: "keyboard", label: I18n.t("Keyboard"), sub: I18n.t("RGB · color and brightness") },
                 { icon: "settings", label: I18n.t("Settings"), sub: I18n.t("Language and notifications") },
                 { icon: "extension", label: I18n.t("Plugins"), sub: I18n.t("Install and update") }
             ]
+            readonly property int aboutTab: pages.length
 
             ColumnLayout {
                 id: nav
                 anchors { top: parent.top; bottom: parent.bottom; left: parent.left; margins: Tokens.padding.large }
-                width: win.compact ? 76 : Math.min(Tokens.sizes.nexus.maxNavWidth, 340, Math.round(win.width / 3))
+                width: win.compact ? 76 : Math.min(Tokens.sizes.nexus.maxNavWidth, 300, Math.round(win.width / 4))
                 spacing: Tokens.spacing.large
 
                 // App name: one word in two colours (no gap between them)
-                Row {
-                    visible: !win.compact
+                RowLayout {
+                    visible: !win.narrow
+                    Layout.fillWidth: true
                     Layout.leftMargin: Tokens.padding.small
                     Layout.topMargin: Tokens.padding.small
-                    StyledText { text: "Sol"; color: Colours.fg; font: Tokens.font.title.large }
-                    StyledText { text: "wind"; color: Colours.primary; font: Tokens.font.title.large }
+                    Row {
+                        visible: !win.compact
+                        StyledText { text: "Sol"; color: Colours.fg; font: Tokens.font.title.large }
+                        StyledText { text: "wind"; color: Colours.primary; font: Tokens.font.title.large }
+                    }
+                    Item { visible: !win.compact; Layout.fillWidth: true }
+                    IconBtn {
+                        Layout.alignment: Qt.AlignHCenter
+                        Layout.fillWidth: win.compact
+                        icon: win.compact ? "arrow_forward" : "arrow_back"
+                        onClicked: root.navFolded = !root.navFolded
+                    }
                 }
                 ColumnLayout {
                     Layout.fillWidth: true
@@ -75,6 +91,14 @@ ShellRoot {
                             onClicked: root.tab = index
                         }
                     }
+                }
+                Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Colours.outline; opacity: 0.5 }
+                NavItem {
+                    icon: "info"; label: I18n.t("About")
+                    compact: win.compact
+                    selected: root.tab === win.aboutTab
+                    first: true; last: true
+                    onClicked: root.tab = win.aboutTab
                 }
                 Item { Layout.fillHeight: true }
                 // A glance at the state, whatever page is open
@@ -119,14 +143,15 @@ ShellRoot {
 
                 StackLayout {
                     anchors { fill: parent; margins: Tokens.padding.extraLarge; bottomMargin: 0 }
-                    // Without solwindd there is nothing to show or change (only the settings page's quit / report and
-                    // the plugins, which don't need it)
+                    // Without solwindd there is nothing to show or change (only the settings page's quit / report,
+                    // the plugins and About, which don't need it)
                     visible: Daemon.connected || root.tab >= 2
                     currentIndex: root.tab
                     FanPage {}
                     KeyboardPage {}
                     SettingsPage {}
                     PluginsPage {}
+                    AboutPage {}
                 }
                 ColumnLayout {
                     visible: !Daemon.connected && root.tab < 2
@@ -224,8 +249,8 @@ ShellRoot {
     IpcHandler {
         target: "cc"
         function toggle(): void { root.shown = !root.shown }
-        // Open the window on a page (0 fan control, 1 keyboard, 2 settings, 3 plugins); used by the UI preview
-        function tab(i: int): void { root.tab = Math.max(0, Math.min(3, i)); root.shown = true }
+        // Open the window on a page (0 fan control, 1 keyboard, 2 settings, 3 plugins, 4 about); used by the UI preview
+        function tab(i: int): void { root.tab = Math.max(0, Math.min(4, i)); root.shown = true }
         function open(): void { root.shown = true }
         function hide(): void { root.shown = false }
         // Quit completely: fans driven by Solwind go back to NBFC's automatic control

@@ -16,9 +16,10 @@ Singleton {
     onActiveChanged: Solwind.watch("fans", active)
     Component.onCompleted: Solwind.watch("fans", active)
 
-    // [{ label, model, extra, value (°C or NaN), note }] for the temperature tiles
+    // [{ label, model, extra, value (°C or NaN), usage (% or NaN), note }] for the temperature tiles
     readonly property var readings: up && s.Readings ? Array.from(s.Readings).map(r => ({
         label: r.label, model: r.model, extra: r.threads !== "" ? I18n.t("%1 threads").arg(r.threads) : "", value: r.value,
+        usage: typeof r.usage === "number" ? r.usage : NaN,
         note: r.note === "asleep" ? I18n.t("Asleep") : r.note === "error" ? I18n.t("Read error") : r.note === "nosensor" ? I18n.t("No sensor") : ""
     })) : []
     // For fan control: discrete GPU temperature (NaN when asleep / absent)

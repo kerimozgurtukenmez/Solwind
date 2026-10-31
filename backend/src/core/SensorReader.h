@@ -24,6 +24,7 @@ struct Options {
 //   name|label|millidegrees   for coretemp k10temp zenpower acpitz i915 xe amdgpu nouveau
 //   fan|driver|number|rpm     every hwmon's fan*_input
 //   nvidia||<millideg>|asleep|skip|fail   per NVIDIA display device (nvidia-smi only on gpu rounds, card awake)
+//   usage|cpu|total|idle      /proc/stat's counters (added since sensors.sh; usage|gpu|percent next to a temperature)
 QString round(const Paths &paths, bool gpu, const Options &opt = {});
 
 // hwinfo.sh (once):  cpu|model|threads   and   gpu|vendor|pci-address|model  per display device

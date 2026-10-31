@@ -178,6 +178,7 @@ QList<Installed> installed(const QString &pluginDir)
         Installed i;
         i.id = QDir(pluginDir).relativeFilePath(f).chopped(3);
         if (!validId(i.id)) continue;
+        i.enabled = !QFileInfo::exists(pluginDir + u'/' + i.id + u".disabled"_s);
         QFile r(pluginDir + u'/' + i.id + u".json"_s);
         if (r.open(QIODevice::ReadOnly)) {
             const QJsonObject o = QJsonDocument::fromJson(r.readAll()).object();
@@ -203,6 +204,7 @@ public:
     int install(const QString &id, const QString &sourceDir);
     int update(const QStringList &ids);
     int remove(const QString &id);
+    int setEnabled(const QString &id, bool on);
 
 private:
     const Options &o;
@@ -414,13 +416,14 @@ int Runner::list(bool json)
         return std::nullopt;
     };
     if (json) {
-        // For the window's Plugins page: { plugins: [{ id, kind, description, tested, state, fits: yes|no|"" }],
+        // For the window's Plugins page: { plugins: [{ id, kind, description, tested, state, enabled, fits: yes|no|"" }],
         // others: [ids installed but not in the catalog] }
         QJsonArray list, others;
         for (const Entry &e : catalog.plugins) {
             const Fit f = fits(e.fits, o.sysRoot);
             list.append(QJsonObject{ { u"id"_s, e.id }, { u"kind"_s, e.kind }, { u"description"_s, e.description },
                                      { u"tested"_s, e.tested }, { u"state"_s, stateOf(mine(e.id), e) },
+                                     { u"enabled"_s, !mine(e.id) || mine(e.id)->enabled },
                                      { u"fits"_s, f == Fit::Yes ? u"yes"_s : f == Fit::No ? u"no"_s : QString() } });
         }
         for (const Installed &i : have) if (!catalog.find(i.id)) others.append(i.id);
@@ -439,7 +442,7 @@ int Runner::list(bool json)
         const QString fit = f == Fit::Yes ? t(u"fits this computer"_s) : f == Fit::No ? t(u"doesn't fit this computer"_s) : QString();
         out << e.id << u"  ("_s << t(e.kind == u"fan"_s ? u"fans"_s : u"keyboard light"_s) << u")\n"_s
             << u"    "_s << e.description << u'\n'
-            << u"    "_s << state << (fit.isEmpty() ? QString() : u" · "_s + fit)
+            << u"    "_s << state << (i && !i->enabled ? u" · "_s + t(u"turned off"_s) : QString()) << (fit.isEmpty() ? QString() : u" · "_s + fit)
             << (e.tested.isEmpty() ? QString() : u" · "_s + t(u"tested on: %1"_s).arg(e.tested)) << Qt::endl;
     }
     for (const Installed &i : have)
@@ -474,6 +477,8 @@ int Runner::install(const QString &id, const QString &sourceDir, bool hint)
     // One at a time; everything of it under the cache folder, only yours
     QLockFile lk(o.cacheDir + u"/lock"_s);
     if (!lock(lk)) return 1;
+    // A plugin that isn't there has no state: a marker its file left behind (deleted by hand) would turn the new one off
+    if (!QFileInfo::exists(o.pluginDir + u'/' + id + u".so"_s)) QFile::remove(o.pluginDir + u'/' + id + u".disabled"_s);
     const QString work = o.cacheDir + u'/' + QString(id).replace(u'/', u'-');
     QDir(work).removeRecursively();
     if (!QDir().mkpath(work)) return fail(t(u"Can't make %1"_s).arg(work));
@@ -536,8 +541,25 @@ int Runner::remove(const QString &id)
     if (!QFileInfo::exists(so)) return fail(t(u"%1 isn't installed"_s).arg(id));
     if (!QFile::remove(so)) return fail(t(u"Can't remove %1"_s).arg(so));
     QFile::remove(o.pluginDir + u'/' + id + u".json"_s);
+    QFile::remove(o.pluginDir + u'/' + id + u".disabled"_s);
     QDir(o.pluginDir).rmdir(id.section(u'/', 0, 0));     // (only if empty)
     out << t(u"Removed %1. It stays loaded until solwindd starts again: solwind quit, then solwind"_s).arg(id) << Qt::endl;
+    return 0;
+}
+
+// Off: a file next to the plugin, which solwindd doesn't open then. Nothing of the plugin changes.
+int Runner::setEnabled(const QString &id, bool on)
+{
+    if (!notRoot()) return 1;
+    if (!validId(id)) { err << t(u"Not a plugin name: %1 (solwind plugins lists them)"_s).arg(id) << Qt::endl; return 2; }
+    QLockFile lk(o.cacheDir + u"/lock"_s);
+    if (!lock(lk)) return 1;
+    if (!QFileInfo::exists(o.pluginDir + u'/' + id + u".so"_s)) return fail(t(u"%1 isn't installed"_s).arg(id));
+    const QString marker = o.pluginDir + u'/' + id + u".disabled"_s;
+    if (on ? QFileInfo::exists(marker) && !QFile::remove(marker) : !QFile(marker).open(QIODevice::WriteOnly))
+        return fail(t(u"Can't change %1"_s).arg(marker));
+    out << t(on ? u"Turned %1 on."_s : u"Turned %1 off."_s).arg(id) << Qt::endl;
+    restartHint();
     return 0;
 }
 } // namespace
@@ -548,7 +570,7 @@ int run(const QStringList &args, const Options &options, const I18n &i18n, QText
     const QString cmd = args.value(0);
     const QStringList rest = args.mid(1);
     auto usage = [&] {
-        err << i18n.tIn(options.lang, u"Usage: solwind plugin list | install <name> | install --source <folder> <name> | update [<name>...] | remove <name>"_s)
+        err << i18n.tIn(options.lang, u"Usage: solwind plugin list | install <name> | install --source <folder> <name> | update [<name>...] | remove <name> | enable <name> | disable <name>"_s)
             << Qt::endl;
         return 2;
     };
@@ -558,6 +580,8 @@ int run(const QStringList &args, const Options &options, const I18n &i18n, QText
     if (cmd == u"install"_s && rest.size() == 3 && rest[0] == u"--source"_s && !rest[1].isEmpty()) return r.install(rest[2], rest[1]);
     if (cmd == u"update"_s) return r.update(rest);
     if (cmd == u"remove"_s && rest.size() == 1) return r.remove(rest[0]);
+    if (cmd == u"enable"_s && rest.size() == 1) return r.setEnabled(rest[0], true);
+    if (cmd == u"disable"_s && rest.size() == 1) return r.setEnabled(rest[0], false);
     return usage();
 }
 }

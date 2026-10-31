@@ -17,7 +17,8 @@ class SolwindPlugin;
 // skipped (the first folder wins). Not loaded, and reported: another interface version, no plugin metadata, built for
 // another SDK (its "sdk": the Solwind version and a hash of the SDK headers, SOLWIND_SDK_ID), a link, a file another
 // user could change, or one in a folder (up to the plugin folder) another user could change (writable by group /
-// others, or owned by someone else than you or root).
+// others, or owned by someone else than you or root). A plugin turned off by `solwind plugin disable` (a file
+// <plugin>.disabled next to it) isn't opened at all.
 class PluginLoader
 {
 public:
@@ -35,6 +36,7 @@ public:
 
     const QList<Plugin> &plugins() const { return m_plugins; }   // by priority, then id
     const QList<Failure> &failures() const { return m_failures; }
+    const QStringList &turnedOff() const { return m_turnedOff; }  // their files
     // The keyboard plugins of every file, in the order they are asked (priority)
     QList<const KeyboardPlugin *> keyboardPlugins();
     // The fan plugin of the first fan plugin file (priority) that makes one; nullptr if none. `id` gets its plugin id.
@@ -44,5 +46,6 @@ public:
 private:
     QList<Plugin> m_plugins;
     QList<Failure> m_failures;
+    QStringList m_turnedOff;
     QList<QPluginLoader *> m_loaders;      // kept: a plugin is never unloaded while solwindd runs
 };

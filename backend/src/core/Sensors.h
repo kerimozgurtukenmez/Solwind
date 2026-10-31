@@ -21,6 +21,7 @@ struct Reading {
     QString threads;               // CPU only: nproc's answer ("" if unknown)
     double value = std::numeric_limits<double>::quiet_NaN();   // °C, NaN = not known
     QString note;                  // "" | asleep | error | nosensor
+    double usage = std::numeric_limits<double>::quiet_NaN();   // % busy, NaN = not known (the iGPU's isn't read)
     bool operator==(const Reading &o) const;
 };
 
@@ -55,6 +56,9 @@ public:
     // nvidia-smi back-off (S-9)
     int tick = 0;
     double lastNv = std::numeric_limits<double>::quiet_NaN();
+    double lastNvUsage = std::numeric_limits<double>::quiet_NaN();
+    // /proc/stat's counters of the round before: the CPU's usage is what they did in between
+    double lastCpuTotal = 0, lastCpuIdle = 0;
     QString lastNvNote;
     int nvFails = 0;
     qint64 nvRetryAt = 0;

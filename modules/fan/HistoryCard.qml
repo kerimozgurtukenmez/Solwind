@@ -19,7 +19,7 @@ Card {
     readonly property var last: h.length ? h[h.length - 1] : null
 
     // Temperature scale: fixed 30-90 °C in 10 °C steps (widened only if a value falls outside)
-    readonly property int stepPx: 22                // height of one 10 °C step
+    property int stepPx: 22                         // height of one 10 °C step
     readonly property var range: {
         let lo = 30, hi = 90
         for (const s of h) {
