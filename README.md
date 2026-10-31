@@ -128,7 +128,7 @@ sudo make install
 It goes under `/usr/local` (command, solwindd, app, menu entry, icon, systemd user services, and the headers plugins are built against). Then install the [plugins](#plugins) for your laptop, and open **Solwind** from the app launcher or run `solwind`. On a first install the launcher may only show it after you log in again or restart the shell.
 
 - **Update:** `git pull`, `make`, `solwind quit`, `sudo make install`, `solwind plugin update`, then `solwind` (`make install` prints the command if you use the background service).
-- **Uninstall:** `solwind quit`, then `sudo make uninstall`. Turn the background service off first; it tells you if you forgot. Your settings stay in `~/.config/solwind`, your plugins in `~/.local/share/solwind/plugins`.
+- **Uninstall:** `solwind quit`, then `sudo make uninstall`. Turn the background service off first; it tells you if you forgot. It then asks whether to delete your settings (`~/.config/solwind`), plugins (`~/.local/share/solwind`) and build cache too; the answer is no unless you say yes.
 - **Packaging:** `make DESTDIR=/package/root PREFIX=/usr install`.
 
 `make install` stops without changing anything while Solwind runs or when it finds an older install in your home folder.

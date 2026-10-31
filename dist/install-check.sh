@@ -1,10 +1,11 @@
 #!/bin/sh
 # Checks for the Makefile, so make install / make uninstall never change the files of a running Solwind, install
-# next to another copy or over another program's files, and the messages after them. Only reads. Not run for
-# packaging (DESTDIR).
+# next to another copy or over another program's files, and the messages after them. Only reads, except that after
+# an uninstall it offers to delete the user's own Solwind folders (only if asked, in a terminal). Not run for packaging
+# (DESTDIR).
 # Usage: sh dist/install-check.sh install|uninstall|installed|removed <prefix> [1 = the menu folder is new]
 # As root the user is the one who asked for it (sudo: SUDO_USER, doas: DOAS_USER, pkexec: PKEXEC_UID): only their
-# home folder is looked at, read only.
+# home folder is looked at.
 set -u
 mode=$1
 prefix=$2
@@ -241,8 +242,31 @@ installed)
     ;;
 removed)
     echo
-    t "Solwind removed. Your settings stay in $config/solwind, your plugins in ~/.local/share/solwind; delete them by hand if you want." \
-      "Solwind kaldırıldı. Ayarların $config/solwind, eklentilerin ~/.local/share/solwind klasöründe duruyor; istersen elle sil."
+    t "Solwind removed." "Solwind kaldırıldı."
+    # What stays in the home folder: yours to keep or not. Asked only in a terminal, and "no" unless answered yes;
+    # another Solwind install still uses these folders.
+    _left=""
+    [ -z "$home" ] || for _d in "$config/solwind" "$data/solwind" "$home/.cache/solwind"; do
+        [ -d "$_d" ] && _left="$_left$_d$nl"
+    done
+    if [ -n "$_left" ]; then
+        t "These stay in your home folder (settings, plugins, plugin build cache):" \
+          "Bunlar ev klasöründe duruyor (ayarlar, eklentiler, eklenti derleme önbelleği):"
+        printf '%s' "$_left"
+        if [ -t 0 ] && [ ! -f /usr/share/solwind/shell.qml ] && [ ! -f /usr/local/share/solwind/shell.qml ]; then
+            t "Delete them too? This can't be undone. [y/N]" "Bunlar da silinsin mi? Geri alınamaz. [e/H]"
+            read -r _a || _a=""
+            case "$_a" in
+                y|Y|yes|YES|e|E|evet|EVET)
+                    printf '%s' "$_left" | while IFS= read -r _d; do
+                        case "$_d" in */solwind) rm -rf -- "$_d" && t "Deleted $_d" "Silindi: $_d" ;; esac
+                    done ;;
+                *) t "Kept." "Saklandı." ;;
+            esac
+        else
+            t "Delete them by hand if you want." "İstersen elle sil."
+        fi
+    fi
     ;;
 esac
 exit 0
