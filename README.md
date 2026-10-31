@@ -1,89 +1,88 @@
 # Solwind
 
-A small control center for laptops: **fan control** and **keyboard lighting**, with a window made with [Quickshell](https://quickshell.org) to fit right into [Caelestia dots](https://github.com/caelestia-dots).
+**Fan control and keyboard lighting for Linux laptops**, in a window made with [Quickshell](https://quickshell.org) that fits right into [Caelestia dots](https://github.com/caelestia-dots).
 
-It has two parts: **solwindd**, a small background service (C++/Qt) that drives the fans and the keyboard light, and the **window**, which only shows and changes what solwindd does. The fans don't need the window; the terminal commands and [your own tools](docs/DBUS.md) talk to solwindd too.
-
-> [!NOTE]
-> I used AI assistance while building this project. I reviewed parts of the code myself and tested the features my own laptop has before publishing it.
-
-> [!WARNING]
-> **This is an early project, use it at your own risk.**
->
-> - I've only tested it on my own **HP Victus 16-r0xxx** (Arch Linux, Hyprland). Other models and brands may not work.
-> - The fan part **writes fan speeds to your hardware**, through NBFC, the HP driver or MSI's drivers. A bad setting can make your laptop run hot, so keep an eye on the temperatures. Only the NBFC and HP fan plugins were tested on my laptop; the MSI and OpenRGB plugins never ran on real hardware.
-> - If solwindd crashes, its systemd service hands the fans back to automatic control and starts it again. By hand: `nbfc set -a` with NBFC, `solwind fan-permission off` with the HP or MSI plugin.
-
-## Screenshots
+A small background service, **solwindd**, drives the fans and the keyboard light. The window only shows and changes what it does, so the fans don't need the window open.
 
 | Fan control | Keyboard | Plugins |
 |---|---|---|
 | ![Fan control](docs/screenshots/fan.png) | ![Keyboard lighting](docs/screenshots/keyboard.png) | ![Plugins](docs/screenshots/plugins.png) |
 
-Colors follow your Caelestia theme. A narrow window shows everything in one column.
+> [!WARNING]
+> **This is an early project, use it at your own risk.** It writes fan speeds to your hardware, and a bad setting can make your laptop run hot. I only tested it on my own HP Victus 16-r0xxx (Arch Linux, Hyprland). The MSI and OpenRGB plugins have never run on real hardware.
 
-## Features
+> [!NOTE]
+> I used AI assistance while building this project. I reviewed parts of the code myself and tested the features my own laptop has before publishing it.
 
-**Fans** (through [NBFC-Linux](https://github.com/nbfc-linux/nbfc-linux) with the `NBFC/nbfc` plugin, the HP driver with `HP/hp-wmi-fan`, or MSI's drivers with `MSI/msi-fan`, which is not tested on hardware):
-- Per fan: **Auto** (NBFC or the firmware decides), **Fixed** or **Curve** (following the CPU, the GPU or the hotter one)
-- Curve editor, profiles (Quiet, Balanced, Performance and your own), max fan button, a 10 minute graph
-- Speeds up right away, slows down gently. Above the safety limit (90 °C unless you change it) every fan it controls goes to 100%
-- NBFC service controls and config picker, notifications, tray icon
+## What it does
 
-**Keyboard** (a plugin per kind of light):
-- Color, brightness, breathing and color cycle effects (also with your Caelestia theme colors); the effects only on the HP single-zone keyboard
-- Detects your laptop and light, and only shows what your keyboard can do (`solwind kbd info`)
+- **Fans:** Auto, Fixed or Curve per fan, following the CPU, the GPU or the hotter one. Curve editor, profiles, max fan and a 10 minute graph.
+- **Safety:** every fan Solwind drives goes to 100% above the limit you set (90 °C by default). If Solwind quits or crashes, the fans go back to automatic.
+- **Keyboard:** color, brightness and effects, also with your Caelestia theme colors. It only shows what your keyboard can do.
+- **The rest:** temperatures and usage, notifications, a tray icon, terminal commands, English and Turkish. Colors, rounding and fonts come from your Caelestia setup.
 
-English and Turkish. Colors, rounding and fonts come from your Caelestia setup; Solwind only reads Caelestia's files.
+## Supported laptops
 
-### Supported keyboards
+What Solwind drives comes from plugins, one for each kind of hardware. Pick yours here.
 
-Each kind of light has its own plugin (see [Plugins](#plugins)). Solwind itself only uses the files a kernel driver offers in `/sys`, never the firmware or USB directly. The one exception is the `OpenRGB/openrgb` plugin, which sends a color to OpenRGB's server on this computer and lets OpenRGB do the USB side. Only the first row is tested on real hardware.
-
-| Laptop | Plugin | Kernel light | What works |
+| Laptop | Fans | Keyboard | Tested |
 |---|---|---|---|
-| HP Victus / OMEN, single-zone RGB | `HP/hp-wmi-keyboard` | `hp::kbd_backlight` (extra module, [see below](#hp-laptops)) | Color, brightness, effects |
-| HP OMEN / Victus, four-zone RGB | `HP/hp-wmi-keyboard-zones` | `hp::kbd_zoned_backlight-*` or `hp::kbd_backlight_zone0`–`3` (extra module) | Color (same on all zones), brightness |
-| HP OMEN / Victus, four-zone RGB | `HP/hp-wmi-rgb-zones` | `rgb_zones/zone00`–`zone03` (older copies of the module) | Color only, same on all zones |
-| ASUS, Lenovo, Chromebooks and others | none yet | | Earlier versions had built-in support for ASUS TUF colors and other brands' brightness (only tried with a fake `/sys`). They'll come back as plugins once I've looked into each driver again. |
-| ASUS ROG, Lenovo Legion RGB | — | colors go through USB | Not through the kernel; use [asusctl](https://gitlab.com/asus-linux/asusctl) / [L5P-Keyboard-RGB](https://github.com/4JX/L5P-Keyboard-RGB) for colors |
-| MSI, single color | `MSI/msi-ec-keyboard` | `msiacpi::kbd_backlight` (needs the out-of-tree [msi-ec](https://github.com/BeardOverflow/msi-ec) module and a laptop on its firmware list; the one in the official kernel doesn't have it) | Brightness, not tested |
-| MSI RGB (SteelSeries) and other RGB keyboards [OpenRGB](https://openrgb.org) supports | `OpenRGB/openrgb` | none, through OpenRGB | One color; brightness dims the color in software and isn't kept when Solwind restarts; no effects; not tested on hardware. OpenRGB must be installed and see the keyboard itself (`openrgb --list-devices`; its udev rules give your user wide hardware access). If nothing answers, Solwind starts its server on 127.0.0.1 (port 6742). That server has no password, so any program on this computer can use it |
-| HP per-key RGB, HP white backlight, other OMEN modules | — | not offered by the kernel or the module | — |
+| Any laptop with an [NBFC](https://github.com/nbfc-linux/nbfc-linux) config | `NBFC/nbfc` | | Yes, on my HP |
+| HP Victus / OMEN, single-zone RGB | `NBFC/nbfc` or `HP/hp-wmi-fan` | `HP/hp-wmi-keyboard`: color, brightness, effects | Yes, on my HP |
+| HP Victus / OMEN, four-zone RGB | `NBFC/nbfc` or `HP/hp-wmi-fan` | `HP/hp-wmi-keyboard-zones` or `HP/hp-wmi-rgb-zones` (older module): one color on all zones | Keyboard no |
+| MSI, single color | `MSI/msi-fan` | `MSI/msi-ec-keyboard`: brightness | No |
+| MSI RGB (SteelSeries) | `MSI/msi-fan` | `OpenRGB/openrgb`: one color, brightness | No |
+| Other RGB keyboards [OpenRGB](https://openrgb.org) supports | | `OpenRGB/openrgb` | No |
 
-Effects are only on for the HP single-zone keyboard, the one I could test them on.
+ASUS and Lenovo have no plugins yet. For their USB keyboards use [asusctl](https://gitlab.com/asus-linux/asusctl) or [L5P-Keyboard-RGB](https://github.com/4JX/L5P-Keyboard-RGB). Effects are only on for the HP single-zone keyboard, the one I could test them on.
 
-### HP laptops
+## Install
 
-- **Keyboard colors** need the extra kernel module [hp-wmi-fan-and-backlight-control](https://github.com/TUXOV/hp-wmi-fan-and-backlight-control); the official kernel doesn't support HP keyboard lights yet (as of Linux 7.3). It only helps RGB keyboards.
-- **Fans** need NBFC with a config for your exact model (and the `NBFC/nbfc` plugin). Configs using ACPI methods also need `acpi_call` (`acpi_call-dkms` on Arch).
-
-```sh
-git clone https://github.com/TUXOV/hp-wmi-fan-and-backlight-control
-cd hp-wmi-fan-and-backlight-control
-make install-arch          # Arch (DKMS package); other distros: make && sudo make install-dkms
-```
-
-Reboot, then `ls /sys/class/leds | grep hp::` should list the light. Remove older copies of the module first (`dkms status`). Undo on Arch: `sudo pacman -R hp-wmi-fan-and-backlight-control-dkms`. Only the `HP/hp-wmi-fan` plugin uses the module's fan controls.
-
-## Installation
-
-### Requirements
+### 1. Requirements
 
 | Needed | Arch package |
 |---|---|
-| [Quickshell](https://quickshell.org) 0.3.x | `quickshell` / `quickshell-git` (AUR) |
-| [Caelestia shell](https://github.com/caelestia-dots/shell) (Solwind won't start without it) | `caelestia-shell` (AUR) |
+| [Quickshell](https://quickshell.org) 0.3.x | `quickshell` or `quickshell-git` (AUR) |
+| [Caelestia shell](https://github.com/caelestia-dots/shell) | `caelestia-shell` (AUR) |
 | Material Symbols font | `ttf-material-symbols-variable` |
-| [NBFC-Linux](https://github.com/nbfc-linux/nbfc-linux) with a config for your laptop (fans, unless you use the HP fan plugin) | `nbfc-linux` (AUR) |
-| A polkit agent (password dialogs) | e.g. `hyprpolkitagent` |
-| Optional: tray icon, NVIDIA temperature, GPU names | `python-gobject`, `nvidia-utils`, `pciutils` |
-| To build solwindd and its plugins: CMake, Qt 6 (base and declarative, 6.5 or newer; I use 6.12), a C++20 compiler; git (plugins are downloaded with it) | `cmake`, `qt6-base`, `qt6-declarative`, `base-devel`, `git` |
-| systemd (the background service runs as a systemd user service) | `systemd` |
+| A polkit agent, for password dialogs | e.g. `hyprpolkitagent` |
+| CMake, Qt 6.5 or newer, a C++20 compiler, git | `cmake`, `qt6-base`, `qt6-declarative`, `base-devel`, `git` |
+| systemd | `systemd` |
+| Optional: tray icon, NVIDIA readings, GPU names | `python-gobject`, `nvidia-utils`, `pciutils` |
 
-### NBFC
+### 2. Solwind
 
-Solwind tells NBFC what to do, NBFC talks to the laptop. Set it up first ([full guide](https://github.com/nbfc-linux/nbfc-linux#readme)):
+```sh
+git clone https://github.com/kerimozgurtukenmez/Solwind.git
+cd Solwind
+make
+sudo make install
+```
+
+It goes under `/usr/local`. No plugin comes with it: without one Solwind only shows the temperatures.
+
+### 3. The plugins for your laptop
+
+```sh
+solwind plugins                   # lists them, and which fit this computer
+solwind plugin install NBFC/nbfc  # the names are in the table above
+```
+
+Then follow the part for your laptop below.
+
+### 4. Start it
+
+```sh
+solwind quit; solwind
+```
+
+Solwind loads plugins when it starts. You can also open **Solwind** from the app launcher; on a first install it may only appear after you log in again. **Start in the background on login** is a switch in Settings.
+
+## Setup for your laptop
+
+### Fans through NBFC
+
+Set NBFC up first ([full guide](https://github.com/nbfc-linux/nbfc-linux#readme)). On Arch it's `nbfc-linux` from the AUR.
 
 ```sh
 sudo nbfc update                       # download the laptop configs
@@ -94,88 +93,72 @@ nbfc status -a                         # do the fans and temperature look right?
 sudo nbfc restart && sudo systemctl enable nbfc_service
 ```
 
-If no config fits, don't force one. The keyboard part works without NBFC.
+If no config fits, don't force one. Configs using ACPI methods also need `acpi_call` (`acpi_call-dkms` on Arch).
 
-**MSI fans (`MSI/msi-fan`):** not tested on hardware. It needs one of two things. With the out-of-tree [msi-ec](https://github.com/BeardOverflow/msi-ec) module, on a laptop on its firmware list, you get readings, Auto and max fan, because `msi-ec` can't set a speed; the `msi-ec` in the official kernel only has battery limits. With a kernel that has the `msi-wmi-platform` fan curve patches you get Fixed, Curve and profiles; those patches aren't in the official kernel, and the plugin was written from their 2025 version, so they may have changed. A speed never goes below 30%. With neither, the plugin does nothing. Solwind never writes the embedded controller itself. One person reported hard resets on one MSI with custom curves outside the high performance profile, cause not confirmed, so go carefully. The steps are the same as below, with `solwind plugin install MSI/msi-fan`.
+### HP keyboard lights
 
-**HP fans without NBFC:** `HP/hp-wmi-fan` drives the fans through the same module's `pwm1` and `pwm2`, on the boards the module opens those files on. No NBFC, no config, and the two fans really run at their own speeds. I tested it on one board only (8BBD, with the module patched for that board, since the board isn't on its list). If your firmware ignores the command the fans just stay on automatic. On a board that isn't on the module's list the module has no `pwm1` and `pwm2`, and the plugin stays idle.
+These need the extra module [hp-wmi-fan-and-backlight-control](https://github.com/TUXOV/hp-wmi-fan-and-backlight-control), the official kernel doesn't support them yet. Remove older copies of it first (`dkms status`).
 
 ```sh
-solwind plugin disable NBFC/nbfc           # if you had it: the NBFC plugin comes first
-solwind quit                               # hands the fans back while NBFC still runs
-sudo nbfc stop                             # both can't drive the same fans
+git clone https://github.com/TUXOV/hp-wmi-fan-and-backlight-control
+cd hp-wmi-fan-and-backlight-control
+make install-arch                      # other distros: make && sudo make install-dkms
+```
+
+Reboot, then `ls /sys/class/leds | grep hp::` should list the light. Then use **Grant permission** on the Keyboard page.
+
+### HP fans without NBFC
+
+`HP/hp-wmi-fan` uses `pwm1` and `pwm2` of the same module, on the boards the module has them. I tested one board (8BBD, with the module patched for it, as it isn't on the module's list). If your firmware ignores the command, the fans just stay on automatic.
+
+```sh
+solwind plugin disable NBFC/nbfc       # if you had it: it comes first
+solwind quit
+sudo nbfc stop                         # both can't drive the same fans
 sudo systemctl disable nbfc_service
 solwind plugin install HP/hp-wmi-fan
-solwind fan-permission                     # lets your user write the fan speed
+solwind fan-permission                 # lets your user write the fan speed
 solwind
 ```
 
-Things that work differently from NBFC:
+- The driver has one mode for both fans: a fan on Auto next to a Fixed or Curve one runs at that fan's speed.
+- The lowest speed is about 2000 RPM. Only automatic control stops the fans.
+- Fan settings are kept apart from NBFC's.
+- Back to NBFC: `solwind quit`, `solwind fan-permission off`, `solwind plugin remove HP/hp-wmi-fan`, `solwind plugin enable NBFC/nbfc`, `sudo systemctl enable --now nbfc_service`, `solwind`.
 
-- The driver has one mode for both fans. A fan on Auto next to a Fixed or Curve fan runs at that fan's speed; real automatic control needs both on Auto.
-- The lowest speed is about 2000 RPM, so 0% doesn't stop the fans. Only automatic control can.
-- Fan settings are kept apart from NBFC's. Back to NBFC: `solwind quit`, `solwind fan-permission off`, `solwind plugin remove HP/hp-wmi-fan`, `solwind plugin enable NBFC/nbfc`, `sudo systemctl enable --now nbfc_service`, `solwind`.
+### MSI
 
-### Install
+Not tested on hardware. Solwind never writes the embedded controller itself, so it depends on what your kernel offers:
 
-```sh
-git clone https://github.com/kerimozgurtukenmez/Solwind.git
-cd Solwind
-make                  # builds solwindd (without sudo)
-sudo make install
-```
-
-It goes under `/usr/local` (command, solwindd, app, menu entry, icon, systemd user services, and the headers plugins are built against). Then install the [plugins](#plugins) for your laptop, and open **Solwind** from the app launcher or run `solwind`. On a first install the launcher may only show it after you log in again or restart the shell.
-
-- **Update:** `git pull`, `make`, `solwind quit`, `sudo make install`, `solwind plugin update`, then `solwind` (`make install` prints the command if you use the background service).
-- **Uninstall:** `solwind quit`, then `sudo make uninstall`. Turn the background service off first; it tells you if you forgot. It then asks whether to delete your settings (`~/.config/solwind`), plugins (`~/.local/share/solwind`) and build cache too; the answer is no unless you say yes.
-- **Packaging:** `make DESTDIR=/package/root PREFIX=/usr install`.
-
-`make install` stops without changing anything while Solwind runs or when it finds an older install in your home folder.
-
-**Coming from Solwind 0.5 or older:** `solwind quit`, then `make` and `sudo make install` as above. Your settings stay as they are. If you had "Start in the background on login" on, it now starts solwindd; run `systemctl --user daemon-reload` once (`make install` reminds you).
-
-**Coming from Ccenter** (Solwind's old name) or an older Solwind installed with `install.sh`: remove that copy first, without sudo, then install. Your settings are copied over on the first start.
+| You have | You get |
+|---|---|
+| The out-of-tree [msi-ec](https://github.com/BeardOverflow/msi-ec) module, on a laptop on its firmware list | Fan readings, Auto, max fan, single-color keyboard brightness. `msi-ec` can't set a speed. The one in the official kernel only has battery limits |
+| A kernel with the `msi-wmi-platform` fan curve patches | Fixed, Curve and profiles too, never below 30%. These aren't in the official kernel, and the plugin was written from their 2025 version |
+| Neither | The plugins do nothing |
 
 ```sh
-ccenter quit        # or: solwind quit
-make remove-old     # shows what it removes and asks
-sudo make install
+solwind plugin install MSI/msi-fan
+solwind plugin install MSI/msi-ec-keyboard
+solwind fan-permission
+solwind quit; solwind
 ```
 
-Keybinds or scripts that use `ccenter` need `solwind` now.
+Stop NBFC and turn its plugin off first if you had it, as for HP. One person reported hard resets on one MSI with custom curves outside the high performance profile. The cause isn't confirmed, so go carefully.
 
-### Plugins
+### RGB keyboards through OpenRGB
 
-Solwind itself only reads the temperatures. What it drives comes from plugins, and **none comes with it**: you install the ones for your laptop. They live in their own repository, [Solwind-plugins](https://github.com/kerimozgurtukenmez/Solwind-plugins), and only the ones you install are downloaded.
+Install [OpenRGB](https://openrgb.org) and make sure it sees the keyboard itself: `openrgb --list-devices`. Its udev rules give your user wide hardware access.
 
 ```sh
-solwind plugins                            # every plugin, which are installed, which fit this computer
-solwind plugin install NBFC/nbfc           # fans through NBFC
-solwind plugin install HP/hp-wmi-keyboard  # an HP single-zone RGB keyboard (see the table above for the others)
-solwind plugin install HP/hp-wmi-fan       # HP fans without NBFC (see HP laptops)
-solwind plugin install OpenRGB/openrgb     # RGB keyboards through OpenRGB, MSI's among them
-solwind quit; solwind                      # solwindd loads plugins when it starts
+solwind plugin install OpenRGB/openrgb
+solwind quit; solwind
 ```
 
-`solwind plugin install` takes the plugin's commit from Solwind's catalog (`plugin-catalog.json` in this repository), downloads only that plugin's folder at exactly that commit with git (git checks the commit id, so it's exactly the code the catalog names), builds it against the installed Solwind and puts it into `~/.local/share/solwind/plugins`. No sudo; it needs `git` and `cmake`. `solwind plugin update` brings installed plugins to the catalog's commits and builds them again after a Solwind update; `solwind plugin remove <name>` removes one; `solwind plugin disable <name>` turns one off without removing it (`enable` turns it on again; both take effect when solwindd starts again). `solwind report` and `busctl --user get-property solwind.Daemon /solwind solwind.Daemon Plugins` show which ones solwindd loaded.
-
-- A plugin runs inside solwindd, as your user. Only the plugins in the catalog of the Solwind you cloned are offered. The commit ids pin the code, but a catalog is only as trustworthy as my GitHub account (there's no signature).
-- solwindd loads a plugin only if it was built for this Solwind (the same version and plugin interface), and only if no one but you (or root) can change the file or the plugin folders it is in (a link is refused too). After an update, run `solwind plugin update`: until then solwindd skips them and says why.
-- Without a fan plugin the fan page only shows the temperatures and nothing is ever sent to NBFC; without a keyboard plugin the Keyboard page says which light it found.
-
-### Permissions
-
-- **Keyboard light (optional):** your user needs write access to the light's files. Use **Grant permission** on the Keyboard page (or `sudo make udev`); **Remove permission** undoes it. Only your user gets access.
-- **HP and MSI fans (only with `HP/hp-wmi-fan` or `MSI/msi-fan`):** `solwind fan-permission` adds `/etc/udev/rules.d/91-solwind-fans.rules`, which gives your user the fan files of the HP and MSI drivers. Any program of yours can then set the fan speed. `solwind fan-permission off` removes it and puts the fans on automatic.
-- **NBFC service actions** (start, stop, applying a config) ask for your password every time. Setting fan speeds doesn't.
+It's only used when no plugin takes a keyboard light of the kernel. If nothing answers, Solwind starts OpenRGB's server on 127.0.0.1, port 6742. That server has no password, so any program on this computer can use it. Solwind sets one color on the whole keyboard. Brightness dims that color and isn't kept when Solwind restarts.
 
 ## Usage
 
-- `solwind` (or the menu entry) starts solwindd if it isn't running and opens the window.
-- Closing the window doesn't stop solwindd, it keeps controlling the fans. Quit everything with **Quit** in Settings, the tray menu or `solwind quit`; the fans go back to automatic control and the keyboard stays on its chosen color.
-- **Start in the background on login** is a switch in the app (it turns the systemd user service `solwind.service` on). If solwindd crashes, systemd hands the fans back the way the fan plugin in use said when it started (NBFC: `nbfc set -a`; without a fan plugin nothing is done, the firmware keeps the fans) and starts solwindd again. The tray icon comes with it (it ends by itself if you turn the tray off).
-- The terminal commands work without the window.
+Closing the window doesn't stop solwindd, it keeps controlling the fans. Quit with **Quit** in Settings, the tray menu or `solwind quit`: the fans go back to automatic and the keyboard stays on its color.
 
 ```sh
 solwind status              # fans, temperatures, active profile
@@ -186,41 +169,79 @@ solwind log -f              # follow solwindd's log
 solwind --help              # everything; solwind help kbd for one command
 ```
 
-Exit codes: 0 done, 1 error, 2 wrong usage, 3 not started (already running, or an old Solwind app drives the fans), 4 not running. For a Hyprland keybind: `hl.bind("SUPER + F9", hl.dsp.exec_cmd("solwind profile performance"))` (`/usr/local/bin` is on Hyprland's `PATH`, at least on mine). The window class is `solwind`.
+Exit codes: 0 done, 1 error, 2 wrong usage, 3 not started, 4 not running. For a Hyprland keybind: `hl.bind("SUPER + F9", hl.dsp.exec_cmd("solwind profile performance"))`. The window class is `solwind`.
 
-## Your own UI or scripts
+Fans back to automatic by hand: `nbfc set -a` with NBFC; with the HP or MSI plugin quit Solwind.
 
-solwindd's whole interface is on D-Bus (the session bus, `solwind.Daemon`): its state as properties with change signals, and methods to change it. The window uses nothing else, so a widget, a bar module or a script can do what it does. See [docs/DBUS.md](docs/DBUS.md). For example:
+## Update and uninstall
+
+**Update:**
+
+```sh
+git pull
+make
+solwind quit
+sudo make install
+solwind plugin update
+solwind
+```
+
+A plugin installed from a local folder isn't updated by `solwind plugin update`: install it from its folder again.
+
+**Uninstall:** turn **Start in the background on login** off, then:
+
+```sh
+solwind quit
+sudo make uninstall
+```
+
+It removes the permissions too, then asks whether to delete your settings, plugins and build cache. The answer is no unless you say yes.
+
+**Packaging:** `make DESTDIR=/package/root PREFIX=/usr install`.
+
+**Coming from Ccenter (Solwind's old name) or an `install.sh` install:** your settings are copied over on the first start. Keybinds and scripts that use `ccenter` need `solwind` now.
+
+```sh
+ccenter quit        # or: solwind quit
+make remove-old     # shows what it removes and asks
+sudo make install
+```
+
+## Plugins and permissions
+
+- **Plugins** live in their own repository, [Solwind-plugins](https://github.com/kerimozgurtukenmez/Solwind-plugins). Installing one downloads only its folder at the exact commit in `plugin-catalog.json`, builds it on your computer and puts it in `~/.local/share/solwind/plugins`, without sudo. Its build steps run as you.
+- **Commands:** `solwind plugin update`, `solwind plugin remove <name>`, `solwind plugin disable <name>`, `enable <name>`. Or use the Plugins page. Changes take effect when Solwind starts again.
+- **What's loaded:** solwindd only loads a plugin built for this Solwind, and only if no one but you or root can change it. It runs inside solwindd, as your user. A catalog is only as trustworthy as my GitHub account, there's no signature.
+- **Keyboard permission:** **Grant permission** on the Keyboard page or `sudo make udev`. Only your user gets it. **Remove permission** undoes it.
+- **Fan permission (HP, MSI):** `solwind fan-permission` adds `/etc/udev/rules.d/91-solwind-fans.rules`, so any program of yours can set the fan speed. To remove it: `solwind quit`, then `solwind fan-permission off`.
+- **NBFC actions** (start, stop, config) ask for your password every time. Setting fan speeds doesn't. Solwind never sees your password.
+- Solwind never edits NBFC config files or Caelestia's files. To change the NBFC config back: `sudo nbfc config --set "<config name>"` and `sudo nbfc restart`.
+
+## Reporting a problem
+
+Run `solwind report` or **Create report** in Settings, and attach the file to a [GitHub issue](https://github.com/kerimozgurtukenmez/Solwind/issues). It has versions, your laptop model (no serial numbers), what solwindd detected and recent logs. Your user and computer names are replaced, and nothing is sent anywhere. Logs are cleared on reboot, so make it before rebooting.
+
+## Your own tools
+
+Everything the window does goes through D-Bus (session bus, `solwind.Daemon`), so a widget or a script can do the same. solwindd checks everything it's sent, and the safety limit stays its own. See [docs/DBUS.md](docs/DBUS.md).
 
 ```sh
 busctl --user get-property solwind.Daemon /solwind/Fans solwind.Fans Temp
 busctl --user call solwind.Daemon /solwind/Fans solwind.Fans ApplyProfile sb quiet false
 ```
 
-solwindd checks everything it's sent; the safety limit and handing the fans back are its own, whatever a client does.
-
-## Reporting a problem
-
-Run `solwind report` (or **Create report** in Settings) and attach the file to a [GitHub issue](https://github.com/kerimozgurtukenmez/Solwind/issues). It's one text file in your home folder with versions, your laptop model (no serial numbers), NBFC status, what solwindd detected and reads, your settings and recent logs. Your user name and computer name are replaced, nothing is sent anywhere. Logs are cleared on reboot, so make it before rebooting.
-
-## Undoing things
-
-- Fans back to automatic: `nbfc set -a` with NBFC; with the HP or MSI plugin quit Solwind
-- Solwind never edits NBFC config files, it only selects one. To go back: `sudo nbfc config --set "<config name>"` and `sudo nbfc restart`
-- Keyboard permission: **Remove permission** in the app, or `sudo make uninstall-udev`
-- HP and MSI fan permission: `solwind quit`, then `solwind fan-permission off`, or `sudo make uninstall-udev`
-
-## Security
-
-- Day-to-day use needs no admin rights: solwindd runs as your user, fan speeds go through `nbfc set` or, with the HP and MSI plugins, the driver's files your user was given.
-- Admin actions only happen when you click them, through your system's password dialog. Solwind never sees your password.
-- The keyboard is touched through the kernel's LED files, except with the `OpenRGB/openrgb` plugin, which talks to OpenRGB's server on 127.0.0.1. The keyboard permission is for your user only, and the rule is checked line by line before it's installed.
-- Plugins are code that runs inside solwindd, as your user, and building one runs its build steps on your computer; solwindd skips one that someone else could have changed (see [Plugins](#plugins)).
-- NBFC config files and Caelestia's files are never changed.
-
 ## Development
 
-`backend/` is solwindd (C++/Qt, CMake) and `solwind-plugin`; the interfaces plugins implement are in `backend/src/plugins/`, `backend/qml/` is the QML module the window uses to talk to it. The plugins are in [Solwind-plugins](https://github.com/kerimozgurtukenmez/Solwind-plugins): clone it next to this one and build both together for the tests (`cmake -S backend -B <dir> -DSOLWIND_PLUGINS_DIR=<Solwind-plugins> && cmake --build <dir> && ctest --test-dir <dir>`; without it only the tests that don't need a plugin are built). In the window, `services/` only passes solwindd's state to the pages in `modules/`. Run it from the cloned folder with `make` and `./bin/solwind` (quit the installed copy first): solwindd then runs as a temporary systemd service with the same hand-back, with the plugins of the build (if it has them) and the ones in your home folder. UI text is English in the code, wrapped in `I18n.t(…)`, with the Turkish text in `services/translations.js` (solwindd uses the same file).
+`backend/` is solwindd and `solwind-plugin` (C++/Qt, CMake), and `backend/src/plugins/` has the interfaces plugins implement. `services/` passes solwindd's state to the pages in `modules/`. UI text is English in the code, with the Turkish in `services/translations.js`.
+
+For the tests, clone Solwind-plugins next to this repository:
+
+```sh
+cmake -S backend -B <dir> -DSOLWIND_PLUGINS_DIR=../Solwind-plugins
+cmake --build <dir> && ctest --test-dir <dir>
+```
+
+To run from the cloned folder: `make`, then `./bin/solwind` (quit the installed copy first).
 
 ## Thanks
 
@@ -232,6 +253,6 @@ Copyright (C) 2026 Kerim Özgür Tükenmez
 
 Solwind is free software under the **GNU General Public License version 3**, without any warranty; see [`LICENSE`](LICENSE).
 
-The transparency math in `services/Colours.qml` is adapted from [Caelestia shell](https://github.com/caelestia-dots/shell) (GPL-3.0), whose QML plugin Solwind uses at runtime (not included). Quickshell (LGPL-3.0), Qt (LGPL-3.0), NBFC-Linux (GPL-3.0) and Material Symbols (Apache-2.0) are separate and not included.
+The transparency math in `services/Colours.qml` is adapted from [Caelestia shell](https://github.com/caelestia-dots/shell) (GPL-3.0), whose QML plugin Solwind uses at runtime (not included). Quickshell (LGPL-3.0), Qt (LGPL-3.0), NBFC-Linux (GPL-3.0) and Material Symbols (Apache-2.0) are separate and not included, and so are OpenRGB, msi-ec and the HP module.
 
-Solwind is an independent project, not made or supported by the Caelestia, Quickshell or NBFC developers or any laptop maker. Please report Solwind problems here.
+Solwind is an independent project, not made or supported by the Caelestia, Quickshell, NBFC or OpenRGB developers or any laptop maker. Please report Solwind problems here.
