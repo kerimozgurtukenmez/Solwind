@@ -256,7 +256,15 @@ To run from the cloned folder: `make`, then `./bin/solwind` (quit the installed 
 
 ## Thanks
 
-[Caelestia](https://github.com/caelestia-dots), [Quickshell](https://quickshell.org), [Qt](https://www.qt.io), [NBFC-Linux](https://github.com/nbfc-linux/nbfc-linux) and everyone who made laptop configs for it, and [Material Symbols](https://fonts.google.com/icons).
+Solwind only asks; these projects do the hard part of talking to the hardware:
+
+- [NBFC-Linux](https://github.com/nbfc-linux/nbfc-linux) and everyone who made laptop configs for it
+- [hp-wmi-fan-and-backlight-control](https://github.com/TUXOV/hp-wmi-fan-and-backlight-control) by TUXOV, and the developers of the kernel's `hp-wmi` driver it's based on, for HP fans and keyboard lights
+- [msi-ec](https://github.com/BeardOverflow/msi-ec) by BeardOverflow and its contributors, who map MSI's firmwares one by one
+- Armin Wolf and Antheas Kapenekakis, for the `msi-wmi-platform` fan curve patches
+- [OpenRGB](https://openrgb.org), for RGB keyboards the kernel doesn't reach
+
+And [Caelestia](https://github.com/caelestia-dots), [Quickshell](https://quickshell.org), [Qt](https://www.qt.io) and [Material Symbols](https://fonts.google.com/icons), for the window.
 
 ## License
 
@@ -266,4 +274,4 @@ Solwind is free software under the **GNU General Public License version 3**, wit
 
 The transparency math in `services/Colours.qml` is adapted from [Caelestia shell](https://github.com/caelestia-dots/shell) (GPL-3.0), whose QML plugin Solwind uses at runtime (not included). Quickshell (LGPL-3.0), Qt (LGPL-3.0), NBFC-Linux (GPL-3.0) and Material Symbols (Apache-2.0) are separate and not included, and so are OpenRGB, msi-ec and the HP module.
 
-Solwind is an independent project, not made or supported by the Caelestia, Quickshell, NBFC or OpenRGB developers or any laptop maker. Please report Solwind problems here.
+Solwind is an independent project, not made or supported by the developers of any project named here, or by any laptop maker. Please report Solwind problems here.
