@@ -128,7 +128,7 @@ Card {
     }
     // The old rule (earlier versions) let every user write, or has the old name (Ccenter): offer the current one
     GridLayout {
-        visible: Keyboard.writable && (Keyboard.ruleLegacy || Keyboard.ruleOld)
+        visible: Keyboard.writable && Keyboard.backend !== "openrgb" && (Keyboard.ruleLegacy || Keyboard.ruleOld)
         Layout.fillWidth: true
         columns: status.width < 380 ? 1 : 2
         columnSpacing: 8
@@ -151,7 +151,7 @@ Card {
     }
     // If the permission comes from the rule the app added, it can be removed here
     GridLayout {
-        visible: Keyboard.writable && Keyboard.ruleAt === "etc" && !Keyboard.ruleLegacy && !Keyboard.ruleOld
+        visible: Keyboard.writable && Keyboard.backend !== "openrgb" && Keyboard.ruleAt === "etc" && !Keyboard.ruleLegacy && !Keyboard.ruleOld
         Layout.fillWidth: true
         columns: status.width < 380 ? 1 : 2
         columnSpacing: 8

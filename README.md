@@ -47,6 +47,8 @@ Each kind of light has its own plugin (see [Plugins](#plugins)). Solwind only us
 | HP OMEN / Victus, four-zone RGB | `HP/hp-wmi-rgb-zones` | `rgb_zones/zone00`–`zone03` (older copies of the module) | Color only, same on all zones |
 | ASUS, Lenovo, Chromebooks and others | none yet | | Earlier versions had built-in support for ASUS TUF colors and other brands' brightness (only tried with a fake `/sys`). They'll come back as plugins once I've looked into each driver again. |
 | ASUS ROG, Lenovo Legion RGB | — | colors go through USB | Not through the kernel; use [asusctl](https://gitlab.com/asus-linux/asusctl) / [L5P-Keyboard-RGB](https://github.com/4JX/L5P-Keyboard-RGB) for colors |
+| MSI, single color | `MSI/msi-ec-keyboard` | `msiacpi::kbd_backlight` (needs the [msi-ec](https://github.com/BeardOverflow/msi-ec) module, the one in the official kernel doesn't have it) | Brightness, not tested |
+| MSI RGB (SteelSeries) and other RGB keyboards [OpenRGB](https://openrgb.org) supports | `OpenRGB/openrgb` | none, through OpenRGB | One color and brightness, no software effects, not tested on hardware. Install OpenRGB; Solwind starts its server on 127.0.0.1 if it isn't running |
 | HP per-key RGB, HP white backlight, other OMEN modules | — | not offered by the kernel or the module | — |
 
 Effects are only on for the HP single-zone keyboard, the one I could test them on.
@@ -150,6 +152,7 @@ solwind plugins                            # every plugin, which are installed, 
 solwind plugin install NBFC/nbfc           # fans through NBFC
 solwind plugin install HP/hp-wmi-keyboard  # an HP single-zone RGB keyboard (see the table above for the others)
 solwind plugin install HP/hp-wmi-fan       # HP fans without NBFC (see HP laptops)
+solwind plugin install OpenRGB/openrgb     # RGB keyboards through OpenRGB, MSI's among them
 solwind quit; solwind                      # solwindd loads plugins when it starts
 ```
 

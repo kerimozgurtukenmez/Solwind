@@ -1,9 +1,12 @@
 #include "KbdIo.h"
 
+#include "KeyboardParse.h"
 #include "KeyboardScan.h"
 
 #include <QFile>
+#include <QRegularExpression>
 
+#include <algorithm>
 #include <cerrno>
 #include <cstring>
 #include <fcntl.h>
@@ -13,12 +16,34 @@ using namespace Qt::StringLiterals;
 
 void KbdIo::scan(quint64 tag)
 {
-    emit scanned(tag, KeyboardScan::scan(m_paths));
+    QString text = KeyboardScan::scan(m_paths);
+    // Lights outside /sys, in the same lines, only if no plugin takes a light of /sys
+    if (!KeyboardParse::parse(text, QString(), m_plugins).plugin) {
+        static const QRegularExpression notInALine(u"[|\\r\\n]"_s);
+        auto clean = [](QString s) { return s.replace(notInALine, u" "_s); };
+        for (const KeyboardPlugin *p : m_plugins) {
+            for (const KbdLight &l : p->externalLights()) {
+                const QString name = clean(l.name);
+                text += u"\nled|%1|%2|%3"_s.arg(name, clean(l.driver), clean(l.path));
+                for (auto it = l.v.cbegin(); it != l.v.cend(); ++it) text += u"\nv|%1|%2|%3"_s.arg(name, it.key(), clean(it.value()));
+                for (const QString &f : l.w) text += u"\nw|%1|%2"_s.arg(name, f);
+            }
+        }
+    }
+    emit scanned(tag, text);
 }
 
 void KbdIo::write(const QStringList &pv, quint64 tag)
 {
     for (qsizetype i = 0; i + 1 < pv.size(); i += 2) {
+        const auto owner = std::find_if(m_plugins.cbegin(), m_plugins.cend(), [&](const KeyboardPlugin *p) { return p->ownsPath(pv[i]); });
+        if (owner != m_plugins.cend()) {
+            if (const QString why = (*owner)->writeExternal(pv[i], pv[i + 1]); !why.isEmpty()) {
+                emit written(tag, pv[i] + u": "_s + why);
+                return;
+            }
+            continue;
+        }
         const QByteArray path = QFile::encodeName(pv[i]);
         const QByteArray value = pv[i + 1].toUtf8() + '\n';
         // (a signal can interrupt a call: this process also runs programs, unlike the QML's awk; tried again then)

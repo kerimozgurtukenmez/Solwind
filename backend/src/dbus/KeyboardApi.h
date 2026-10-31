@@ -21,7 +21,7 @@ class KeyboardApi : public QObject, protected QDBusContext
     Q_CLASSINFO("D-Bus Interface", "solwind.Keyboard")
     Q_PROPERTY(bool Available READ available)
     Q_PROPERTY(bool Ready READ ready)                        // the first read is done
-    Q_PROPERTY(QString Backend READ backend)                 // led-rgb | hp-zoned | hp-rgbzones | asus-tuf | led-mono | ""
+    Q_PROPERTY(QString Backend READ backend)                 // led-rgb | hp-zoned | hp-rgbzones | led-mono | openrgb | asus-tuf | led-mono | ""
     Q_PROPERTY(QString Name READ name)
     Q_PROPERTY(QString Driver READ driver)
     Q_PROPERTY(int Zones READ zones)

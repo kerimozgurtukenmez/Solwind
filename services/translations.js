@@ -399,6 +399,8 @@ var dict = {
         "Critical temperature, fan speed could not be set, max fan ended": "Kritik sıcaklık, fan hızı ayarlanamadı, maks. fan bitti",
         "Not loaded": "Yüklü değil",
         "No plugin found": "Eklenti bulunamadı",
+        "RGB, one color on the whole keyboard": "RGB, tüm klavyede tek renk",
+        "%1: installed from a local folder for another Solwind, so it isn't loaded. Install it from its folder again, or: solwind plugin update %1": "%1: yerel klasörden başka bir Solwind için kurulmuş, bu yüzden yüklenmiyor. Klasöründen yeniden kur ya da: solwind plugin update %1",
         "Global": "Global"
     }
 }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Paths.h"
+#include "plugins/KeyboardPlugin.h"
 
 #include <QList>
 #include <QObject>
@@ -15,6 +16,8 @@ class KbdIo : public QObject
     Q_OBJECT
 public:
     explicit KbdIo(const Paths &paths) : m_paths(paths) {}
+    // Before anything runs on the thread: lights outside /sys are asked of these
+    void setPlugins(const QList<const KeyboardPlugin *> &plugins) { m_plugins = plugins; }
 
 public slots:
     void scan(quint64 tag);                                        // -> scanned (KeyboardScan)
@@ -30,4 +33,5 @@ signals:
 
 private:
     Paths m_paths;
+    QList<const KeyboardPlugin *> m_plugins;
 };

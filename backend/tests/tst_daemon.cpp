@@ -324,10 +324,10 @@ private slots:
         QStringList ids;
         for (const QVariantMap &m : list) ids << m.value(u"id"_s).toString();
         // (by priority: HP's zone plugins are asked before the single light, as the old built-in order)
-        QCOMPARE(ids, (QStringList{ u"HP/hp-wmi-keyboard-zones"_s, u"HP/hp-wmi-rgb-zones"_s, u"HP/hp-wmi-keyboard"_s, u"NBFC/nbfc"_s, u"HP/hp-wmi-fan"_s }));
-        QCOMPARE(list[3].value(u"kind"_s).toString(), u"fan"_s);
-        QCOMPARE(list[3].value(u"brand"_s).toString(), u"NBFC"_s);
-        QCOMPARE(list[3].value(u"file"_s).toString(), QStringLiteral(PLUGINS_DIR) + u"/NBFC/nbfc.so"_s);
+        QCOMPARE(ids, (QStringList{ u"HP/hp-wmi-keyboard-zones"_s, u"HP/hp-wmi-rgb-zones"_s, u"HP/hp-wmi-keyboard"_s, u"MSI/msi-ec-keyboard"_s, u"NBFC/nbfc"_s, u"HP/hp-wmi-fan"_s, u"OpenRGB/openrgb"_s }));
+        QCOMPARE(list[4].value(u"kind"_s).toString(), u"fan"_s);
+        QCOMPARE(list[4].value(u"brand"_s).toString(), u"NBFC"_s);
+        QCOMPARE(list[4].value(u"file"_s).toString(), QStringLiteral(PLUGINS_DIR) + u"/NBFC/nbfc.so"_s);
         QCOMPARE(list[0].value(u"kind"_s).toString(), u"keyboard"_s);
         // (only one fan plugin drives the fans: NBFC's priority comes first)
         for (const QVariantMap &m : list)

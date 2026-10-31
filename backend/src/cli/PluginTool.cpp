@@ -403,8 +403,8 @@ void Runner::restartHint()
 // Solwind) | hand (no record) | local (from a local folder)
 static QString stateOf(const std::optional<Installed> &i, const Entry &e)
 {
-    return !i ? u"none"_s : i->source.isEmpty() ? u"hand"_s : i->source == u"local"_s ? u"local"_s
-         : i->sdk != QLatin1String(SOLWIND_SDK_ID) ? u"sdk"_s : i->commit != e.commit ? u"update"_s : u"current"_s;
+    return !i ? u"none"_s : i->source.isEmpty() ? u"hand"_s : i->sdk != QLatin1String(SOLWIND_SDK_ID) ? u"sdk"_s
+         : i->source == u"local"_s ? u"local"_s : i->commit != e.commit ? u"update"_s : u"current"_s;
 }
 
 int Runner::list(bool json)
@@ -434,8 +434,8 @@ int Runner::list(bool json)
         const auto i = mine(e.id);
         QString state = !i ? t(u"not installed"_s)
                       : i->source.isEmpty() ? t(u"installed by hand (solwind plugin install %1 puts the catalog's in)"_s).arg(e.id)
-                      : i->source == u"local"_s ? t(u"installed from a local folder"_s)
                       : i->sdk != QLatin1String(SOLWIND_SDK_ID) ? t(u"installed, built for another Solwind: solwind plugin update"_s)
+                      : i->source == u"local"_s ? t(u"installed from a local folder"_s)
                       : i->commit != e.commit ? t(u"installed, an update is in the catalog: solwind plugin update"_s)
                       : t(u"installed, up to date"_s);
         const Fit f = fits(e.fits, o.sysRoot);
@@ -512,7 +512,9 @@ int Runner::update(const QStringList &ids)
         const Entry *e = catalog.find(i.id);
         if (!e) { out << t(u"%1: not in the catalog, left as it is"_s).arg(i.id) << Qt::endl; continue; }
         if (i.source == u"local"_s && !ids.contains(i.id)) {
-            out << t(u"%1: installed from a local folder, left as it is (solwind plugin update %1 puts the catalog's in)"_s).arg(i.id) << Qt::endl;
+            out << t(i.sdk == QLatin1String(SOLWIND_SDK_ID)
+                         ? u"%1: installed from a local folder, left as it is (solwind plugin update %1 puts the catalog's in)"_s
+                         : u"%1: installed from a local folder for another Solwind, so it isn't loaded. Install it from its folder again, or: solwind plugin update %1"_s).arg(i.id) << Qt::endl;
             continue;
         }
         if (i.source == u"catalog"_s && i.commit == e->commit && i.sdk == QLatin1String(SOLWIND_SDK_ID)) continue;

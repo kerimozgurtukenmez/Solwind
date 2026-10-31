@@ -109,7 +109,7 @@ Read while a client watches `fans`, while Solwind drives fans, or while notifica
 | Property | Type | |
 |---|---|---|
 | `Available`, `Ready` | b | A light was found; the first look is done |
-| `Backend` | s | The kind of light (the keyboard plugin's): `led-rgb`, `hp-zoned`, `hp-rgbzones`, or `""` (none, or no plugin takes it) |
+| `Backend` | s | The kind of light (the keyboard plugin's): `led-rgb`, `hp-zoned`, `hp-rgbzones`, `led-mono`, `openrgb`, or `""` (none, or no plugin takes it) |
 | `Name`, `Driver`, `Kernel`, `Zones` | s, s, s, i | |
 | `Dmi` | a{sv} | `vendor`, `product`, `family`, `board` |
 | `Notes` | as | `legion-usb`, `rog-usb`, `hp-none`, `no-plugin` (a light was found, but no installed plugin takes it; `NoteTexts` names it) |

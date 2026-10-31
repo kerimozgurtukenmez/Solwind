@@ -19,6 +19,20 @@
             "fits": { "paths": ["/sys/devices/platform/hp-wmi/hwmon"], "vendors": ["HP"] }
         },
         {
+            "id": "MSI/msi-ec-keyboard",
+            "kind": "keyboard",
+            "description": "MSI single-color keyboard light (msiacpi::kbd_backlight of the msi-ec module), brightness only",
+            "commit": "7378dbcd372b207d19afbf965af0fc9d9e5dfc15",
+            "fits": { "leds": [{ "name": "msiacpi::kbd_backlight" }] }
+        },
+        {
+            "id": "OpenRGB/openrgb",
+            "kind": "keyboard",
+            "description": "RGB keyboards the kernel doesn't expose (MSI's SteelSeries keyboards and others), through OpenRGB",
+            "commit": "7378dbcd372b207d19afbf965af0fc9d9e5dfc15",
+            "fits": { "programs": ["openrgb"] }
+        },
+        {
             "id": "HP/hp-wmi-keyboard",
             "kind": "keyboard",
             "description": "HP single-zone RGB keyboard light (hp::kbd_backlight of the hp-wmi-fan-and-backlight-control module), with effects",

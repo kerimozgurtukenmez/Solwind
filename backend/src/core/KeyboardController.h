@@ -32,7 +32,7 @@ class KeyboardController : public QObject
 public:
     KeyboardController(const Paths &paths, Settings &settings, const I18n &i18n, bool control, QObject *parent = nullptr);
     // The loaded keyboard plugins, in the order they are asked (before start())
-    void setPlugins(const QList<const KeyboardPlugin *> &plugins) { m_plugins = plugins; }
+    void setPlugins(const QList<const KeyboardPlugin *> &plugins) { m_plugins = plugins; m_io->setPlugins(plugins); }
     ~KeyboardController() override;
 
     void start();                                         // the first read (Keyboard.qml: Component.onCompleted)
@@ -194,6 +194,6 @@ private:
     qint64 m_lastAwake = 0;
     bool m_quitting = false;
 
-    QTimer m_flush, m_recover, m_healthy, m_effectTimer, m_saveSpeed, m_saveRange, m_wake;
+    QTimer m_flush, m_recover, m_healthy, m_effectTimer, m_saveSpeed, m_saveRange, m_wake, m_externalRetry;
     Cmd m_perm;
 };

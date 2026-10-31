@@ -33,6 +33,9 @@ KeyboardController::KeyboardController(const Paths &paths, Settings &settings, c
     connect(m_io, &KbdIo::readDone, this, [this](quint64 tag, const QStringList &c, const QList<bool> &ok) {
         if (auto f = m_reads.take(tag)) f(c, ok);
     });
+    m_externalRetry.setSingleShot(true);
+    m_externalRetry.setInterval(3000);
+    connect(&m_externalRetry, &QTimer::timeout, this, [this] { if (!m_quitting) refresh(); });
     m_ioThread.setObjectName(u"keyboard"_s);
     m_ioThread.start();
 
@@ -112,6 +115,7 @@ void KeyboardController::parse(const QString &text)
     m_ruleLegacy = f.ruleLegacy;
     m_ruleOld = f.ruleOld;
 
+    const bool newLight = f.plugin && !m_plugin;
     m_plugin = f.plugin;
     m_zones = f.zones;
     m_name = f.name;
@@ -135,11 +139,13 @@ void KeyboardController::parse(const QString &text)
     m_notes = f.notes;
 
     // K-16: a colour that can't be read back (ASUS TUF) is applied once at start; K-15 above
-    if (!m_ready && m_plugin && m_plugin->atStart() == KeyboardPlugin::AtStart::Always && m_writable && !saved.color.isEmpty())
+    if ((!m_ready || newLight) && m_plugin && m_plugin->atStart() == KeyboardPlugin::AtStart::Always && m_writable && !saved.color.isEmpty())
         queue(u"color"_s, colorValue(m_color, 1));
     if (applySaved && m_writable) queue(u"color"_s, colorValue(m_color, 1));
     m_ready = true;
     updateTimers();
+    if (!m_plugin && std::any_of(m_plugins.cbegin(), m_plugins.cend(), [](const KeyboardPlugin *p) { return p->externalPending(); }))
+        m_externalRetry.start();
 }
 
 void KeyboardController::loadSaved()
@@ -693,6 +699,7 @@ QString KeyboardController::kindText() const
     if (b == u"hp-zoned"_s || b == u"hp-rgbzones"_s) return m_i18n.t(u"RGB, %1 zones (same color on all)"_s).arg(m_zones.size());
     if (b == u"asus-tuf"_s) return m_i18n.t(u"RGB, single zone, ASUS TUF"_s);
     if (b == u"led-rgb"_s) return m_i18n.t(u"RGB, single zone"_s);
+    if (rgb()) return m_i18n.t(u"RGB, one color on the whole keyboard"_s);
     return m_i18n.t(u"single color, %1 brightness levels"_s).arg(m_maxBrightness);
 }
 

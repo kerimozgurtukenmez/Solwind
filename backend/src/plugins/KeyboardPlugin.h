@@ -58,6 +58,20 @@ public:
     // Where a colour goes for one zone (a light's folder, or an rgb_zones file), and the value written (K-20)
     virtual QString colorPath(const QString &zone) const { return zone + QStringLiteral("/multi_intensity"); }
     virtual QString colorValue(const QColor &c, double level, const KbdFormat &f) const;
+
+    // ---------- a light that isn't in /sys (OpenRGB) ----------
+    // These run on the keyboard thread, one at a time, and may block for a few seconds at most: quitting waits for them.
+    // Asked at every detection that found no light in /sys; each comes to match() in KbdCandidates::leds, with a path
+    // that is no file
+    virtual QList<KbdLight> externalLights() const { return {}; }
+    // (any thread) No light yet, but one may come soon (its server is starting): the core looks again in a few seconds
+    virtual bool externalPending() const { return false; }
+    virtual bool ownsPath(const QString &path) const { Q_UNUSED(path) return false; }
+    // What the core would write to a file of such a light (<light's path>/brightness, colorPath()); "" or what went wrong
+    virtual QString writeExternal(const QString &path, const QString &value) const
+    {
+        Q_UNUSED(path) Q_UNUSED(value) return QStringLiteral("not an external light");
+    }
 };
 
 // QML's colour helpers, to the bit (qtdeclarative qqmlbuiltinfunctions.cpp / qquickvaluetypes.cpp, Qt 6.10 and dev):

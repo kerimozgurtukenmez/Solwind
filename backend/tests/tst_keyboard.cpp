@@ -15,7 +15,9 @@
 #include <QSignalSpy>
 #include <QStandardPaths>
 
+#include <atomic>
 #include <memory>
+#include <mutex>
 
 using namespace Qt::StringLiterals;
 
@@ -112,6 +114,62 @@ class TstKeyboard : public QObject
     }
 
 private slots:
+    // A light outside /sys that comes a moment later (OpenRGB's server starting): looked for again, the saved colour on it
+    void externalLightComesLater()
+    {
+        struct Late : KeyboardPlugin {
+            QString id() const override { return u"late"_s; }
+            bool rgb() const override { return true; }
+            QList<KbdLight> match(const KbdCandidates &c) const override
+            {
+                for (const KbdLight &l : c.leds) if (l.driver == u"late"_s) return { l };
+                return {};
+            }
+            bool writable(const QList<KbdLight> &) const override { return true; }
+            AtStart atStart() const override { return AtStart::Always; }
+            QList<KbdLight> externalLights() const override
+            {
+                if (++asked < 2) return {};
+                KbdLight l;
+                l.name = u"Late"_s;
+                l.driver = u"late"_s;
+                l.path = u"late:0"_s;
+                l.v = { { u"brightness"_s, u"255"_s }, { u"max_brightness"_s, u"255"_s } };
+                return { l };
+            }
+            bool externalPending() const override { return asked < 2; }
+            bool ownsPath(const QString &path) const override { return path.startsWith(u"late:"_s); }
+            QString writeExternal(const QString &path, const QString &value) const override
+            {
+                const std::lock_guard l(lock);
+                written << path + u'=' + value;
+                return QString();
+            }
+            mutable std::atomic<int> asked{ 0 };
+            mutable std::mutex lock;
+            mutable QStringList written;
+        } late;
+        FakeWorld world;
+        world.applyToThisProcess();
+        Settings set(world.settingsHome() + u"/solwind"_s);
+        set.load();
+        set.setKbd({ { u"color"_s, u"#102030"_s } });
+        I18n in;
+        Paths p;
+        p.sysRoot = world.sysRoot() + u"/empty"_s;
+        p.udevRoot = world.cct() + u"/udev"_s;
+        p.home = world.cct() + u"/home"_s;
+        KeyboardController c(p, set, in, true);
+        c.setPlugins({ &late });
+        c.start();
+        QTRY_VERIFY(c.ready());
+        QVERIFY(!c.available());
+        QTRY_VERIFY_WITH_TIMEOUT(c.available(), 6000);
+        QCOMPARE(c.name(), u"Late"_s);
+        const auto written = [&] { const std::lock_guard l(late.lock); return late.written; };
+        QTRY_VERIFY(!written().isEmpty());
+        QCOMPARE(written().value(0), u"late:0/multi_intensity=16 32 48"_s);
+    }
     void init()
     {
         k.reset();
